@@ -432,8 +432,8 @@ function initInput() {
   btnStop.addEventListener('click', () => sendAction('stop'));
   btnNewSession.addEventListener('click', startNewSession);
 
-  // 附件按钮
-  btnAttach.addEventListener('click', () => fileInput.click());
+  // 附件按钮 —— 打开自定义文件选择器
+  btnAttach.addEventListener('click', () => openFilePicker());
   fileInput.addEventListener('change', () => {
     for (const file of fileInput.files) {
       uploadFile(file);
@@ -905,4 +905,137 @@ function getParentPath(p) {
   parts.pop();
   if (parts.length === 1 && parts[0].endsWith(':')) return parts[0] + '/';
   return parts.join('/');
+}
+
+// ─── 文件选择器 ──────────────────────────────────────────────
+const filePickerOverlay = document.getElementById('file-picker-overlay');
+const filePickerList = document.getElementById('file-picker-list');
+const filePickerCurrentPath = document.getElementById('file-picker-current-path');
+const filePickerUp = document.getElementById('file-picker-up');
+const filePickerClose = document.getElementById('file-picker-close');
+const filePickerConfirm = document.getElementById('file-picker-confirm');
+const filePickerSelectedCount = document.getElementById('file-picker-selected-count');
+
+let filePickerCurrentDir = '/';
+let filePickerSelected = new Map(); // path -> name
+
+filePickerClose.addEventListener('click', closeFilePicker);
+filePickerOverlay.addEventListener('click', (e) => {
+  if (e.target === filePickerOverlay) closeFilePicker();
+});
+filePickerUp.addEventListener('click', () => {
+  navigateFilePicker(getParentPath(filePickerCurrentDir));
+});
+filePickerConfirm.addEventListener('click', confirmFileSelection);
+
+function openFilePicker() {
+  filePickerSelected.clear();
+  updateFilePickerCount();
+  filePickerOverlay.style.display = 'flex';
+  // 默认打开当前 CWD，没有就用根目录
+  navigateFilePicker(cwdInput.value.trim() || '/');
+}
+
+function closeFilePicker() {
+  filePickerOverlay.style.display = 'none';
+}
+
+function updateFilePickerCount() {
+  filePickerSelectedCount.textContent = `已选 ${filePickerSelected.size} 个文件`;
+  filePickerConfirm.disabled = filePickerSelected.size === 0;
+}
+
+async function navigateFilePicker(path) {
+  filePickerCurrentDir = path;
+  filePickerCurrentPath.textContent = path || '/';
+  filePickerList.innerHTML = '<div class="picker-empty">加载中...</div>';
+
+  try {
+    const resp = await fetch('/api/browse-files', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ path }),
+    });
+    const data = await resp.json();
+
+    if (data.error) {
+      filePickerList.innerHTML = `<div class="picker-empty">${esc(data.error)}</div>`;
+      return;
+    }
+
+    filePickerCurrentDir = data.current || path;
+    filePickerCurrentPath.textContent = filePickerCurrentDir;
+
+    if (!data.items || data.items.length === 0) {
+      filePickerList.innerHTML = '<div class="picker-empty">此目录为空</div>';
+      return;
+    }
+
+    filePickerList.innerHTML = data.items.map(item => {
+      const isDir = item.type === 'dir' || item.type === 'drive';
+      const icon = item.type === 'drive' ? '&#128423;' : isDir ? '&#128193;' : getFileIcon(item.name);
+      const isSelected = filePickerSelected.has(item.path);
+      return `<div class="picker-item file-picker-item ${item.type === 'drive' ? 'drive' : ''} ${isSelected ? 'selected' : ''}"
+          data-path="${esc(item.path)}" data-type="${esc(item.type)}" data-name="${esc(item.name)}">
+        <span class="picker-item-icon">${icon}</span>
+        <span class="picker-item-name">${esc(item.name)}</span>
+        ${!isDir && isSelected ? '<span style="margin-left:auto;color:var(--green);font-size:12px;">✓</span>' : ''}
+      </div>`;
+    }).join('');
+
+    filePickerList.querySelectorAll('.file-picker-item').forEach(el => {
+      el.addEventListener('click', () => {
+        const type = el.dataset.type;
+        const itemPath = el.dataset.path;
+        const itemName = el.dataset.name;
+
+        if (type === 'dir' || type === 'drive') {
+          navigateFilePicker(itemPath);
+        } else {
+          // 切换选中状态
+          if (filePickerSelected.has(itemPath)) {
+            filePickerSelected.delete(itemPath);
+            el.classList.remove('selected');
+            const check = el.querySelector('span[style]');
+            if (check) check.remove();
+          } else {
+            filePickerSelected.set(itemPath, itemName);
+            el.classList.add('selected');
+            const check = document.createElement('span');
+            check.style.cssText = 'margin-left:auto;color:var(--green);font-size:12px;';
+            check.textContent = '✓';
+            el.appendChild(check);
+          }
+          updateFilePickerCount();
+        }
+      });
+    });
+  } catch (e) {
+    filePickerList.innerHTML = `<div class="picker-empty">请求失败: ${esc(e.message)}</div>`;
+  }
+}
+
+function getFileIcon(name) {
+  const ext = name.split('.').pop().toLowerCase();
+  const imageExts = ['png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp', 'svg'];
+  const codeExts = ['js', 'ts', 'py', 'go', 'rs', 'java', 'c', 'cpp', 'h', 'cs', 'rb', 'php', 'sh', 'bat'];
+  const docExts = ['pdf', 'doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx'];
+  const textExts = ['txt', 'md', 'log', 'csv', 'json', 'yaml', 'yml', 'toml', 'xml', 'html', 'css'];
+  if (imageExts.includes(ext)) return '&#128444;';
+  if (codeExts.includes(ext)) return '&#128196;';
+  if (docExts.includes(ext)) return '&#128209;';
+  if (textExts.includes(ext)) return '&#128196;';
+  return '&#128196;';
+}
+
+function confirmFileSelection() {
+  if (filePickerSelected.size === 0) return;
+
+  for (const [filePath, fileName] of filePickerSelected) {
+    // 直接引用本地路径，不上传，不做缩略图（避免安全限制）
+    attachedFiles.push({ name: fileName, path: filePath, isImage: false });
+  }
+
+  renderAttachments();
+  closeFilePicker();
 }

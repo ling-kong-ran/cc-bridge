@@ -57,6 +57,52 @@ MIME_TYPES = {
 }
 
 
+# ─── 文件+目录浏览 ──────────────────────────────────────────
+def browse_files(path: str) -> dict:
+    """列出指定目录下的子目录和文件（用于附件选择器）"""
+    import string
+
+    if not path or path == "/":
+        if sys.platform == "win32":
+            drives = []
+            for letter in string.ascii_uppercase:
+                drive = f"{letter}:/"
+                if os.path.isdir(drive):
+                    drives.append({"name": f"{letter}:/", "path": drive, "type": "drive"})
+            return {"current": "/", "parent": None, "items": drives}
+        else:
+            path = "/"
+
+    path = os.path.normpath(path)
+    if not os.path.isdir(path):
+        return {"current": path, "parent": None, "items": [], "error": "路径不存在"}
+
+    parent = os.path.dirname(path)
+    if parent == path:
+        parent = "/"
+
+    items = []
+    try:
+        for entry in sorted(os.listdir(path)):
+            full = os.path.join(path, entry)
+            if entry.startswith('.'):
+                continue
+            if os.path.isdir(full):
+                if entry in ('node_modules', '__pycache__', '.git', 'venv', '.venv'):
+                    continue
+                items.append({"name": entry, "path": full.replace("\\", "/"), "type": "dir"})
+            elif os.path.isfile(full):
+                items.append({"name": entry, "path": full.replace("\\", "/"), "type": "file"})
+    except PermissionError:
+        return {"current": path, "parent": parent, "items": [], "error": "无权限访问"}
+
+    return {
+        "current": path.replace("\\", "/"),
+        "parent": parent.replace("\\", "/") if parent != "/" else "/",
+        "items": items,
+    }
+
+
 # ─── 目录浏览 ──────────────────────────────────────────────
 def browse_directory(path: str) -> dict:
     import string
@@ -507,6 +553,11 @@ async def handle_api_post(path: str, body: bytes, writer: asyncio.StreamWriter):
         update_env_config(data)
     elif path == "/api/browse":
         result = browse_directory(data.get("path", ""))
+        resp = json.dumps(result, ensure_ascii=False).encode("utf-8")
+        await send_response(writer, 200, "application/json; charset=utf-8", resp)
+        return
+    elif path == "/api/browse-files":
+        result = browse_files(data.get("path", ""))
         resp = json.dumps(result, ensure_ascii=False).encode("utf-8")
         await send_response(writer, 200, "application/json; charset=utf-8", resp)
         return

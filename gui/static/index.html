@@ -196,6 +196,30 @@
     </div>
   </div>
 
+  <!-- 文件选择器弹窗 -->
+  <div id="file-picker-overlay" class="picker-overlay" style="display:none">
+    <div class="picker-modal" style="width:580px; max-height:75vh;">
+      <div class="picker-header">
+        <span class="picker-title">// SELECT_FILES</span>
+        <button id="file-picker-close" class="picker-close">[X]</button>
+      </div>
+      <div class="picker-path">
+        <button id="file-picker-up" class="picker-up" title="上级目录">
+          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"></polyline></svg>
+          <span>UP</span>
+        </button>
+        <span id="file-picker-current-path" class="picker-current">/</span>
+      </div>
+      <div id="file-picker-list" class="picker-list" style="max-height:340px;"></div>
+      <div class="picker-footer" style="justify-content:space-between; align-items:center;">
+        <span id="file-picker-selected-count" style="font-family:var(--font-mono);font-size:11px;color:var(--text-muted);">已选 0 个文件</span>
+        <button id="file-picker-confirm" class="btn btn-primary" style="width:auto; padding:8px 24px;">
+          <span class="btn-prefix">&gt;</span> ATTACH
+        </button>
+      </div>
+    </div>
+  </div>
+
   <script src="/static/app.js"></script>
 </body>
 </html>
