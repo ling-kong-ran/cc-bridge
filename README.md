@@ -37,7 +37,6 @@ gui\start.bat
 **跨平台**
 
 ```bash
-cd gui
 python server.py
 ```
 
@@ -48,18 +47,17 @@ python server.py
 ## 目录结构
 
 ```
-ccb-gui/
+cc-gui/
 ├── ccb.exe              # 可选：本地 ccb 可执行文件
-├── gui/
-│   ├── server.py        # HTTP 服务器（纯标准库，asyncio）
-│   ├── ccb_bridge.py    # ccb/claude 子进程管理与流式通信
-│   ├── config_manager.py# 配置与环境变量读写
-│   ├── session_store.py # 会话历史持久化
-│   ├── start.bat        # Windows 一键启动脚本
-│   └── static/
-│       ├── index.html   # 页面结构
-│       ├── app.js       # 前端逻辑
-│       └── style.css    # 主题样式
+├── server.py            # HTTP 服务器（纯标准库，asyncio）
+├── ccb_bridge.py        # ccb/claude 子进程管理与流式通信
+├── config_manager.py    # 配置与环境变量读写
+├── session_store.py     # 会话历史持久化
+├── start.bat            # Windows 一键启动脚本
+├── static/
+│   ├── index.html       # 页面结构
+│   ├── app.js           # 前端逻辑
+│   └── style.css        # 主题样式
 └── README.md
 ```
 

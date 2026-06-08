@@ -27,7 +27,7 @@ from config_manager import (
 from session_store import list_sessions, save_session, delete_session, load_session_history
 
 STATIC_DIR = Path(__file__).parent / "static"
-DEFAULT_CWD = str(Path(__file__).parent.parent.resolve())  # 项目根目录作为默认 CWD
+DEFAULT_CWD = str(Path(__file__).parent.resolve())  # 项目根目录作为默认 CWD
 HOST = "127.0.0.1"
 
 session_manager = SessionManager()

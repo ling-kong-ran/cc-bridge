@@ -16,7 +16,7 @@ def _detect_available_clis() -> list[dict]:
     """检测所有可用的 CLI，返回列表 [{name, path, source}]"""
     available = []
     # 1. 同级目录的 ccb.exe
-    local_ccb = Path(__file__).parent.parent / "ccb.exe"
+    local_ccb = Path(__file__).parent / "ccb.exe"
     if local_ccb.exists():
         available.append({
             "name": "ccb (本地)",
@@ -48,7 +48,7 @@ def get_available_clis() -> list[dict]:
 # 当前选中的 CLI（默认取第一个可用的）
 _available = _detect_available_clis()
 _current_cli = _available[0]["path"] if _available else "claude"
-DEFAULT_CWD = str(Path(__file__).parent.parent.resolve())  # 项目根目录
+DEFAULT_CWD = str(Path(__file__).parent.resolve())  # 项目根目录
 
 def get_current_cli() -> str:
     return _current_cli
