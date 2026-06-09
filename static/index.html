@@ -4,6 +4,13 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>CCB 图形界面</title>
+  <script>
+    try {
+      if (localStorage.getItem('ccb-theme') === 'light') {
+        document.documentElement.classList.add('light-theme');
+      }
+    } catch (e) {}
+  </script>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700;800&family=Syne+Mono&family=VT323&display=swap" rel="stylesheet">
@@ -59,6 +66,17 @@
           </span>
           <span class="toggle-text">跳过权限确认</span>
         </label>
+      </div>
+
+      <!-- 主题切换 -->
+      <div class="sidebar-section">
+        <button id="btn-theme-toggle" class="theme-toggle" type="button" aria-label="切换为亮色主题" title="切换为亮色主题">
+          <span class="theme-toggle-icon" aria-hidden="true">
+            <svg class="theme-icon-moon" viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.8A8.5 8.5 0 1 1 11.2 3a6.7 6.7 0 0 0 9.8 9.8z"></path></svg>
+            <svg class="theme-icon-sun" viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="4"></circle><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"></path></svg>
+          </span>
+          <span id="theme-toggle-text">切换为亮色</span>
+        </button>
       </div>
 
       <!-- 工作目录 -->

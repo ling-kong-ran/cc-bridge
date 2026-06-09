@@ -25,9 +25,12 @@ const cwdInput = document.getElementById('cwd-input');
 const connectionStatus = document.getElementById('connection-status');
 const costDisplay = document.getElementById('cost-display');
 const costValue = document.getElementById('cost-value');
+const btnThemeToggle = document.getElementById('btn-theme-toggle');
+const themeToggleText = document.getElementById('theme-toggle-text');
 
 // ─── 初始化 ──────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', () => {
+  initTheme();
   initNavigation();
   initSSE();
   initInput();
@@ -45,6 +48,30 @@ async function loadDefaultCwd() {
       cwdInput.value = data.cwd;
     }
   } catch (e) { /* ignore */ }
+}
+
+function initTheme() {
+  updateThemeToggle();
+  btnThemeToggle.addEventListener('click', () => {
+    const nextTheme = document.documentElement.classList.contains('light-theme') ? 'dark' : 'light';
+    applyTheme(nextTheme);
+  });
+}
+
+function applyTheme(theme) {
+  const isLight = theme === 'light';
+  document.documentElement.classList.toggle('light-theme', isLight);
+  try {
+    localStorage.setItem('ccb-theme', isLight ? 'light' : 'dark');
+  } catch (e) { /* ignore */ }
+  updateThemeToggle();
+}
+
+function updateThemeToggle() {
+  const isLight = document.documentElement.classList.contains('light-theme');
+  themeToggleText.textContent = isLight ? '切换为暗色' : '切换为亮色';
+  btnThemeToggle.setAttribute('aria-label', isLight ? '切换为暗色主题' : '切换为亮色主题');
+  btnThemeToggle.title = isLight ? '切换为暗色主题' : '切换为亮色主题';
 }
 
 async function loadClis() {
