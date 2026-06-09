@@ -570,6 +570,13 @@ async def handle_action(body: bytes, writer: asyncio.StreamWriter):
         await push_event(client_id, "session_stopped", {})
         await send_response(writer, 200, "application/json", b'{"ok":true}')
 
+    elif action == "interrupt":
+        session = session_manager.get_session(client_id)
+        if session and session.is_running:
+            await session.interrupt()
+        await push_event(client_id, "generation_interrupted", {})
+        await send_response(writer, 200, "application/json", b'{"ok":true}')
+
     else:
         await send_response(writer, 400, "application/json", b'{"error":"unknown action"}')
 

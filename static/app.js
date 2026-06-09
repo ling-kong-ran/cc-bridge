@@ -206,6 +206,13 @@ function initSSE() {
     }
   });
 
+  eventSource.addEventListener('generation_interrupted', () => {
+    isResponding = false;
+    currentAssistantEl = null;
+    updateUI();
+    addSystemMsg('已中断当前回复，可继续补充');
+  });
+
   eventSource.addEventListener('error', (e) => {
     if (e.data) {
       const data = JSON.parse(e.data);
@@ -483,7 +490,7 @@ function initInput() {
   });
 
   btnSend.addEventListener('click', sendMessage);
-  btnStop.addEventListener('click', () => sendAction('stop'));
+  btnStop.addEventListener('click', () => sendAction('interrupt'));
   btnNewSession.addEventListener('click', startNewSession);
 
   // 附件按钮 —— 打开自定义文件选择器

@@ -140,6 +140,12 @@ class CCBSession:
         self.is_running = False
         await self._kill_proc()
 
+    async def interrupt(self):
+        """仅终止当前回复生成，保留逻辑会话以便继续补充。"""
+        if not self.is_running:
+            return
+        await self._kill_proc()
+
     async def _kill_proc(self):
         """终止子进程"""
         if self._read_task:
