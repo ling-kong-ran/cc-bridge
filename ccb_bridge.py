@@ -15,12 +15,20 @@ import shutil
 def _detect_available_clis() -> list[dict]:
     """检测所有可用的 CLI，返回列表 [{name, path, source}]"""
     available = []
-    # 1. 同级目录的 ccb.exe
+    # 1. 同级目录的 ccb.exe（与 start.bat 同层）
     local_ccb = Path(__file__).parent / "ccb.exe"
     if local_ccb.exists():
         available.append({
             "name": "ccb (本地)",
             "path": str(local_ccb),
+            "source": "local",
+        })
+    # 2. start.bat 所在目录的上一层（即仓库根目录的父目录）
+    parent_ccb = Path(__file__).parent.parent / "ccb.exe"
+    if parent_ccb.exists() and parent_ccb != local_ccb:
+        available.append({
+            "name": "ccb (上级目录)",
+            "path": str(parent_ccb),
             "source": "local",
         })
     # 2. PATH 中的 ccb
