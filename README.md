@@ -85,7 +85,7 @@ cc-gui/
 
 ## 技术说明
 
-- **零依赖服务端**：HTTP、SSE、multipart 解析全部手写，不依赖 Flask / FastAPI 等框架
+- **零依赖服务端**：HTTP、SSE、multipart 解析基于 Python 标准库实现，不依赖 Flask / FastAPI 等框架
 - **SSE 替代 WebSocket**：规避 Windows asyncio 的 WebSocket 兼容性问题
 - **子进程通信**：每条消息启动一个 `ccb -p --stream-json` 子进程，`--resume` 实现多轮连续对话
 - **文件安全**：`/api/file` 预览端点仅允许访问 `.gui-uploads/` 目录下的文件，防止路径穿越

@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>CCB GUI</title>
+  <title>CCB 图形界面</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700;800&family=Syne+Mono&family=VT323&display=swap" rel="stylesheet">
@@ -23,30 +23,30 @@
           <span class="logo-bracket">]</span>
           <span class="logo-cursor">_</span>
         </div>
-        <p class="logo-sub">CLAUDE CODE BRIDGE v1.0</p>
+        <p class="logo-sub">Claude Code 桥接工具 v1.0</p>
         <div class="header-line"></div>
       </div>
 
       <!-- 新建会话 -->
       <div class="sidebar-section">
         <button id="btn-new-session" class="btn btn-primary">
-          <span class="btn-prefix">&gt;</span> NEW SESSION
+          <span class="btn-prefix">&gt;</span> 新建会话
         </button>
       </div>
 
       <!-- CLI 选择 -->
       <div class="sidebar-section">
-        <label class="field-label">// CLI_EXECUTABLE</label>
+        <label class="field-label">命令行工具</label>
         <select id="cli-select" class="select"></select>
       </div>
 
       <!-- 模型选择 -->
       <div class="sidebar-section">
-        <label class="field-label">// MODEL</label>
+        <label class="field-label">模型</label>
         <select id="model-select" class="select">
-          <option value="claude-opus-4-6">OPUS_4.6</option>
-          <option value="claude-sonnet-4-6" selected>SONNET_4.6</option>
-          <option value="claude-haiku-4-6">HAIKU_4.6</option>
+          <option value="claude-opus-4-6">Opus 4.6（高能力）</option>
+          <option value="claude-sonnet-4-6" selected>Sonnet 4.6（推荐）</option>
+          <option value="claude-haiku-4-6">Haiku 4.6（快速）</option>
         </select>
       </div>
 
@@ -57,15 +57,15 @@
             <input type="checkbox" id="skip-permissions" checked>
             <span class="toggle-indicator"></span>
           </span>
-          <span class="toggle-text">SKIP_PERMISSIONS</span>
+          <span class="toggle-text">跳过权限确认</span>
         </label>
       </div>
 
       <!-- 工作目录 -->
       <div class="sidebar-section">
-        <label class="field-label">// CWD</label>
+        <label class="field-label">工作目录</label>
         <div class="cwd-wrapper">
-          <input id="cwd-input" type="text" class="input cwd-input" placeholder="C:\path\to\project">
+          <input id="cwd-input" type="text" class="input cwd-input" placeholder="C:\项目路径">
           <button id="btn-browse" class="btn-browse" title="浏览目录">
             <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path></svg>
           </button>
@@ -74,7 +74,7 @@
 
       <!-- 历史会话 -->
       <div class="sidebar-section session-section">
-        <label class="field-label">// SESSIONS</label>
+        <label class="field-label">历史会话</label>
         <div id="session-list" class="session-list"></div>
       </div>
 
@@ -82,11 +82,11 @@
       <nav class="nav">
         <button class="nav-btn active" data-page="chat">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>
-          <span>CHAT</span>
+          <span>对话</span>
         </button>
         <button class="nav-btn" data-page="config">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
-          <span>CONFIG</span>
+          <span>配置</span>
         </button>
       </nav>
 
@@ -94,10 +94,10 @@
       <div class="status-bar">
         <div id="connection-status" class="conn-status">
           <span class="status-dot offline"></span>
-          <span class="status-text">OFFLINE</span>
+          <span class="status-text">未连接</span>
         </div>
         <div id="cost-display" style="display:none" class="cost-row">
-          <span class="cost-label">COST</span>
+          <span class="cost-label">费用</span>
           <span class="cost-value">$<span id="cost-value">0.0000</span></span>
         </div>
       </div>
@@ -108,8 +108,8 @@
       <!-- 对话页 -->
       <div id="page-chat" class="page active">
         <div class="chat-topbar">
-          <span class="topbar-label">TERMINAL://CHAT</span>
-          <span id="topbar-model" class="topbar-model">NO_SESSION</span>
+          <span class="topbar-label">对话</span>
+          <span id="topbar-model" class="topbar-model">未启动会话</span>
         </div>
         <div id="messages" class="messages">
           <div class="welcome-msg">
@@ -120,8 +120,8 @@
  ██║     ██║     ██╔══██╗
  ╚██████╗╚██████╗██████╔╝
   ╚═════╝ ╚═════╝╚═════╝</pre>
-            <p class="welcome-sub">CLAUDE CODE BRIDGE</p>
-            <p class="welcome-hint">SELECT MODEL &gt; SET CWD &gt; NEW SESSION</p>
+            <p class="welcome-sub">Claude Code 桥接工具</p>
+            <p class="welcome-hint">选择模型 &gt; 设置工作目录 &gt; 新建会话</p>
           </div>
         </div>
         <div class="input-area">
@@ -131,10 +131,10 @@
             <button id="btn-attach" class="btn-attach" title="添加文件">
               <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"></path></svg>
             </button>
-            <textarea id="message-input" placeholder="INPUT COMMAND... (ENTER=SEND, SHIFT+ENTER=NEWLINE)" rows="1"></textarea>
+            <textarea id="message-input" placeholder="输入消息...（回车发送，Shift+回车换行）" rows="1"></textarea>
             <div class="input-actions">
-              <button id="btn-send" class="btn-send" disabled>SEND</button>
-              <button id="btn-stop" class="btn-stop">STOP</button>
+              <button id="btn-send" class="btn-send" disabled>发送</button>
+              <button id="btn-stop" class="btn-stop">停止</button>
             </div>
           </div>
           <input type="file" id="file-input" multiple style="display:none">
@@ -144,28 +144,28 @@
       <!-- 配置页 -->
       <div id="page-config" class="page config-page">
         <div class="chat-topbar">
-          <span class="topbar-label">TERMINAL://CONFIG</span>
+          <span class="topbar-label">配置</span>
         </div>
         <div class="config-inner">
           <section class="config-section">
-            <h3 class="config-title"><span class="title-prefix">[01]</span> ENV_VARS</h3>
+            <h3 class="config-title"><span class="title-prefix">[01]</span> 环境变量</h3>
             <div class="config-card">
               <div id="env-fields"></div>
               <button id="btn-save-env" class="btn-save">
-                <span class="btn-prefix">&gt;</span> WRITE_CONFIG
+                <span class="btn-prefix">&gt;</span> 保存配置
               </button>
             </div>
           </section>
           <section class="config-section">
-            <h3 class="config-title"><span class="title-prefix">[02]</span> SKILLS</h3>
+            <h3 class="config-title"><span class="title-prefix">[02]</span> 技能</h3>
             <div id="skills-list" class="config-card">
-              <p class="empty-state">LOADING...</p>
+              <p class="empty-state">加载中...</p>
             </div>
           </section>
           <section class="config-section">
-            <h3 class="config-title"><span class="title-prefix">[03]</span> AGENTS</h3>
+            <h3 class="config-title"><span class="title-prefix">[03]</span> 代理</h3>
             <div id="agents-list" class="config-card">
-              <p class="empty-state">LOADING...</p>
+              <p class="empty-state">加载中...</p>
             </div>
           </section>
         </div>
@@ -177,20 +177,20 @@
   <div id="dir-picker-overlay" class="picker-overlay" style="display:none">
     <div class="picker-modal">
       <div class="picker-header">
-        <span class="picker-title">// SELECT_DIRECTORY</span>
-        <button id="picker-close" class="picker-close">[X]</button>
+        <span class="picker-title">选择目录</span>
+        <button id="picker-close" class="picker-close">关闭</button>
       </div>
       <div class="picker-path">
         <button id="picker-up" class="picker-up" title="上级目录">
           <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"></polyline></svg>
-          <span>UP</span>
+          <span>上级</span>
         </button>
         <span id="picker-current-path" class="picker-current">/</span>
       </div>
       <div id="picker-list" class="picker-list"></div>
       <div class="picker-footer">
         <button id="picker-select" class="btn btn-primary" style="width:auto; padding:8px 24px;">
-          <span class="btn-prefix">&gt;</span> SELECT
+          <span class="btn-prefix">&gt;</span> 选择
         </button>
       </div>
     </div>
@@ -200,21 +200,24 @@
   <div id="file-picker-overlay" class="picker-overlay" style="display:none">
     <div class="picker-modal" style="width:580px; max-height:75vh;">
       <div class="picker-header">
-        <span class="picker-title">// SELECT_FILES</span>
-        <button id="file-picker-close" class="picker-close">[X]</button>
+        <span class="picker-title">选择附件</span>
+        <button id="file-picker-close" class="picker-close">关闭</button>
       </div>
       <div class="picker-path">
         <button id="file-picker-up" class="picker-up" title="上级目录">
           <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"></polyline></svg>
-          <span>UP</span>
+          <span>上级</span>
         </button>
         <span id="file-picker-current-path" class="picker-current">/</span>
+      </div>
+      <div class="picker-search">
+        <input id="file-picker-search" class="picker-search-input" type="search" placeholder="搜索当前目录及子目录中的文件或文件夹">
       </div>
       <div id="file-picker-list" class="picker-list" style="max-height:340px;"></div>
       <div class="picker-footer" style="justify-content:space-between; align-items:center;">
         <span id="file-picker-selected-count" style="font-family:var(--font-mono);font-size:11px;color:var(--text-muted);">已选 0 个文件</span>
         <button id="file-picker-confirm" class="btn btn-primary" style="width:auto; padding:8px 24px;">
-          <span class="btn-prefix">&gt;</span> ATTACH
+          <span class="btn-prefix">&gt;</span> 添加附件
         </button>
       </div>
     </div>

@@ -56,7 +56,7 @@ async function loadClis() {
     const current = data.current || '';
     cliSelect.innerHTML = '';
     if (available.length === 0) {
-      cliSelect.innerHTML = '<option value="">未检测到可用 CLI</option>';
+      cliSelect.innerHTML = '<option value="">未检测到可用命令行工具</option>';
       return;
     }
     for (const cli of available) {
@@ -73,7 +73,7 @@ async function loadClis() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ path: cliSelect.value }),
       });
-      addSystemMsg(`已切换 CLI: ${cliSelect.value}`);
+      addSystemMsg(`已切换命令行工具: ${cliSelect.value}`);
     });
   } catch (e) { /* ignore */ }
 }
@@ -107,8 +107,8 @@ function initSSE() {
     sessionActive = true;
     updateUI();
     const topbarModel = document.getElementById('topbar-model');
-    if (topbarModel) topbarModel.textContent = (data.model || '').replace('claude-', '').toUpperCase();
-    addSystemMsg(`SESSION_STARTED · ${data.model}`);
+    if (topbarModel) topbarModel.textContent = formatModelName(data.model || '');
+    addSystemMsg(`会话已启动 · ${formatModelName(data.model || '')}`);
   });
 
   eventSource.addEventListener('session_stopped', (e) => {
@@ -121,7 +121,7 @@ function initSSE() {
   eventSource.addEventListener('system', (e) => {
     const data = JSON.parse(e.data);
     if (data.subtype === 'init') {
-      addSystemMsg(`${data.model} · ${(data.tools||[]).length} tools · ${(data.skills||[]).length} skills`);
+      addSystemMsg(`${formatModelName(data.model || '')} · ${(data.tools||[]).length} 个工具 · ${(data.skills||[]).length} 个技能`);
     }
   });
 
@@ -281,7 +281,7 @@ function renderCurrentState() {
       html += `<div class="text-block">${renderMd(block.text)}<span class="typing-cursor"></span></div>`;
     } else if (block.type === 'tool_use') {
       html += `<div class="tool-card">
-        <div class="tool-header"><span class="tool-icon">&#9881;</span> ${esc(block.name || 'Tool')}</div>
+        <div class="tool-header"><span class="tool-icon">&#9881;</span> ${esc(block.name || '工具')}</div>
         <div class="tool-body">${esc(block.input)}</div>
       </div>`;
     }
@@ -300,7 +300,7 @@ function renderBlock(block) {
     return `<div class="thinking-block">
       <div class="thinking-header" onclick="this.parentElement.classList.toggle('open')">
         <span class="thinking-arrow">&#9654;</span>
-        <span class="thinking-label">Thinking</span>
+        <span class="thinking-label">思考过程</span>
         <span class="thinking-preview">${esc(preview)}</span>
       </div>
       <div class="thinking-content">${esc(block.thinking)}</div>
@@ -310,7 +310,7 @@ function renderBlock(block) {
   } else if (block.type === 'tool_use') {
     const input = typeof block.input === 'string' ? block.input : JSON.stringify(block.input, null, 2);
     return `<div class="tool-card">
-      <div class="tool-header"><span class="tool-icon">&#9881;</span> ${esc(block.name || 'Tool')}</div>
+      <div class="tool-header"><span class="tool-icon">&#9881;</span> ${esc(block.name || '工具')}</div>
       <div class="tool-body">${esc(input)}</div>
     </div>`;
   }
@@ -544,7 +544,7 @@ function startNewSession() {
 function updateUI() {
   btnSend.disabled = !sessionActive || isResponding;
   btnStop.classList.toggle('visible', isResponding);
-  btnNewSession.textContent = sessionActive ? '重新开始' : '+ 新建会话';
+  btnNewSession.innerHTML = sessionActive ? '<span class="btn-prefix">&gt;</span> 重新开始' : '<span class="btn-prefix">&gt;</span> 新建会话';
   // 会话活跃时禁用配置修改
   cwdInput.disabled = sessionActive;
   btnBrowse.disabled = sessionActive;
@@ -569,7 +569,7 @@ async function loadConfig() {
     const agents = await (await fetch('/api/agents')).json();
     renderAgents(agents);
   } catch (e) {
-    console.error('Config load failed:', e);
+    console.error('配置加载失败:', e);
   }
 }
 
@@ -601,7 +601,7 @@ function renderEnvEditor(env) {
 function renderSkills(skills) {
   const el = document.getElementById('skills-list');
   if (!skills.length) {
-    el.innerHTML = '<p class="empty-state">无 Skills</p>';
+    el.innerHTML = '<p class="empty-state">暂无技能</p>';
     return;
   }
   el.innerHTML = skills.map(s => `
@@ -615,7 +615,7 @@ function renderSkills(skills) {
 function renderAgents(agents) {
   const el = document.getElementById('agents-list');
   if (!agents.length) {
-    el.innerHTML = '<p class="empty-state">无 Agents</p>';
+    el.innerHTML = '<p class="empty-state">暂无代理</p>';
     return;
   }
   el.innerHTML = agents.map(a => `
@@ -632,7 +632,7 @@ async function loadSessions() {
     const sessions = await (await fetch('/api/sessions')).json();
     renderSessionList(sessions);
   } catch (e) {
-    console.error('Load sessions failed:', e);
+    console.error('历史会话加载失败:', e);
   }
 }
 
@@ -711,7 +711,7 @@ async function resumeSession(sessionId, cwd, model) {
       renderHistory(history);
     }
   } catch(e) {
-    console.error('Load history failed:', e);
+    console.error('历史消息加载失败:', e);
   }
 
   const result = await sendAction('resume_session', {
@@ -745,7 +745,7 @@ function renderHistory(history) {
         } else if (block.type === 'tool_use') {
           const input = typeof block.input === 'string' ? block.input : JSON.stringify(block.input, null, 2);
           html += `<div class="tool-card">
-            <div class="tool-header"><span class="tool-icon">&#9881;</span> ${esc(block.name || 'Tool')}</div>
+            <div class="tool-header"><span class="tool-icon">&#9881;</span> ${esc(block.name || '工具')}</div>
             <div class="tool-body">${esc(input.length > 200 ? input.substring(0, 200) + '...' : input)}</div>
           </div>`;
         }
@@ -915,9 +915,13 @@ const filePickerUp = document.getElementById('file-picker-up');
 const filePickerClose = document.getElementById('file-picker-close');
 const filePickerConfirm = document.getElementById('file-picker-confirm');
 const filePickerSelectedCount = document.getElementById('file-picker-selected-count');
+const filePickerSearch = document.getElementById('file-picker-search');
 
 let filePickerCurrentDir = '/';
 let filePickerSelected = new Map(); // path -> name
+let filePickerItems = [];
+let filePickerSearchTimer = null;
+let filePickerSearchSeq = 0;
 
 filePickerClose.addEventListener('click', closeFilePicker);
 filePickerOverlay.addEventListener('click', (e) => {
@@ -927,9 +931,11 @@ filePickerUp.addEventListener('click', () => {
   navigateFilePicker(getParentPath(filePickerCurrentDir));
 });
 filePickerConfirm.addEventListener('click', confirmFileSelection);
+filePickerSearch.addEventListener('input', handleFilePickerSearchInput);
 
 function openFilePicker() {
   filePickerSelected.clear();
+  filePickerSearch.value = '';
   updateFilePickerCount();
   filePickerOverlay.style.display = 'flex';
   // 默认打开当前 CWD，没有就用根目录
@@ -948,6 +954,9 @@ function updateFilePickerCount() {
 async function navigateFilePicker(path) {
   filePickerCurrentDir = path;
   filePickerCurrentPath.textContent = path || '/';
+  filePickerItems = [];
+  filePickerSearch.value = '';
+  filePickerSearchSeq += 1;
   filePickerList.innerHTML = '<div class="picker-empty">加载中...</div>';
 
   try {
@@ -966,53 +975,115 @@ async function navigateFilePicker(path) {
     filePickerCurrentDir = data.current || path;
     filePickerCurrentPath.textContent = filePickerCurrentDir;
 
-    if (!data.items || data.items.length === 0) {
+    filePickerItems = data.items || [];
+
+    if (filePickerItems.length === 0) {
       filePickerList.innerHTML = '<div class="picker-empty">此目录为空</div>';
       return;
     }
 
-    filePickerList.innerHTML = data.items.map(item => {
-      const isDir = item.type === 'dir' || item.type === 'drive';
-      const icon = item.type === 'drive' ? '&#128423;' : isDir ? '&#128193;' : getFileIcon(item.name);
-      const isSelected = filePickerSelected.has(item.path);
-      return `<div class="picker-item file-picker-item ${item.type === 'drive' ? 'drive' : ''} ${isSelected ? 'selected' : ''}"
-          data-path="${esc(item.path)}" data-type="${esc(item.type)}" data-name="${esc(item.name)}">
-        <span class="picker-item-icon">${icon}</span>
-        <span class="picker-item-name">${esc(item.name)}</span>
-        ${!isDir && isSelected ? '<span style="margin-left:auto;color:var(--green);font-size:12px;">✓</span>' : ''}
-      </div>`;
-    }).join('');
-
-    filePickerList.querySelectorAll('.file-picker-item').forEach(el => {
-      el.addEventListener('click', () => {
-        const type = el.dataset.type;
-        const itemPath = el.dataset.path;
-        const itemName = el.dataset.name;
-
-        if (type === 'dir' || type === 'drive') {
-          navigateFilePicker(itemPath);
-        } else {
-          // 切换选中状态
-          if (filePickerSelected.has(itemPath)) {
-            filePickerSelected.delete(itemPath);
-            el.classList.remove('selected');
-            const check = el.querySelector('span[style]');
-            if (check) check.remove();
-          } else {
-            filePickerSelected.set(itemPath, itemName);
-            el.classList.add('selected');
-            const check = document.createElement('span');
-            check.style.cssText = 'margin-left:auto;color:var(--green);font-size:12px;';
-            check.textContent = '✓';
-            el.appendChild(check);
-          }
-          updateFilePickerCount();
-        }
-      });
-    });
+    renderFilePickerItems(filePickerItems);
   } catch (e) {
     filePickerList.innerHTML = `<div class="picker-empty">请求失败: ${esc(e.message)}</div>`;
   }
+}
+
+function formatModelName(model) {
+  const names = {
+    'claude-opus-4-6': 'Opus 4.6',
+    'claude-sonnet-4-6': 'Sonnet 4.6',
+    'claude-haiku-4-6': 'Haiku 4.6',
+  };
+  return names[model] || model.replace(/^claude-/, '');
+}
+
+function handleFilePickerSearchInput() {
+  window.clearTimeout(filePickerSearchTimer);
+  const keyword = filePickerSearch.value.trim();
+
+  if (!keyword) {
+    renderFilePickerItems(filePickerItems);
+    return;
+  }
+
+  filePickerSearchTimer = window.setTimeout(() => {
+    searchFilePicker(keyword);
+  }, 250);
+}
+
+async function searchFilePicker(keyword) {
+  const seq = ++filePickerSearchSeq;
+  filePickerList.innerHTML = '<div class="picker-empty">搜索中...</div>';
+
+  try {
+    const resp = await fetch('/api/search-files', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ path: filePickerCurrentDir, query: keyword }),
+    });
+    const data = await resp.json();
+    if (seq !== filePickerSearchSeq || filePickerSearch.value.trim() !== keyword) return;
+
+    if (data.error) {
+      filePickerList.innerHTML = `<div class="picker-empty">${esc(data.error)}</div>`;
+      return;
+    }
+
+    renderFilePickerItems(data.items || [], {
+      emptyText: '未找到匹配项',
+      truncated: data.truncated,
+    });
+  } catch (e) {
+    if (seq === filePickerSearchSeq) {
+      filePickerList.innerHTML = `<div class="picker-empty">搜索失败: ${esc(e.message)}</div>`;
+    }
+  }
+}
+
+function renderFilePickerItems(items, options = {}) {
+  const keyword = filePickerSearch.value.trim().toLowerCase();
+  const filteredItems = keyword && items === filePickerItems
+    ? items.filter(item => `${item.name} ${item.path}`.toLowerCase().includes(keyword))
+    : items;
+
+  if (filteredItems.length === 0) {
+    filePickerList.innerHTML = `<div class="picker-empty">${options.emptyText || (keyword ? '未找到匹配项' : '此目录为空')}</div>`;
+    return;
+  }
+
+  filePickerList.innerHTML = `${options.truncated ? '<div class="picker-empty compact">结果较多，仅显示前 200 项</div>' : ''}${filteredItems.map(item => {
+    const isDir = item.type === 'dir' || item.type === 'drive';
+    const icon = item.type === 'drive' ? '&#128423;' : isDir ? '&#128193;' : getFileIcon(item.name);
+    const isSelected = filePickerSelected.has(item.path);
+    const displayName = item.display || item.name;
+    return `<div class="picker-item file-picker-item ${item.type === 'drive' ? 'drive' : ''} ${isSelected ? 'selected' : ''}"
+        data-path="${esc(item.path)}" data-type="${esc(item.type)}" data-name="${esc(displayName)}">
+      <span class="picker-item-icon">${icon}</span>
+      <span class="picker-item-name">${esc(displayName)}</span>
+      ${!isDir && isSelected ? '<span class="picker-check">✓</span>' : ''}
+    </div>`;
+  }).join('')}`;
+
+  filePickerList.querySelectorAll('.file-picker-item').forEach(el => {
+    el.addEventListener('click', () => {
+      const type = el.dataset.type;
+      const itemPath = el.dataset.path;
+      const itemName = el.dataset.name;
+
+      if (type === 'dir' || type === 'drive') {
+        navigateFilePicker(itemPath);
+        return;
+      }
+
+      if (filePickerSelected.has(itemPath)) {
+        filePickerSelected.delete(itemPath);
+      } else {
+        filePickerSelected.set(itemPath, itemName);
+      }
+      updateFilePickerCount();
+      renderFilePickerItems(filePickerSearch.value.trim() ? filteredItems : filePickerItems);
+    });
+  });
 }
 
 function getFileIcon(name) {

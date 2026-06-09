@@ -103,6 +103,78 @@ def browse_files(path: str) -> dict:
     }
 
 
+def search_files(path: str, query: str, max_results: int = 200) -> dict:
+    """在指定目录及其子目录中搜索文件（用于附件选择器搜索）。"""
+    query = (query or "").strip().lower()
+    if not query:
+        return browse_files(path)
+
+    if not path or path == "/":
+        if sys.platform == "win32":
+            return {"current": "/", "parent": None, "items": [], "error": "请先选择一个具体目录后再搜索"}
+        path = "/"
+
+    path = os.path.normpath(path)
+    if not os.path.isdir(path):
+        return {"current": path, "parent": None, "items": [], "error": "路径不存在"}
+
+    excluded_dirs = {'node_modules', '__pycache__', '.git', 'venv', '.venv'}
+    items = []
+
+    try:
+        for root, dirs, files in os.walk(path):
+            dirs[:] = sorted(d for d in dirs if not d.startswith('.') and d not in excluded_dirs)
+
+            for dirname in list(dirs):
+                full = os.path.join(root, dirname)
+                rel = os.path.relpath(full, path).replace("\\", "/")
+                if query in dirname.lower() or query in rel.lower():
+                    items.append({
+                        "name": dirname,
+                        "display": rel,
+                        "path": full.replace("\\", "/"),
+                        "type": "dir",
+                    })
+                    if len(items) >= max_results:
+                        return {
+                            "current": path.replace("\\", "/"),
+                            "parent": os.path.dirname(path).replace("\\", "/"),
+                            "items": items,
+                            "truncated": True,
+                        }
+
+            for filename in sorted(files):
+                if filename.startswith('.'):
+                    continue
+                full = os.path.join(root, filename)
+                rel = os.path.relpath(full, path).replace("\\", "/")
+                if query not in filename.lower() and query not in rel.lower():
+                    continue
+                items.append({
+                    "name": filename,
+                    "display": rel,
+                    "path": full.replace("\\", "/"),
+                    "type": "file",
+                })
+                if len(items) >= max_results:
+                    return {
+                        "current": path.replace("\\", "/"),
+                        "parent": os.path.dirname(path).replace("\\", "/"),
+                        "items": items,
+                        "truncated": True,
+                    }
+    except PermissionError:
+        return {"current": path.replace("\\", "/"), "parent": None, "items": [], "error": "无权限访问"}
+
+    items.sort(key=lambda item: (item["type"] != "dir", item.get("display", item["name"]).lower()))
+    return {
+        "current": path.replace("\\", "/"),
+        "parent": os.path.dirname(path).replace("\\", "/"),
+        "items": items,
+        "truncated": False,
+    }
+
+
 # ─── 目录浏览 ──────────────────────────────────────────────
 def browse_directory(path: str) -> dict:
     import string
@@ -558,6 +630,11 @@ async def handle_api_post(path: str, body: bytes, writer: asyncio.StreamWriter):
         return
     elif path == "/api/browse-files":
         result = browse_files(data.get("path", ""))
+        resp = json.dumps(result, ensure_ascii=False).encode("utf-8")
+        await send_response(writer, 200, "application/json; charset=utf-8", resp)
+        return
+    elif path == "/api/search-files":
+        result = search_files(data.get("path", ""), data.get("query", ""))
         resp = json.dumps(result, ensure_ascii=False).encode("utf-8")
         await send_response(writer, 200, "application/json; charset=utf-8", resp)
         return
