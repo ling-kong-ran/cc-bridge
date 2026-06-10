@@ -105,5 +105,14 @@
   "cliInstallNotDetected": "安装命令已执行，但仍未检测到命令行工具，请重启服务后重试",
   "agentsRunning": "{count} 个子代理运行中",
   "subagent": "子代理",
-  "running": "运行中"
+  "running": "运行中",
+  "notifications": "系统通知",
+  "notifyWhenUnfocused": "页面失焦时任务完成后通知",
+  "notifyPermissionDenied": "通知权限未开启，请在浏览器权限设置中允许通知",
+  "notifyUnsupported": "当前浏览器不支持系统通知",
+  "notifyTurnTitle": "CCB GUI",
+  "notifyTurnBody": "{project} 的回复已完成",
+  "notifySubagentTitle": "子代理已完成",
+  "notifySubagentBody": "{agent} · {task}",
+  "notifyFallbackBody": "{project} 的任务已结束"
 }

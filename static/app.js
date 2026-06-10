@@ -35,14 +35,19 @@ const themeToggleText = document.getElementById('theme-toggle-text');
 const languageSelect = document.getElementById('language-select');
 const fontSizeRange = document.getElementById('font-size-range');
 const fontSizeValue = document.getElementById('font-size-value');
+const notificationsToggle = document.getElementById('notifications-toggle');
+const notificationsRow = document.getElementById('notifications-row');
 let currentLanguage = 'en';
 let i18nMap = {};
 let fontSizePercent = 100;
+let notificationsEnabled = false;
+let lastNotifyAt = 0;
 
 // ─── 初始化 ──────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', async () => {
   initTheme();
   initInterfaceSettings();
+  initNotifications();
   await loadThemePreference();
   initNavigation();
   initSSE();
@@ -86,6 +91,96 @@ function initInterfaceSettings() {
   fontSizeRange?.addEventListener('input', () => {
     applyFontSize(Number(fontSizeRange.value || 100));
   });
+}
+
+function initNotifications() {
+  if (!notificationsToggle) return;
+  if (!("Notification" in window)) {
+    notificationsEnabled = false;
+    notificationsToggle.checked = false;
+    notificationsToggle.disabled = true;
+    if (notificationsRow) notificationsRow.title = t('notifyUnsupported');
+    return;
+  }
+
+  notificationsToggle.addEventListener('change', async () => {
+    if (!notificationsToggle.checked) {
+      notificationsEnabled = false;
+      await saveGuiSettings({ notifications_enabled: false });
+      return;
+    }
+
+    const permission = await requestNotificationPermission();
+    notificationsEnabled = permission === 'granted';
+    notificationsToggle.checked = notificationsEnabled;
+    await saveGuiSettings({ notifications_enabled: notificationsEnabled });
+    if (!notificationsEnabled) {
+      addSystemMsg(t('notifyPermissionDenied'), true);
+    }
+  });
+}
+
+async function requestNotificationPermission() {
+  if (!("Notification" in window)) return 'unsupported';
+  if (Notification.permission === 'granted' || Notification.permission === 'denied') {
+    return Notification.permission;
+  }
+  try {
+    return await Notification.requestPermission();
+  } catch (e) {
+    return Notification.permission || 'default';
+  }
+}
+
+function applyNotificationPreference(enabled, persist = false) {
+  const supported = "Notification" in window;
+  notificationsEnabled = Boolean(enabled && supported && Notification.permission === 'granted');
+  if (notificationsToggle) {
+    notificationsToggle.checked = notificationsEnabled;
+    notificationsToggle.disabled = !supported;
+  }
+  if (persist) saveGuiSettings({ notifications_enabled: notificationsEnabled });
+}
+
+function pageIsUnfocused() {
+  return document.visibilityState === 'hidden' || !document.hasFocus();
+}
+
+function notifyComplete(kind, detail = {}) {
+  if (!notificationsEnabled || !("Notification" in window) || Notification.permission !== 'granted' || !pageIsUnfocused()) {
+    return;
+  }
+
+  const now = Date.now();
+  if (now - lastNotifyAt < 1500) return;
+  lastNotifyAt = now;
+
+  const project = getProjectName(cwdInput.value.trim()) || t('appSubtitleShort');
+  let title = t('notifyTurnTitle');
+  let body = t('notifyTurnBody', { project });
+  if (kind === 'subagent') {
+    title = t('notifySubagentTitle');
+    body = t('notifySubagentBody', {
+      agent: detail.agent || t('subagent'),
+      task: detail.task || project,
+    });
+  } else if (kind === 'process') {
+    body = t('notifyFallbackBody', { project });
+  }
+
+  try {
+    const notification = new Notification(title, { body, tag: `ccb-gui-${kind}`, renotify: true });
+    notification.onclick = () => {
+      try { window.focus(); } catch (e) { /* ignore */ }
+      notification.close();
+    };
+    setTimeout(() => notification.close(), 8000);
+  } catch (e) { /* ignore */ }
+}
+
+function getProjectName(cwd) {
+  if (!cwd) return '';
+  return cwd.replace(/\\/g, '/').split('/').filter(Boolean).pop() || cwd;
 }
 
 function initFocusConfigReload() {
@@ -141,6 +236,7 @@ async function loadThemePreference() {
 
     applyFontSize(size, false);
     await applyLanguage(language, false);
+    applyNotificationPreference(Boolean(data.notifications_enabled));
 
     if (data.language !== language || Number(data.font_size_percent) !== size) {
       saveGuiSettings({ language, font_size_percent: size });
@@ -148,6 +244,7 @@ async function loadThemePreference() {
   } catch (e) {
     applyFontSize(100, false);
     await applyLanguage('en', false);
+    applyNotificationPreference(false);
   }
 }
 
@@ -493,6 +590,7 @@ function initSSE() {
       currentTurnContent = '';
       currentTurnHasAssistantOutput = false;
       currentAssistantEl = null;
+      notifyComplete('process');
       updateUI();
       if (isSlashCommand(finishedTurn) && !hadAssistantOutput) {
         const command = getSlashCommandName(finishedTurn);
@@ -780,11 +878,18 @@ function updateTaskActivity(parentToolUseId, message) {
 
 function finishTasks(ids) {
   let changed = false;
+  let completedTask = null;
   for (const id of ids || []) {
+    const taskInfo = runningTasks.get(id);
+    if (taskInfo && !completedTask) completedTask = taskInfo;
     finishedTaskIds.add(id);
     if (runningTasks.delete(id)) changed = true;
   }
   if (changed) {
+    notifyComplete('subagent', {
+      agent: completedTask?.type || t('subagent'),
+      task: completedTask?.last || completedTask?.desc || '',
+    });
     renderAgentStatus();
     if (currentAssistantEl) scheduleRender();
   }
@@ -829,6 +934,7 @@ function handleResult(data) {
   currentTurnContent = '';
   currentTurnHasAssistantOutput = false;
   clearRunningTasks();
+  notifyComplete('turn');
   cleanupUploadedFiles(uploadedFilesPendingCleanup);
   uploadedFilesPendingCleanup = [];
   updateUI();
