@@ -439,7 +439,7 @@ html.light-theme .theme-icon-sun { display: none; }
 
 .input:focus, .select:focus {
   border-color: var(--green-dim);
-  background: rgba(var(--accent-rgb),0.02);
+  background-color: rgba(var(--accent-rgb),0.02);
   box-shadow: 0 0 0 2px rgba(var(--accent-rgb),0.05);
   color: var(--text-bright);
 }
