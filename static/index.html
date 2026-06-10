@@ -55,6 +55,7 @@
           <div class="runtime-panel-body">
             <label class="field-label" for="cli-select" data-i18n="cliTool">CLI Tool</label>
             <select id="cli-select" class="select"></select>
+            <button id="btn-cli-install-guide" class="cli-install-link" style="display:none" data-i18n="cliInstallGuideLink">How to install the CLI?</button>
 
             <label class="field-label" for="model-select" data-i18n="model">Model</label>
             <select id="model-select" class="select">
@@ -270,6 +271,35 @@
         <span id="file-picker-selected-count" style="font-family:var(--font-mono);color:var(--text-muted);">Selected 0 files</span>
         <button id="file-picker-confirm" class="btn btn-primary" style="width:auto; padding:8px 24px;">
           <span class="btn-prefix">&gt;</span> <span data-i18n="addAttachments">Add Attachments</span>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- CLI 安装引导弹窗 -->
+  <div id="cli-install-overlay" class="picker-overlay" style="display:none">
+    <div class="picker-modal" style="width:520px;">
+      <div class="picker-header">
+        <span class="picker-title" data-i18n="cliInstallTitle">Install Claude Code CLI</span>
+        <button id="cli-install-close" class="picker-close" data-i18n="close">Close</button>
+      </div>
+      <div class="cli-install-body">
+        <p class="cli-install-desc" data-i18n="cliInstallDesc">No CLI detected. Install Claude Code with npm (requires Node.js 18+):</p>
+        <div class="cli-install-cmd-row">
+          <code id="cli-install-cmd" class="cli-install-cmd">npm install -g @anthropic-ai/claude-code</code>
+          <button id="cli-install-copy" class="btn-copy-cmd" data-i18n-title="copyCommand" title="Copy command">
+            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+            <span data-i18n="copy">Copy</span>
+          </button>
+        </div>
+        <p class="cli-install-hint" data-i18n="cliInstallHint">Run the command in a terminal, or click the button below to install automatically.</p>
+        <div id="cli-install-status" class="cli-install-status" style="display:none"></div>
+        <pre id="cli-install-output" class="cli-install-output" style="display:none"></pre>
+      </div>
+      <div class="picker-footer" style="justify-content:space-between; align-items:center;">
+        <a class="cli-install-doc-link" href="https://docs.anthropic.com/en/docs/claude-code" target="_blank" rel="noopener" data-i18n="cliInstallDocs">Official docs</a>
+        <button id="cli-install-run" class="btn btn-primary" style="width:auto; padding:8px 24px;">
+          <span class="btn-prefix">&gt;</span> <span data-i18n="cliInstallRun">Install Automatically</span>
         </button>
       </div>
     </div>

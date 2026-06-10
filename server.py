@@ -14,7 +14,7 @@ from urllib.parse import urlparse, parse_qs
 
 sys.path.insert(0, str(Path(__file__).parent))
 
-from ccb_bridge import SessionManager, discover_slash_commands, get_available_clis, get_current_cli, set_current_cli
+from ccb_bridge import SessionManager, discover_slash_commands, get_available_clis, get_current_cli, set_current_cli, refresh_clis
 from config_manager import (
     get_settings,
     save_settings,
@@ -294,6 +294,53 @@ def browse_directory(path: str) -> dict:
         "current": path.replace("\\", "/"),
         "parent": parent.replace("\\", "/") if parent != "/" else "/",
         "items": items,
+    }
+
+
+# ─── CLI 安装 ─────────────────────────────────────────────
+INSTALL_CLI_COMMAND = "npm install -g @anthropic-ai/claude-code"
+_install_lock = asyncio.Lock()
+
+
+async def install_cli() -> dict:
+    """通过 npm 全局安装 Claude Code CLI，返回安装结果。"""
+    import shutil as _shutil
+
+    npm = _shutil.which("npm")
+    if not npm:
+        return {"ok": False, "error": "npm_not_found"}
+
+    if _install_lock.locked():
+        return {"ok": False, "error": "install_in_progress"}
+
+    async with _install_lock:
+        try:
+            proc = await asyncio.create_subprocess_exec(
+                npm, "install", "-g", "@anthropic-ai/claude-code",
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.STDOUT,
+                limit=1024 * 1024 * 5,
+            )
+            stdout, _ = await asyncio.wait_for(proc.communicate(), timeout=600)
+            output = (stdout or b"").decode("utf-8", errors="replace").strip()
+            if proc.returncode != 0:
+                return {"ok": False, "error": "install_failed", "output": output[-4000:]}
+        except asyncio.TimeoutError:
+            try:
+                proc.kill()
+            except ProcessLookupError:
+                pass
+            return {"ok": False, "error": "install_timeout"}
+        except Exception as exc:
+            return {"ok": False, "error": "install_failed", "output": str(exc)}
+
+    available = refresh_clis()
+    return {
+        "ok": bool(available),
+        "available": available,
+        "current": get_current_cli() if available else "",
+        "output": output[-4000:],
+        "error": None if available else "cli_not_detected_after_install",
     }
 
 
@@ -682,7 +729,12 @@ async def handle_api_get(path: str, writer: asyncio.StreamWriter, query: dict = 
         discovered = await discover_slash_commands(model=model, cwd=cwd)
         data = format_slash_commands(discovered)
     elif path == "/api/clis":
-        data = {"available": get_available_clis(), "current": get_current_cli()}
+        available = refresh_clis()
+        data = {
+            "available": available,
+            "current": get_current_cli() if available else "",
+            "install_command": INSTALL_CLI_COMMAND,
+        }
     elif path == "/api/default-cwd":
         data = {"cwd": DEFAULT_CWD}
     elif path == "/api/sessions":
@@ -761,6 +813,11 @@ async def handle_api_post(path: str, body: bytes, writer: asyncio.StreamWriter):
         cwd = data.get("cwd", "")
         history = load_session_history(sid, cwd)
         resp = json.dumps(history, ensure_ascii=False).encode("utf-8")
+        await send_response(writer, 200, "application/json; charset=utf-8", resp)
+        return
+    elif path == "/api/install-cli":
+        result = await install_cli()
+        resp = json.dumps(result, ensure_ascii=False).encode("utf-8")
         await send_response(writer, 200, "application/json; charset=utf-8", resp)
         return
     elif path == "/api/clis":

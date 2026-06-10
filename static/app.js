@@ -47,6 +47,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   initNavigation();
   initSSE();
   initInput();
+  initCliInstallModal();
   loadDefaultCwd();
   loadClis();
   loadModels();
@@ -235,16 +236,25 @@ function normalizeFontSize(value) {
 
 async function loadClis() {
   const cliSelect = document.getElementById('cli-select');
+  const guideBtn = document.getElementById('btn-cli-install-guide');
   try {
     const resp = await fetch('/api/clis');
     const data = await resp.json();
     const available = data.available || [];
     const current = data.current || '';
+    if (data.install_command) cliInstallCommand = data.install_command;
     cliSelect.innerHTML = '';
     if (available.length === 0) {
       cliSelect.innerHTML = `<option value="">${esc(t('noCli'))}</option>`;
+      if (guideBtn) guideBtn.style.display = '';
+      // 首次检测不到 CLI 时自动弹出安装引导
+      if (!cliInstallPromptShown) {
+        cliInstallPromptShown = true;
+        openCliInstallModal();
+      }
       return;
     }
+    if (guideBtn) guideBtn.style.display = 'none';
     for (const cli of available) {
       const opt = document.createElement('option');
       opt.value = cli.path;
@@ -263,6 +273,102 @@ async function loadClis() {
       loadSlashCommands();
     };
   } catch (e) { /* ignore */ }
+}
+
+// ─── CLI 安装引导 ────────────────────────────────────────────
+let cliInstallCommand = 'npm install -g @anthropic-ai/claude-code';
+let cliInstallPromptShown = false;
+let cliInstalling = false;
+
+function openCliInstallModal() {
+  const overlay = document.getElementById('cli-install-overlay');
+  if (!overlay) return;
+  const cmdEl = document.getElementById('cli-install-cmd');
+  if (cmdEl) cmdEl.textContent = cliInstallCommand;
+  setCliInstallStatus('', '');
+  const output = document.getElementById('cli-install-output');
+  if (output) { output.style.display = 'none'; output.textContent = ''; }
+  overlay.style.display = '';
+}
+
+function closeCliInstallModal() {
+  const overlay = document.getElementById('cli-install-overlay');
+  if (overlay) overlay.style.display = 'none';
+}
+
+function setCliInstallStatus(text, kind) {
+  const status = document.getElementById('cli-install-status');
+  if (!status) return;
+  if (!text) { status.style.display = 'none'; status.textContent = ''; return; }
+  status.style.display = '';
+  status.textContent = text;
+  status.className = `cli-install-status${kind ? ' ' + kind : ''}`;
+}
+
+async function copyCliInstallCommand() {
+  let copied = false;
+  try {
+    await navigator.clipboard.writeText(cliInstallCommand);
+    copied = true;
+  } catch (e) {
+    // http 环境下 clipboard API 可能不可用，回退到 execCommand
+    const ta = document.createElement('textarea');
+    ta.value = cliInstallCommand;
+    ta.style.position = 'fixed';
+    ta.style.opacity = '0';
+    document.body.appendChild(ta);
+    ta.select();
+    try { copied = document.execCommand('copy'); } catch (e2) { /* ignore */ }
+    ta.remove();
+  }
+  setCliInstallStatus(copied ? t('cmdCopied') : t('cmdCopyFailed'), copied ? 'ok' : 'err');
+}
+
+async function runCliAutoInstall() {
+  if (cliInstalling) return;
+  cliInstalling = true;
+  const runBtn = document.getElementById('cli-install-run');
+  const output = document.getElementById('cli-install-output');
+  if (runBtn) runBtn.disabled = true;
+  setCliInstallStatus(t('cliInstalling'), '');
+  try {
+    const resp = await fetch('/api/install-cli', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
+    const result = await resp.json();
+    if (output && result.output) {
+      output.style.display = '';
+      output.textContent = result.output;
+      output.scrollTop = output.scrollHeight;
+    }
+    if (result.ok) {
+      setCliInstallStatus(t('cliInstallSuccess'), 'ok');
+      await loadClis();
+      addSystemMsg(t('cliInstallSuccess'));
+      setTimeout(closeCliInstallModal, 1200);
+    } else {
+      const reasons = {
+        npm_not_found: t('cliInstallNpmMissing'),
+        install_in_progress: t('cliInstallInProgress'),
+        install_timeout: t('cliInstallTimeout'),
+        cli_not_detected_after_install: t('cliInstallNotDetected'),
+      };
+      setCliInstallStatus(reasons[result.error] || t('cliInstallFailed'), 'err');
+    }
+  } catch (e) {
+    setCliInstallStatus(t('cliInstallFailed'), 'err');
+  } finally {
+    cliInstalling = false;
+    if (runBtn) runBtn.disabled = false;
+  }
+}
+
+function initCliInstallModal() {
+  document.getElementById('btn-cli-install-guide')?.addEventListener('click', openCliInstallModal);
+  document.getElementById('cli-install-close')?.addEventListener('click', closeCliInstallModal);
+  document.getElementById('cli-install-copy')?.addEventListener('click', copyCliInstallCommand);
+  document.getElementById('cli-install-run')?.addEventListener('click', runCliAutoInstall);
+  document.getElementById('cli-install-overlay')?.addEventListener('click', (e) => {
+    if (e.target === e.currentTarget) closeCliInstallModal();
+  });
 }
 
 async function loadModels() {

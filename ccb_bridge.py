@@ -67,6 +67,15 @@ def set_current_cli(path: str):
     global _current_cli
     _current_cli = path
 
+def refresh_clis() -> list[dict]:
+    """重新检测可用 CLI；若当前选中的 CLI 已失效则切换到第一个可用项。"""
+    global _current_cli
+    available = _detect_available_clis()
+    paths = [c["path"] for c in available]
+    if available and _current_cli not in paths:
+        _current_cli = available[0]["path"]
+    return available
+
 
 async def discover_slash_commands(
     model: str,

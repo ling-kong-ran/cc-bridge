@@ -85,5 +85,22 @@
   "tool": "工具",
   "thinking": "思考过程",
   "noCommandMatches": "未找到匹配命令",
-  "attachmentIntro": "请查看以下附件文件:"
+  "attachmentIntro": "请查看以下附件文件:",
+  "cliInstallGuideLink": "如何安装命令行工具？",
+  "cliInstallTitle": "安装 Claude Code 命令行工具",
+  "cliInstallDesc": "未检测到可用的命令行工具。可使用 npm 安装 Claude Code（需要 Node.js 18+）：",
+  "cliInstallHint": "在终端中运行上述命令，或点击下方按钮自动安装。",
+  "cliInstallDocs": "官方文档",
+  "cliInstallRun": "自动安装",
+  "copy": "复制",
+  "copyCommand": "复制命令",
+  "cmdCopied": "命令已复制到剪贴板",
+  "cmdCopyFailed": "复制失败，请手动选择并复制命令",
+  "cliInstalling": "正在安装，请稍候...（可能需要几分钟）",
+  "cliInstallSuccess": "安装成功，已检测到命令行工具",
+  "cliInstallFailed": "安装失败，请在终端中手动执行命令查看详细错误",
+  "cliInstallNpmMissing": "未检测到 npm，请先安装 Node.js 18+ 后重试",
+  "cliInstallInProgress": "已有安装任务正在进行中",
+  "cliInstallTimeout": "安装超时，请检查网络后重试或手动安装",
+  "cliInstallNotDetected": "安装命令已执行，但仍未检测到命令行工具，请重启服务后重试"
 }
