@@ -368,6 +368,38 @@ UPLOAD_DIR_FALLBACK = Path(__file__).parent / "uploads"
 UPLOAD_DIR_FALLBACK.mkdir(exist_ok=True)
 
 
+def is_allowed_upload_path(path: str) -> Path | None:
+    """校验上传缓存路径，仅允许 fallback uploads 或任意 .gui-uploads 下的普通文件。"""
+    try:
+        fp = Path(path).resolve()
+        fallback = UPLOAD_DIR_FALLBACK.resolve()
+        is_fallback = str(fp).startswith(str(fallback))
+        is_gui_upload = any(part == ".gui-uploads" for part in fp.parts)
+        if not (is_fallback or is_gui_upload):
+            return None
+        return fp
+    except Exception:
+        return None
+
+
+def delete_uploaded_files(paths: list[str]) -> dict:
+    """删除 GUI 上传缓存文件；只删除文件，不删除用户通过文件选择器引用的原始路径。"""
+    deleted = []
+    failed = []
+    for path in paths or []:
+        fp = is_allowed_upload_path(str(path or ""))
+        if not fp:
+            failed.append({"path": path, "error": "forbidden"})
+            continue
+        try:
+            if fp.exists() and fp.is_file():
+                fp.unlink()
+                deleted.append(str(fp).replace("\\", "/"))
+        except OSError as exc:
+            failed.append({"path": path, "error": str(exc)})
+    return {"ok": True, "deleted": deleted, "failed": failed}
+
+
 # ─── 文件上传 ─────────────────────────────────────────────
 async def handle_upload(headers: dict, body: bytes, writer: asyncio.StreamWriter):
     """处理 multipart 文件上传，保存到工作目录的 .gui-uploads/ 下"""
@@ -772,17 +804,9 @@ async def handle_api_get(path: str, writer: asyncio.StreamWriter, query: dict = 
         if not file_path:
             await send_response(writer, 400, "text/plain", b"missing path")
             return
-        fp = Path(file_path)
-        # 安全检查：只允许访问 .gui-uploads 或 fallback uploads 目录
-        try:
-            resolved = str(fp.resolve())
-            is_fallback = resolved.startswith(str(UPLOAD_DIR_FALLBACK.resolve()))
-            is_gui_upload = ".gui-uploads" in resolved
-            if not (is_fallback or is_gui_upload):
-                await send_response(writer, 403, "text/plain", b"forbidden")
-                return
-        except Exception:
-            await send_response(writer, 400, "text/plain", b"bad path")
+        fp = is_allowed_upload_path(file_path)
+        if not fp:
+            await send_response(writer, 403, "text/plain", b"forbidden")
             return
         if not fp.exists():
             await send_response(writer, 404, "text/plain", b"not found")
@@ -840,6 +864,11 @@ async def handle_api_post(path: str, body: bytes, writer: asyncio.StreamWriter):
         cwd = data.get("cwd", "")
         history = load_session_history(sid, cwd)
         resp = json.dumps(history, ensure_ascii=False).encode("utf-8")
+        await send_response(writer, 200, "application/json; charset=utf-8", resp)
+        return
+    elif path == "/api/upload/delete":
+        result = delete_uploaded_files(data.get("paths") or [])
+        resp = json.dumps(result, ensure_ascii=False).encode("utf-8")
         await send_response(writer, 200, "application/json; charset=utf-8", resp)
         return
     elif path == "/api/install-cli":

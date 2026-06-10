@@ -484,6 +484,8 @@ function initSSE() {
     // ccb 进程结束 —— 确保前端退出 responding 状态
     const data = JSON.parse(e.data || '{}');
     clearRunningTasks();
+    cleanupUploadedFiles(uploadedFilesPendingCleanup);
+    uploadedFilesPendingCleanup = [];
     if (isResponding) {
       const finishedTurn = currentTurnContent;
       const hadAssistantOutput = currentTurnHasAssistantOutput;
@@ -509,6 +511,8 @@ function initSSE() {
     currentTurnHasAssistantOutput = false;
     currentAssistantEl = null;
     clearRunningTasks();
+    cleanupUploadedFiles(uploadedFilesPendingCleanup);
+    uploadedFilesPendingCleanup = [];
     updateUI();
     addSystemMsg(t('interrupted'));
   });
@@ -522,6 +526,8 @@ function initSSE() {
       currentTurnContent = '';
       currentTurnHasAssistantOutput = false;
       currentAssistantEl = null;
+      cleanupUploadedFiles(uploadedFilesPendingCleanup);
+      uploadedFilesPendingCleanup = [];
       updateUI();
     }
     if (eventSource.readyState === EventSource.CLOSED) {
@@ -823,6 +829,8 @@ function handleResult(data) {
   currentTurnContent = '';
   currentTurnHasAssistantOutput = false;
   clearRunningTasks();
+  cleanupUploadedFiles(uploadedFilesPendingCleanup);
+  uploadedFilesPendingCleanup = [];
   updateUI();
 
   const turnCost = Number(data.total_cost_usd || 0);
@@ -879,7 +887,8 @@ const fileInput = document.getElementById('file-input');
 const attachmentsBar = document.getElementById('attachments-bar');
 const slashCommandPanel = document.getElementById('slash-command-panel');
 const inputWrapper = document.querySelector('.input-wrapper');
-let attachedFiles = []; // [{name, path, isImage}]
+let attachedFiles = []; // [{name, path, isImage, uploaded}]
+let uploadedFilesPendingCleanup = []; // 本轮已发送、等待回合结束后删除的上传缓存文件
 let slashCommands = [];
 let slashCommandMatches = [];
 let slashCommandIndex = 0;
@@ -1111,6 +1120,17 @@ function closeSlashCommandPanel() {
   slashCommandIndex = 0;
 }
 
+function cleanupUploadedFiles(files) {
+  const paths = (files || []).filter(f => f && f.uploaded && f.path).map(f => f.path);
+  if (!paths.length) return;
+  fetch('/api/upload/delete', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ paths }),
+    keepalive: true,
+  }).catch(() => {});
+}
+
 async function uploadFile(file) {
   const formData = new FormData();
   formData.append('cwd', cwdInput.value.trim() || '');
@@ -1121,7 +1141,7 @@ async function uploadFile(file) {
     if (data.files && data.files.length > 0) {
       for (const path of data.files) {
         const isImage = /\.(png|jpg|jpeg|gif|webp|bmp|svg)$/i.test(path);
-        attachedFiles.push({ name: file.name, path, isImage });
+        attachedFiles.push({ name: file.name, path, isImage, uploaded: true });
       }
       renderAttachments();
     }
@@ -1146,7 +1166,9 @@ function renderAttachments() {
   `).join('');
   attachmentsBar.querySelectorAll('.attachment-remove').forEach(btn => {
     btn.addEventListener('click', () => {
-      attachedFiles.splice(parseInt(btn.dataset.idx), 1);
+      const idx = parseInt(btn.dataset.idx);
+      const [removed] = attachedFiles.splice(idx, 1);
+      cleanupUploadedFiles([removed]);
       renderAttachments();
     });
   });
@@ -1157,11 +1179,15 @@ function sendMessage() {
   if ((!content && attachedFiles.length === 0) || !sessionActive || isResponding) return;
   const originalContent = content;
 
-  // 注入文件路径
+  // 注入文件路径。上传缓存文件只需要保留到本轮消息发出，之后异步删除以节省磁盘。
+  let sentUploadedFiles = [];
   if (attachedFiles.length > 0) {
-    const filePaths = attachedFiles.map(f => `- ${f.path}`).join('\n');
+    const filesForThisTurn = attachedFiles.slice();
+    sentUploadedFiles = filesForThisTurn.filter(f => f.uploaded);
+    const filePaths = filesForThisTurn.map(f => `- ${f.path}`).join('\n');
     const prefix = `${t('attachmentIntro')}\n${filePaths}\n\n`;
     content = prefix + content;
+    uploadedFilesPendingCleanup.push(...sentUploadedFiles);
     attachedFiles = [];
     renderAttachments();
   }
@@ -1914,7 +1940,7 @@ function confirmFileSelection() {
 
   for (const [filePath, fileName] of filePickerSelected) {
     // 直接引用本地路径，不上传，不做缩略图（避免安全限制）
-    attachedFiles.push({ name: fileName, path: filePath, isImage: false });
+    attachedFiles.push({ name: fileName, path: filePath, isImage: false, uploaded: false });
   }
 
   renderAttachments();
