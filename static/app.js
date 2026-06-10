@@ -667,11 +667,13 @@ const btnAttach = document.getElementById('btn-attach');
 const fileInput = document.getElementById('file-input');
 const attachmentsBar = document.getElementById('attachments-bar');
 const slashCommandPanel = document.getElementById('slash-command-panel');
+const inputWrapper = document.querySelector('.input-wrapper');
 let attachedFiles = []; // [{name, path, isImage}]
 let slashCommands = [];
 let slashCommandMatches = [];
 let slashCommandIndex = 0;
 let slashCommandLoadTimer = null;
+let inputDragDepth = 0;
 
 function initInput() {
   inputEl.addEventListener('keydown', (e) => {
@@ -697,7 +699,7 @@ function initInput() {
       if (item.type.startsWith('image/')) {
         e.preventDefault();
         const blob = item.getAsFile();
-        if (blob) uploadFile(blob);
+        if (blob) uploadFiles([blob]);
         break;
       }
     }
@@ -718,11 +720,10 @@ function initInput() {
   // 附件按钮 —— 打开自定义文件选择器
   btnAttach.addEventListener('click', () => openFilePicker());
   fileInput.addEventListener('change', () => {
-    for (const file of fileInput.files) {
-      uploadFile(file);
-    }
+    uploadFiles(fileInput.files);
     fileInput.value = '';
   });
+  initInputFileDrop();
 
   document.addEventListener('click', (e) => {
     if (!slashCommandPanel.contains(e.target) && e.target !== inputEl) {
@@ -731,6 +732,50 @@ function initInput() {
   });
 
   loadSlashCommands();
+}
+
+function initInputFileDrop() {
+  if (!inputWrapper) return;
+
+  inputWrapper.addEventListener('dragenter', (e) => {
+    if (!dragEventHasFiles(e)) return;
+    e.preventDefault();
+    inputDragDepth += 1;
+    inputWrapper.classList.add('drag-over');
+  });
+
+  inputWrapper.addEventListener('dragover', (e) => {
+    if (!dragEventHasFiles(e)) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'copy';
+  });
+
+  inputWrapper.addEventListener('dragleave', (e) => {
+    if (!dragEventHasFiles(e)) return;
+    e.preventDefault();
+    inputDragDepth = Math.max(0, inputDragDepth - 1);
+    if (inputDragDepth === 0) {
+      inputWrapper.classList.remove('drag-over');
+    }
+  });
+
+  inputWrapper.addEventListener('drop', (e) => {
+    if (!dragEventHasFiles(e)) return;
+    e.preventDefault();
+    inputDragDepth = 0;
+    inputWrapper.classList.remove('drag-over');
+    uploadFiles(e.dataTransfer.files);
+  });
+}
+
+function dragEventHasFiles(e) {
+  return Array.from(e.dataTransfer?.types || []).includes('Files');
+}
+
+function uploadFiles(files) {
+  Array.from(files || []).forEach((file) => {
+    if (file) uploadFile(file);
+  });
 }
 
 function scheduleSlashCommandReload() {

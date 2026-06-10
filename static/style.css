@@ -1147,6 +1147,18 @@ html.light-theme .theme-icon-sun { display: none; }
   box-shadow: 0 0 0 2px rgba(0,255,150,0.04);
 }
 
+.input-wrapper.drag-over textarea {
+  border-color: var(--green);
+  background: rgba(0,255,150,0.05);
+  box-shadow: 0 0 0 2px rgba(0,255,150,0.08), var(--green-glow);
+}
+
+.input-wrapper.drag-over .btn-attach,
+.input-wrapper.drag-over .input-prompt {
+  color: var(--green);
+  opacity: 1;
+}
+
 .input-wrapper textarea::placeholder { color: var(--text-ghost); font-size: 11px; }
 
 .input-actions { display: flex; flex-direction: column; gap: 5px; }
