@@ -16,8 +16,10 @@
 - **文件附件**：内置文件选择器，支持搜索当前目录及子目录中的文件。
 - **动态斜杠菜单**：从 CLI `stream-json` 初始化事件读取可用 slash commands，支持输入 `/` 后搜索选择。
 - **模型与 CLI 选择**：自动检测本地 `ccb.exe`、PATH 中的 `ccb` / `claude`，模型列表来自 Claude 配置。
+- **会话中切换模型**：新建或恢复的会话都可以调整模型，下一条消息会使用当前选择的模型继续同一会话。
 - **运行设置折叠面板**：命令行工具、模型、跳过权限确认放在侧栏折叠面板中，减少对会话列表空间的占用。
 - **界面设置持久化**：支持亮暗主题、中文/英文、字体大小设置，并保存到用户目录。
+- **外部配置自动刷新**：浏览器页面重新获得焦点或从后台切回前台时，会重新读取本机 CLI、模型、环境变量和 slash commands。
 - **Markdown 展示**：支持基础 Markdown、代码块、工具调用卡片和思考块折叠。
 
 ---
@@ -67,6 +69,8 @@ python server.py
 - `/compact` 等出现在 CLI 初始化元数据中的命令可以在 GUI 中选择并发送。
 - 终端 TUI 自己实现的本地命令不一定会出现在 `stream-json` 元数据中，例如部分版本里的 `/clear`。这类命令不保证在 GUI 中可用。
 - “中断”只停止当前生成，保留会话状态，便于继续补充。
+- 恢复历史会话后仍可在“运行设置”中切换模型，GUI 会在下一条消息发送时带上新的模型参数并通过 `--resume` 继续原会话。
+- 如果在外部修改了 `~/.claude/settings.json` 或切换了本机 CLI，回到 GUI 页面时会自动重新加载相关配置。
 
 ---
 
@@ -151,6 +155,7 @@ ccb-gui/
 - **CLI 子进程模型**：每次发送消息启动一次 `ccb` / `claude -p --output-format stream-json`，通过 `--resume` 关联多轮会话。
 - **动态模型列表**：从 `~/.claude/settings.json` 的环境变量配置中提取模型值，避免历史会话污染模型下拉框。
 - **动态 slash command**：短生命周期启动 CLI，读取 `system/init` 事件中的 `slash_commands`、`skills`、`agents` 后缓存。
+- **焦点刷新配置**：监听页面 `focus` 和 `visibilitychange` 事件，节流后重新加载 CLI 列表、模型列表、Claude settings，并刷新 slash command 缓存。
 - **费用累计**：读取 CLI `result.total_cost_usd`，将每轮费用累加到会话索引。
 - **主题与界面偏好**：GUI 偏好保存在 `~/.ccb/gui_settings.json`，重启服务后仍生效。
 

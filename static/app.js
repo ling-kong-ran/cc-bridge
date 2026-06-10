@@ -17,6 +17,7 @@ const sessionGroupOpenState = new Map();
 let connectionOnline = false;
 let currentTurnContent = '';
 let currentTurnHasAssistantOutput = false;
+let lastFocusConfigReloadAt = 0;
 
 // ─── DOM ─────────────────────────────────────────────────────
 const messagesEl = document.getElementById('messages');
@@ -51,6 +52,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   loadModels();
   loadConfig();
   loadSessions();
+  initFocusConfigReload();
 });
 
 async function loadDefaultCwd() {
@@ -83,6 +85,31 @@ function initInterfaceSettings() {
   fontSizeRange?.addEventListener('input', () => {
     applyFontSize(Number(fontSizeRange.value || 100));
   });
+}
+
+function initFocusConfigReload() {
+  window.addEventListener('focus', reloadConfigOnFocus);
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') {
+      reloadConfigOnFocus();
+    }
+  });
+}
+
+function reloadConfigOnFocus() {
+  const now = Date.now();
+  if (now - lastFocusConfigReloadAt < 1500) return;
+  lastFocusConfigReloadAt = now;
+  reloadExternalConfig();
+}
+
+async function reloadExternalConfig() {
+  await Promise.all([
+    loadClis(),
+    loadModels(),
+    loadConfig(),
+  ]);
+  loadSlashCommands();
 }
 
 function applyTheme(theme, persist = true) {
@@ -226,7 +253,7 @@ async function loadClis() {
       if (cli.path === current) opt.selected = true;
       cliSelect.appendChild(opt);
     }
-    cliSelect.addEventListener('change', async () => {
+    cliSelect.onchange = async () => {
       await fetch('/api/clis', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -234,11 +261,12 @@ async function loadClis() {
       });
       addSystemMsg(t('cliSwitched', { path: cliSelect.value }));
       loadSlashCommands();
-    });
+    };
   } catch (e) { /* ignore */ }
 }
 
 async function loadModels() {
+  const previousModel = modelSelect.value;
   try {
     const resp = await fetch('/api/models');
     const models = await resp.json();
@@ -249,8 +277,11 @@ async function loadModels() {
       return;
     }
     modelSelect.innerHTML = availableModels.map((model, idx) => (
-      `<option value="${esc(model)}" ${idx === 0 ? 'selected' : ''}>${esc(formatModelName(model))}</option>`
+      `<option value="${esc(model)}" ${(previousModel ? model === previousModel : idx === 0) ? 'selected' : ''}>${esc(formatModelName(model))}</option>`
     )).join('');
+    if (previousModel && !availableModels.includes(previousModel)) {
+      modelSelect.value = availableModels[0] || '';
+    }
     scheduleSlashCommandReload();
   } catch (e) {
     modelSelect.innerHTML = '<option value="claude-sonnet-4-6">Sonnet 4.6</option>';
