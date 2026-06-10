@@ -14,6 +14,7 @@ let streamBlocks = {};
 let totalCost = 0;
 let currentSessionId = null; // ccb 的 session UUID
 const sessionGroupOpenState = new Map();
+let connectionOnline = false;
 
 // ─── DOM ─────────────────────────────────────────────────────
 const messagesEl = document.getElementById('messages');
@@ -28,10 +29,18 @@ const costDisplay = document.getElementById('cost-display');
 const costValue = document.getElementById('cost-value');
 const btnThemeToggle = document.getElementById('btn-theme-toggle');
 const themeToggleText = document.getElementById('theme-toggle-text');
+const languageSelect = document.getElementById('language-select');
+const fontSizeRange = document.getElementById('font-size-range');
+const fontSizeValue = document.getElementById('font-size-value');
+let currentLanguage = 'en';
+let i18nMap = {};
+let fontSizePercent = 100;
 
 // ─── 初始化 ──────────────────────────────────────────────────
-document.addEventListener('DOMContentLoaded', () => {
+document.addEventListener('DOMContentLoaded', async () => {
   initTheme();
+  initInterfaceSettings();
+  await loadThemePreference();
   initNavigation();
   initSSE();
   initInput();
@@ -60,7 +69,18 @@ function initTheme() {
     const nextTheme = document.documentElement.classList.contains('light-theme') ? 'dark' : 'light';
     applyTheme(nextTheme);
   });
-  loadThemePreference();
+}
+
+function initInterfaceSettings() {
+  languageSelect?.addEventListener('change', () => {
+    applyLanguage(languageSelect.value || 'en').then(() => {
+      loadConfig();
+      loadSessions();
+    });
+  });
+  fontSizeRange?.addEventListener('input', () => {
+    applyFontSize(Number(fontSizeRange.value || 100));
+  });
 }
 
 function applyTheme(theme, persist = true) {
@@ -79,30 +99,109 @@ async function loadThemePreference() {
   try {
     const resp = await fetch('/api/gui-settings');
     const data = await resp.json();
+    const language = data.language === 'zh' ? 'zh' : 'en';
+    const size = normalizeFontSize(data.font_size_percent);
+
     if (data.theme === 'light' || data.theme === 'dark') {
       applyTheme(data.theme, false);
-      return;
+    } else {
+      const currentTheme = document.documentElement.classList.contains('light-theme') ? 'light' : 'dark';
+      saveGuiSettings({ theme: currentTheme });
     }
-    const currentTheme = document.documentElement.classList.contains('light-theme') ? 'light' : 'dark';
-    saveThemePreference(currentTheme);
-  } catch (e) { /* ignore */ }
+
+    applyFontSize(size, false);
+    await applyLanguage(language, false);
+
+    if (data.language !== language || Number(data.font_size_percent) !== size) {
+      saveGuiSettings({ language, font_size_percent: size });
+    }
+  } catch (e) {
+    applyFontSize(100, false);
+    await applyLanguage('en', false);
+  }
 }
 
 async function saveThemePreference(theme) {
+  await saveGuiSettings({ theme });
+}
+
+async function saveGuiSettings(settings) {
   try {
     await fetch('/api/gui-settings', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ theme }),
+      body: JSON.stringify(settings),
     });
   } catch (e) { /* ignore */ }
 }
 
 function updateThemeToggle() {
   const isLight = document.documentElement.classList.contains('light-theme');
-  themeToggleText.textContent = isLight ? '切换为暗色' : '切换为亮色';
-  btnThemeToggle.setAttribute('aria-label', isLight ? '切换为暗色主题' : '切换为亮色主题');
-  btnThemeToggle.title = isLight ? '切换为暗色主题' : '切换为亮色主题';
+  themeToggleText.textContent = isLight ? t('switchToDark') : t('switchToLight');
+  btnThemeToggle.setAttribute('aria-label', isLight ? t('switchToDarkTheme') : t('switchToLightTheme'));
+  btnThemeToggle.title = isLight ? t('switchToDarkTheme') : t('switchToLightTheme');
+}
+
+async function applyLanguage(language, persist = true) {
+  currentLanguage = language === 'zh' ? 'zh' : 'en';
+  if (languageSelect) languageSelect.value = currentLanguage;
+  document.documentElement.lang = currentLanguage === 'zh' ? 'zh-CN' : 'en';
+  await loadLanguageMap(currentLanguage);
+  document.title = t('pageTitle');
+  renderLocalizedText();
+  updateThemeToggle();
+  updateConnectionText();
+  updateUI();
+  updateFilePickerCount();
+  if (persist) saveGuiSettings({ language: currentLanguage });
+}
+
+async function loadLanguageMap(language) {
+  try {
+    const resp = await fetch(`/static/i18n/${language}.json`);
+    if (!resp.ok) throw new Error(`missing locale: ${language}`);
+    i18nMap = await resp.json();
+  } catch (e) {
+    if (language !== 'en') {
+      currentLanguage = 'en';
+      await loadLanguageMap('en');
+    }
+  }
+}
+
+function renderLocalizedText() {
+  document.querySelectorAll('[data-i18n]').forEach(el => {
+    if (el.id === 'topbar-model' && sessionActive) return;
+    el.textContent = t(el.dataset.i18n);
+  });
+  document.querySelectorAll('[data-i18n-placeholder]').forEach(el => {
+    el.placeholder = t(el.dataset.i18nPlaceholder);
+  });
+  document.querySelectorAll('[data-i18n-title]').forEach(el => {
+    el.title = t(el.dataset.i18nTitle);
+  });
+}
+
+function t(key, vars = {}) {
+  let text = i18nMap[key] || key;
+  for (const [name, value] of Object.entries(vars)) {
+    text = text.replaceAll(`{${name}}`, String(value));
+  }
+  return text;
+}
+
+function applyFontSize(value, persist = true) {
+  fontSizePercent = normalizeFontSize(value);
+  document.documentElement.style.setProperty('--ui-scale', String(fontSizePercent / 100));
+  if (fontSizeRange) fontSizeRange.value = String(fontSizePercent);
+  if (fontSizeValue) fontSizeValue.textContent = `${fontSizePercent}%`;
+  if (persist) saveGuiSettings({ font_size_percent: fontSizePercent });
+}
+
+function normalizeFontSize(value) {
+  const size = Number(value);
+  if (!Number.isFinite(size)) return 100;
+  return Math.min(125, Math.max(85, Math.round(size / 5) * 5));
 }
 
 async function loadClis() {
@@ -114,7 +213,7 @@ async function loadClis() {
     const current = data.current || '';
     cliSelect.innerHTML = '';
     if (available.length === 0) {
-      cliSelect.innerHTML = '<option value="">未检测到可用命令行工具</option>';
+      cliSelect.innerHTML = `<option value="">${esc(t('noCli'))}</option>`;
       return;
     }
     for (const cli of available) {
@@ -131,7 +230,7 @@ async function loadClis() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ path: cliSelect.value }),
       });
-      addSystemMsg(`已切换命令行工具: ${cliSelect.value}`);
+      addSystemMsg(t('cliSwitched', { path: cliSelect.value }));
       loadSlashCommands();
     });
   } catch (e) { /* ignore */ }
@@ -143,7 +242,7 @@ async function loadModels() {
     const models = await resp.json();
     const availableModels = Array.isArray(models) ? models.filter(Boolean) : [];
     if (!availableModels.length) {
-      modelSelect.innerHTML = '<option value="claude-sonnet-4-6">Sonnet 4.6（默认）</option>';
+      modelSelect.innerHTML = '<option value="claude-sonnet-4-6">Sonnet 4.6</option>';
       scheduleSlashCommandReload();
       return;
     }
@@ -152,7 +251,7 @@ async function loadModels() {
     )).join('');
     scheduleSlashCommandReload();
   } catch (e) {
-    modelSelect.innerHTML = '<option value="claude-sonnet-4-6">Sonnet 4.6（默认）</option>';
+    modelSelect.innerHTML = '<option value="claude-sonnet-4-6">Sonnet 4.6</option>';
     scheduleSlashCommandReload();
   }
 }
@@ -187,20 +286,24 @@ function initSSE() {
     updateUI();
     const topbarModel = document.getElementById('topbar-model');
     if (topbarModel) topbarModel.textContent = formatModelName(data.model || '');
-    addSystemMsg(`会话已启动 · ${formatModelName(data.model || '')}`);
+    addSystemMsg(t('sessionStarted', { model: formatModelName(data.model || '') }));
   });
 
   eventSource.addEventListener('session_stopped', (e) => {
     sessionActive = false;
     isResponding = false;
     updateUI();
-    addSystemMsg('会话已停止');
+    addSystemMsg(t('sessionStopped'));
   });
 
   eventSource.addEventListener('system', (e) => {
     const data = JSON.parse(e.data);
     if (data.subtype === 'init') {
-      addSystemMsg(`${formatModelName(data.model || '')} · ${(data.tools||[]).length} 个工具 · ${(data.skills||[]).length} 个技能`);
+      addSystemMsg(t('initStatus', {
+        model: formatModelName(data.model || ''),
+        tools: (data.tools || []).length,
+        skills: (data.skills || []).length,
+      }));
     }
   });
 
@@ -236,13 +339,13 @@ function initSSE() {
     isResponding = false;
     currentAssistantEl = null;
     updateUI();
-    addSystemMsg('已中断当前回复，可继续补充');
+    addSystemMsg(t('interrupted'));
   });
 
   eventSource.addEventListener('error', (e) => {
     if (e.data) {
       const data = JSON.parse(e.data);
-      addSystemMsg(data.message || '未知错误', true);
+      addSystemMsg(data.message || t('unknownError'), true);
       // 收到错误事件也要退出 responding 状态
       isResponding = false;
       currentAssistantEl = null;
@@ -260,11 +363,16 @@ function initSSE() {
 }
 
 function setConnectionStatus(connected) {
+  connectionOnline = connected;
   const dot = connectionStatus.querySelector('.status-dot');
-  const text = connectionStatus.querySelector('.status-text');
   dot.className = `status-dot ${connected ? 'online' : 'offline'}`;
-  text.textContent = connected ? '已连接' : '连接中...';
+  updateConnectionText();
   btnNewSession.style.opacity = connected ? '1' : '0.5';
+}
+
+function updateConnectionText() {
+  const text = connectionStatus.querySelector('.status-text');
+  if (text) text.textContent = connectionOnline ? t('connected') : t('connecting');
 }
 
 // ─── 发送 action ────────────────────────────────────────────
@@ -277,7 +385,7 @@ async function sendAction(action, extra = {}) {
     });
     return await resp.json();
   } catch (e) {
-    addSystemMsg('请求失败: ' + e.message, true);
+    addSystemMsg(t('requestFailed', { message: e.message }), true);
     return null;
   }
 }
@@ -368,7 +476,7 @@ function renderCurrentState() {
       html += `<div class="text-block">${renderMd(block.text)}<span class="typing-cursor"></span></div>`;
     } else if (block.type === 'tool_use') {
       html += `<div class="tool-card">
-        <div class="tool-header"><span class="tool-icon">&#9881;</span> ${esc(block.name || '工具')}</div>
+        <div class="tool-header"><span class="tool-icon">&#9881;</span> ${esc(block.name || t('tool'))}</div>
         <div class="tool-body">${esc(block.input)}</div>
       </div>`;
     }
@@ -387,7 +495,7 @@ function renderBlock(block) {
     return `<div class="thinking-block">
       <div class="thinking-header" onclick="this.parentElement.classList.toggle('open')">
         <span class="thinking-arrow">&#9654;</span>
-        <span class="thinking-label">思考过程</span>
+        <span class="thinking-label">${esc(t('thinking'))}</span>
         <span class="thinking-preview">${esc(preview)}</span>
       </div>
       <div class="thinking-content">${esc(block.thinking)}</div>
@@ -397,7 +505,7 @@ function renderBlock(block) {
   } else if (block.type === 'tool_use') {
     const input = typeof block.input === 'string' ? block.input : JSON.stringify(block.input, null, 2);
     return `<div class="tool-card">
-      <div class="tool-header"><span class="tool-icon">&#9881;</span> ${esc(block.name || '工具')}</div>
+      <div class="tool-header"><span class="tool-icon">&#9881;</span> ${esc(block.name || t('tool'))}</div>
       <div class="tool-body">${esc(input)}</div>
     </div>`;
   }
@@ -605,7 +713,7 @@ function updateSlashCommandPanel() {
   slashCommandIndex = Math.min(slashCommandIndex, Math.max(slashCommandMatches.length - 1, 0));
 
   if (!slashCommandMatches.length) {
-    slashCommandPanel.innerHTML = '<div class="slash-command-empty">未找到匹配命令</div>';
+    slashCommandPanel.innerHTML = `<div class="slash-command-empty">${esc(t('noCommandMatches'))}</div>`;
     slashCommandPanel.style.display = 'block';
     return;
   }
@@ -694,7 +802,7 @@ async function uploadFile(file) {
       renderAttachments();
     }
   } catch (e) {
-    addSystemMsg('文件上传失败: ' + e.message, true);
+    addSystemMsg(t('uploadFailed', { message: e.message }), true);
   }
 }
 
@@ -727,7 +835,7 @@ function sendMessage() {
   // 注入文件路径
   if (attachedFiles.length > 0) {
     const filePaths = attachedFiles.map(f => `- ${f.path}`).join('\n');
-    const prefix = `请查看以下附件文件:\n${filePaths}\n\n`;
+    const prefix = `${t('attachmentIntro')}\n${filePaths}\n\n`;
     content = prefix + content;
     attachedFiles = [];
     renderAttachments();
@@ -741,7 +849,7 @@ function sendMessage() {
 
 function startNewSession() {
   if (!clientId) {
-    addSystemMsg('未连接到服务器', true);
+    addSystemMsg(t('notConnected'), true);
     return;
   }
 
@@ -758,7 +866,7 @@ function startNewSession() {
     totalCost = 0;
     currentSessionId = null;
     renderCost();
-    addSystemMsg('会话已停止，可修改工作目录和模型后点击「+ 新建会话」');
+    addSystemMsg(t('stoppedEditable'));
     return;
   }
 
@@ -782,7 +890,7 @@ function startNewSession() {
 function updateUI() {
   btnSend.disabled = !sessionActive || isResponding;
   btnStop.classList.toggle('visible', isResponding);
-  btnNewSession.innerHTML = sessionActive ? '<span class="btn-prefix">&gt;</span> 重新开始' : '<span class="btn-prefix">&gt;</span> 新建会话';
+  btnNewSession.innerHTML = `<span class="btn-prefix">&gt;</span> ${sessionActive ? t('restartSession') : t('newSession')}`;
   // 会话活跃时禁用配置修改
   cwdInput.disabled = sessionActive;
   btnBrowse.disabled = sessionActive;
@@ -835,14 +943,14 @@ function renderEnvEditor(env) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(newEnv),
     });
-    addSystemMsg('环境变量已保存');
+    addSystemMsg(t('envSaved'));
   };
 }
 
 function renderSkills(skills) {
   const el = document.getElementById('skills-list');
   if (!skills.length) {
-    el.innerHTML = '<p class="empty-state">暂无技能</p>';
+    el.innerHTML = `<p class="empty-state">${esc(t('noSkills'))}</p>`;
     return;
   }
   el.innerHTML = skills.map(s => `
@@ -856,7 +964,7 @@ function renderSkills(skills) {
 function renderAgents(agents) {
   const el = document.getElementById('agents-list');
   if (!agents.length) {
-    el.innerHTML = '<p class="empty-state">暂无代理</p>';
+    el.innerHTML = `<p class="empty-state">${esc(t('noAgents'))}</p>`;
     return;
   }
   el.innerHTML = agents.map(a => `
@@ -880,7 +988,7 @@ async function loadSessions() {
 function renderSessionList(sessions) {
   const el = document.getElementById('session-list');
   if (!sessions || !sessions.length) {
-    el.innerHTML = '<div class="session-empty">暂无历史会话</div>';
+    el.innerHTML = `<div class="session-empty">${esc(t('noHistory'))}</div>`;
     return;
   }
 
@@ -900,9 +1008,9 @@ function renderSessionList(sessions) {
         <span class="session-group-chevron">${isOpen ? '▾' : '▸'}</span>
         <span class="session-group-main">
           <span class="session-group-title">${esc(group.name)}</span>
-          <span class="session-group-path">${esc(group.cwd || '未设置工作目录')}</span>
-        </span>
-        <span class="session-group-meta">${group.sessions.length} 个 · ${esc(latestTime)}${groupCost > 0 ? ` · $${groupCost.toFixed(4)}` : ''}</span>
+        <span class="session-group-path">${esc(group.cwd || t('unsetCwd'))}</span>
+      </span>
+      <span class="session-group-meta">${esc(t('itemCount', { count: group.sessions.length }))} · ${esc(latestTime)}${groupCost > 0 ? ` · $${groupCost.toFixed(4)}` : ''}</span>
       </button>
       <div class="session-group-body" ${isOpen ? '' : 'hidden'}>
         ${sessionsHtml}
@@ -946,7 +1054,7 @@ function renderSessionList(sessions) {
 
 function renderSessionItem(s) {
   const isActive = s.session_id === currentSessionId;
-  const title = s.title || '新会话';
+  const title = s.title || t('newChat');
   const time = formatTime(s.updated_at);
   const savedCost = Number(s.total_cost_usd || 0);
   return `<div class="session-item${isActive ? ' active' : ''}" data-sid="${esc(s.session_id)}" data-cwd="${esc(s.cwd)}" data-model="${esc(s.model)}" data-cost="${esc(savedCost)}">
@@ -954,7 +1062,7 @@ function renderSessionItem(s) {
       <div class="session-item-title">${esc(title)}</div>
       <div class="session-item-meta">${esc((s.model || '').replace('claude-',''))} · ${esc(time)}${savedCost > 0 ? ` · $${savedCost.toFixed(4)}` : ''}</div>
     </div>
-    <button class="session-item-delete" title="删除">&times;</button>
+    <button class="session-item-delete" title="${esc(t('delete'))}">&times;</button>
   </div>`;
 }
 
@@ -999,15 +1107,15 @@ function openCurrentCwdSessionGroup() {
 }
 
 function getProjectName(cwd) {
-  if (!cwd) return '未设置工作目录';
+  if (!cwd) return t('unsetCwd');
   const normalized = cwd.replace(/[\\\/]+$/, '');
   const parts = normalized.split(/[\\\/]+/).filter(Boolean);
-  return parts[parts.length - 1] || normalized || '未设置工作目录';
+  return parts[parts.length - 1] || normalized || t('unsetCwd');
 }
 
 async function resumeSession(sessionId, cwd, model, savedCost = 0) {
   if (!clientId) {
-    addSystemMsg('未连接到服务器', true);
+    addSystemMsg(t('notConnected'), true);
     return;
   }
 
@@ -1027,7 +1135,7 @@ async function resumeSession(sessionId, cwd, model, savedCost = 0) {
     modelSelect.value = model;
   }
 
-  addSystemMsg('正在恢复会话...');
+  addSystemMsg(t('restoring'));
 
   // 加载历史消息
   try {
@@ -1054,9 +1162,9 @@ async function resumeSession(sessionId, cwd, model, savedCost = 0) {
   if (result && result.ok) {
     sessionActive = true;
     updateUI();
-    addSystemMsg(`会话已恢复 · 发送消息继续对话`);
+    addSystemMsg(t('restored'));
   } else {
-    addSystemMsg('恢复失败: ' + (result?.error || '未知错误'), true);
+    addSystemMsg(t('restoreFailed', { message: result?.error || t('unknownError') }), true);
   }
   loadSessions();
 }
@@ -1075,7 +1183,7 @@ function renderHistory(history) {
         } else if (block.type === 'tool_use') {
           const input = typeof block.input === 'string' ? block.input : JSON.stringify(block.input, null, 2);
           html += `<div class="tool-card">
-            <div class="tool-header"><span class="tool-icon">&#9881;</span> ${esc(block.name || '工具')}</div>
+            <div class="tool-header"><span class="tool-icon">&#9881;</span> ${esc(block.name || t('tool'))}</div>
             <div class="tool-body">${esc(input.length > 200 ? input.substring(0, 200) + '...' : input)}</div>
           </div>`;
         }
@@ -1091,10 +1199,11 @@ function formatTime(isoStr) {
   try {
     const d = new Date(isoStr);
     const now = new Date();
+    const locale = currentLanguage === 'zh' ? 'zh-CN' : 'en-US';
     if (d.toDateString() === now.toDateString()) {
-      return d.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' });
+      return d.toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit' });
     }
-    return d.toLocaleDateString('zh-CN', { month: 'numeric', day: 'numeric' });
+    return d.toLocaleDateString(locale, { month: 'numeric', day: 'numeric' });
   } catch(e) {
     return isoStr.substring(5, 16);
   }
@@ -1187,7 +1296,7 @@ function closePicker() {
 async function navigatePicker(path) {
   pickerCurrentDir = path;
   pickerCurrentPath.textContent = path || '/';
-  pickerList.innerHTML = '<div class="picker-empty">加载中...</div>';
+  pickerList.innerHTML = `<div class="picker-empty">${esc(t('pickerLoading'))}</div>`;
 
   try {
     const resp = await fetch('/api/browse', {
@@ -1206,7 +1315,7 @@ async function navigatePicker(path) {
     pickerCurrentPath.textContent = pickerCurrentDir;
 
     if (!data.items || data.items.length === 0) {
-      pickerList.innerHTML = '<div class="picker-empty">此目录下无子文件夹</div>';
+      pickerList.innerHTML = `<div class="picker-empty">${esc(t('emptyDirFolders'))}</div>`;
       return;
     }
 
@@ -1227,7 +1336,7 @@ async function navigatePicker(path) {
       });
     });
   } catch (e) {
-    pickerList.innerHTML = `<div class="picker-empty">请求失败: ${esc(e.message)}</div>`;
+    pickerList.innerHTML = `<div class="picker-empty">${esc(t('requestFailed', { message: e.message }))}</div>`;
   }
 }
 
@@ -1280,7 +1389,7 @@ function closeFilePicker() {
 }
 
 function updateFilePickerCount() {
-  filePickerSelectedCount.textContent = `已选 ${filePickerSelected.size} 个文件`;
+  filePickerSelectedCount.textContent = t('selectedFiles', { count: filePickerSelected.size });
   filePickerConfirm.disabled = filePickerSelected.size === 0;
 }
 
@@ -1290,7 +1399,7 @@ async function navigateFilePicker(path) {
   filePickerItems = [];
   filePickerSearch.value = '';
   filePickerSearchSeq += 1;
-  filePickerList.innerHTML = '<div class="picker-empty">加载中...</div>';
+  filePickerList.innerHTML = `<div class="picker-empty">${esc(t('pickerLoading'))}</div>`;
 
   try {
     const resp = await fetch('/api/browse-files', {
@@ -1311,13 +1420,13 @@ async function navigateFilePicker(path) {
     filePickerItems = data.items || [];
 
     if (filePickerItems.length === 0) {
-      filePickerList.innerHTML = '<div class="picker-empty">此目录为空</div>';
+      filePickerList.innerHTML = `<div class="picker-empty">${esc(t('emptyDir'))}</div>`;
       return;
     }
 
     renderFilePickerItems(filePickerItems);
   } catch (e) {
-    filePickerList.innerHTML = `<div class="picker-empty">请求失败: ${esc(e.message)}</div>`;
+    filePickerList.innerHTML = `<div class="picker-empty">${esc(t('requestFailed', { message: e.message }))}</div>`;
   }
 }
 
@@ -1359,7 +1468,7 @@ function handleFilePickerSearchInput() {
 
 async function searchFilePicker(keyword) {
   const seq = ++filePickerSearchSeq;
-  filePickerList.innerHTML = '<div class="picker-empty">搜索中...</div>';
+  filePickerList.innerHTML = `<div class="picker-empty">${esc(t('searchLoading'))}</div>`;
 
   try {
     const resp = await fetch('/api/search-files', {
@@ -1376,12 +1485,12 @@ async function searchFilePicker(keyword) {
     }
 
     renderFilePickerItems(data.items || [], {
-      emptyText: '未找到匹配项',
+      emptyText: t('noMatches'),
       truncated: data.truncated,
     });
   } catch (e) {
     if (seq === filePickerSearchSeq) {
-      filePickerList.innerHTML = `<div class="picker-empty">搜索失败: ${esc(e.message)}</div>`;
+      filePickerList.innerHTML = `<div class="picker-empty">${esc(t('searchFailed', { message: e.message }))}</div>`;
     }
   }
 }
@@ -1393,11 +1502,11 @@ function renderFilePickerItems(items, options = {}) {
     : items;
 
   if (filteredItems.length === 0) {
-    filePickerList.innerHTML = `<div class="picker-empty">${options.emptyText || (keyword ? '未找到匹配项' : '此目录为空')}</div>`;
+    filePickerList.innerHTML = `<div class="picker-empty">${esc(options.emptyText || (keyword ? t('noMatches') : t('emptyDir')))}</div>`;
     return;
   }
 
-  filePickerList.innerHTML = `${options.truncated ? '<div class="picker-empty compact">结果较多，仅显示前 200 项</div>' : ''}${filteredItems.map(item => {
+  filePickerList.innerHTML = `${options.truncated ? `<div class="picker-empty compact">${esc(t('tooManyResults'))}</div>` : ''}${filteredItems.map(item => {
     const isDir = item.type === 'dir' || item.type === 'drive';
     const icon = item.type === 'drive' ? '&#128423;' : isDir ? '&#128193;' : getFileIcon(item.name);
     const isSelected = filePickerSelected.has(item.path);

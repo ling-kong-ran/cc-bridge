@@ -47,6 +47,7 @@
   --font-ui:    'Syne', system-ui, sans-serif;
   --font-mono:  'Syne Mono', 'JetBrains Mono', 'Share Tech Mono', Consolas, monospace;
   --font-retro: 'VT323', var(--font-mono);
+  --ui-scale: 1;
 
   --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
   --ease-out:    cubic-bezier(0.4, 0, 0.2, 1);
@@ -1284,6 +1285,43 @@ html.light-theme .theme-icon-sun { display: none; }
   padding: 14px;
 }
 
+.ui-settings-card {
+  display: grid;
+  gap: 14px;
+  max-width: 680px;
+}
+
+.settings-row {
+  display: grid;
+  grid-template-columns: 150px minmax(0, 1fr);
+  align-items: center;
+  gap: 14px;
+}
+
+.settings-row .field-label {
+  margin-bottom: 0;
+  padding-left: 0;
+}
+
+.font-size-control {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 54px;
+  align-items: center;
+  gap: 12px;
+}
+
+.font-size-control input[type="range"] {
+  width: 100%;
+  accent-color: var(--green);
+}
+
+.font-size-value {
+  font-family: var(--font-mono);
+  font-size: calc(11px * var(--ui-scale));
+  color: var(--text-base);
+  text-align: right;
+}
+
 .env-row { display: flex; gap: 7px; margin-bottom: 5px; }
 .env-row:last-of-type { margin-bottom: 0; }
 
@@ -1495,6 +1533,73 @@ html.light-theme .theme-icon-sun { display: none; }
   text-align: left;
   border-bottom: 1px solid var(--border-dim);
 }
+
+/* ─── Font Scale ───────────────────────────────────────────── */
+.logo-sub,
+.field-label,
+.runtime-summary,
+.runtime-summary-value,
+.toggle-text,
+.theme-toggle,
+.input,
+.select,
+.session-item-title,
+.session-item-meta,
+.session-group-title,
+.session-group-path,
+.session-group-meta,
+.nav-btn,
+.status-text,
+.cost-label,
+.cost-value,
+.topbar-label,
+.topbar-model,
+.welcome-sub,
+.welcome-guide-title,
+.welcome-guide-steps,
+.welcome-action,
+.system-msg,
+.msg-content,
+.input-wrapper textarea,
+.btn-send,
+.btn-stop,
+.config-title,
+.env-key,
+.env-val,
+.btn-save,
+.skill-name,
+.skill-desc,
+.agent-name,
+.agent-desc,
+.empty-state,
+.picker-title,
+.picker-close,
+.picker-up,
+.picker-current,
+.picker-item-name,
+.picker-search-input,
+.picker-empty,
+#file-picker-selected-count,
+.slash-command-name,
+.slash-command-desc,
+.slash-command-empty {
+  font-size: calc(var(--base-font-size, 12px) * var(--ui-scale));
+}
+
+.logo-sub { --base-font-size: 9px; }
+.field-label, .runtime-summary, .nav-btn, .status-text, .cost-label, .btn-send, .btn-stop, .config-title, .btn-save, .picker-up, .picker-current, .picker-search-input, .welcome-action { --base-font-size: 11px; }
+.runtime-summary-value, .session-group-path, .session-group-meta, .empty-state { --base-font-size: 9.5px; }
+.toggle-text, .input, .select, .session-item-title, .env-key, .env-val, .skill-name, .agent-name, .welcome-guide-title, .slash-command-name { --base-font-size: 12px; }
+.session-item-meta, .skill-desc, .agent-desc { --base-font-size: 10.5px; }
+.topbar-label, .topbar-model, .welcome-sub, .picker-empty, .slash-command-desc, .slash-command-empty { --base-font-size: 11px; }
+#file-picker-selected-count { --base-font-size: 11px; }
+.picker-title, .picker-close { --base-font-size: 12px; }
+.welcome-guide-steps { --base-font-size: 11px; }
+.system-msg { --base-font-size: 11.5px; }
+.msg-content { --base-font-size: 14px; }
+.input-wrapper textarea { --base-font-size: 13px; }
+.input-wrapper textarea::placeholder { font-size: calc(11px * var(--ui-scale)); }
+.picker-item-name { --base-font-size: 13px; }
 
 html.light-theme ::-webkit-scrollbar-thumb { background: rgba(31, 140, 101, 0.18); }
 
