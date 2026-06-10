@@ -1750,3 +1750,59 @@ html.light-theme .picker-modal {
 }
 
 .cli-install-doc-link:hover { color: var(--green); }
+
+/* ─── Subagent 运行状态 ─────────────────────────────────── */
+.agent-status-bar {
+  display: flex; align-items: center; flex-wrap: wrap; gap: 8px;
+  padding: 6px 10px; margin-bottom: 6px;
+  background: var(--bg-deep);
+  border: 1px solid var(--border-dim);
+  border-radius: var(--radius-sm);
+}
+
+.agent-status-title {
+  font-family: var(--font-mono); font-size: 11px;
+  color: var(--cyan); letter-spacing: 0.06em;
+  white-space: nowrap;
+}
+
+.agent-chip {
+  display: inline-flex; align-items: center; gap: 6px;
+  font-family: var(--font-mono); font-size: 11px;
+  color: var(--text-base);
+  background: var(--bg-raised);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 2px 10px;
+  max-width: 320px; overflow: hidden;
+}
+
+.agent-chip-detail {
+  color: var(--text-ghost);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+
+.agent-spinner {
+  width: 8px; height: 8px; flex: none;
+  border-radius: 50%;
+  border: 1.5px solid var(--green-dim);
+  border-top-color: transparent;
+  animation: agentSpin 0.8s linear infinite;
+}
+
+@keyframes agentSpin { to { transform: rotate(360deg); } }
+
+.tool-running-badge {
+  display: inline-flex; align-items: center; gap: 5px;
+  margin-left: 8px;
+  font-size: 10px; color: var(--green);
+  letter-spacing: 0.06em;
+}
+
+.tool-card-running {
+  border-color: var(--border-glow);
+}
+
+html.light-theme .agent-status-bar {
+  background: var(--bg-deep);
+}

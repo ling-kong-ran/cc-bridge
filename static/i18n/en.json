@@ -102,5 +102,8 @@
   "cliInstallNpmMissing": "npm not found. Please install Node.js 18+ first",
   "cliInstallInProgress": "An install is already in progress",
   "cliInstallTimeout": "Install timed out. Check your network and retry, or install manually",
-  "cliInstallNotDetected": "Install command finished, but no CLI was detected. Restart the server and retry"
+  "cliInstallNotDetected": "Install command finished, but no CLI was detected. Restart the server and retry",
+  "agentsRunning": "{count} subagents running",
+  "subagent": "Subagent",
+  "running": "Running"
 }

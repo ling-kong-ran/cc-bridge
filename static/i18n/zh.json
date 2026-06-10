@@ -102,5 +102,8 @@
   "cliInstallNpmMissing": "未检测到 npm，请先安装 Node.js 18+ 后重试",
   "cliInstallInProgress": "已有安装任务正在进行中",
   "cliInstallTimeout": "安装超时，请检查网络后重试或手动安装",
-  "cliInstallNotDetected": "安装命令已执行，但仍未检测到命令行工具，请重启服务后重试"
+  "cliInstallNotDetected": "安装命令已执行，但仍未检测到命令行工具，请重启服务后重试",
+  "agentsRunning": "{count} 个子代理运行中",
+  "subagent": "子代理",
+  "running": "运行中"
 }

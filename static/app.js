@@ -475,9 +475,15 @@ function initSSE() {
     handleResult(JSON.parse(e.data));
   });
 
+  eventSource.addEventListener('tool_result', (e) => {
+    const data = JSON.parse(e.data);
+    finishTasks(data.tool_use_ids);
+  });
+
   eventSource.addEventListener('process_ended', (e) => {
     // ccb 进程结束 —— 确保前端退出 responding 状态
     const data = JSON.parse(e.data || '{}');
+    clearRunningTasks();
     if (isResponding) {
       const finishedTurn = currentTurnContent;
       const hadAssistantOutput = currentTurnHasAssistantOutput;
@@ -502,6 +508,7 @@ function initSSE() {
     currentTurnContent = '';
     currentTurnHasAssistantOutput = false;
     currentAssistantEl = null;
+    clearRunningTasks();
     updateUI();
     addSystemMsg(t('interrupted'));
   });
@@ -605,7 +612,9 @@ function handleStreamEvent(data) {
         } else if (finishedBlock.type === 'tool_use') {
           let input = finishedBlock.input;
           try { input = JSON.parse(input); } catch(e) {}
-          currentContent.push({ type: 'tool_use', name: finishedBlock.name, id: finishedBlock.id, input });
+          const toolBlock = { type: 'tool_use', name: finishedBlock.name, id: finishedBlock.id, input };
+          currentContent.push(toolBlock);
+          registerTaskBlocks([toolBlock]);
         }
         delete streamBlocks[evt.index];
       }
@@ -671,8 +680,12 @@ function renderBlock(block) {
     return `<div class="text-block">${renderMd(block.text)}</div>`;
   } else if (block.type === 'tool_use') {
     const input = typeof block.input === 'string' ? block.input : JSON.stringify(block.input, null, 2);
-    return `<div class="tool-card">
-      <div class="tool-header"><span class="tool-icon">&#9881;</span> ${esc(block.name || t('tool'))}</div>
+    const isRunningTask = block.name === 'Task' && block.id && runningTasks.has(block.id);
+    const runningBadge = isRunningTask
+      ? `<span class="tool-running-badge"><span class="agent-spinner"></span>${esc(t('running'))}</span>`
+      : '';
+    return `<div class="tool-card${isRunningTask ? ' tool-card-running' : ''}">
+      <div class="tool-header"><span class="tool-icon">&#9881;</span> ${esc(block.name || t('tool'))}${runningBadge}</div>
       <div class="tool-body">${esc(input)}</div>
     </div>`;
   }
@@ -680,6 +693,12 @@ function renderBlock(block) {
 }
 
 function handleAssistantFinal(data) {
+  // subagent 的 assistant 消息带 parent_tool_use_id，只更新状态栏，不混入主消息流
+  if (data.parent_tool_use_id) {
+    updateTaskActivity(data.parent_tool_use_id, data.message);
+    return;
+  }
+
   // ccb 的 assistant 事件带增量消息（partial messages）
   isResponding = true;
   currentTurnHasAssistantOutput = true;
@@ -703,10 +722,95 @@ function handleAssistantFinal(data) {
       currentContent.push({ type: 'tool_use', name: block.name, id: block.id, input: block.input });
     }
   }
+  registerTaskBlocks(currentContent);
 
   streamBlocks = {};
   renderCurrentState();
   scrollToBottom();
+}
+
+// ─── Subagent 运行状态跟踪 ───────────────────────────────────
+// tool_use_id -> {type, desc, last}
+const runningTasks = new Map();
+// 已结束的 Task id（partial assistant 事件会重复携带同一 tool_use 块，避免重新标记为运行中）
+const finishedTaskIds = new Set();
+
+function registerTaskBlocks(content) {
+  let changed = false;
+  for (const block of content) {
+    if (block.type !== 'tool_use' || block.name !== 'Task' || !block.id) continue;
+    if (finishedTaskIds.has(block.id)) continue;
+    let input = block.input;
+    if (typeof input === 'string') { try { input = JSON.parse(input); } catch (e) { input = {}; } }
+    if (!input || typeof input !== 'object') input = {};
+    const existing = runningTasks.get(block.id) || {};
+    runningTasks.set(block.id, {
+      type: input.subagent_type || existing.type || '',
+      desc: input.description || existing.desc || '',
+      last: existing.last || '',
+    });
+    changed = true;
+  }
+  if (changed) renderAgentStatus();
+}
+
+function updateTaskActivity(parentToolUseId, message) {
+  if (!parentToolUseId || finishedTaskIds.has(parentToolUseId)) return;
+  // 会话恢复到一半时可能没见过对应 Task 块，此处兜底注册
+  const entry = runningTasks.get(parentToolUseId) || { type: '', desc: '', last: '' };
+  const content = message?.content;
+  if (Array.isArray(content)) {
+    for (const block of content) {
+      if (block.type === 'text' && block.text) {
+        entry.last = block.text.replace(/\s+/g, ' ').trim().slice(-60);
+      } else if (block.type === 'tool_use' && block.name) {
+        entry.last = `> ${block.name}`;
+      }
+    }
+  }
+  runningTasks.set(parentToolUseId, entry);
+  renderAgentStatus();
+}
+
+function finishTasks(ids) {
+  let changed = false;
+  for (const id of ids || []) {
+    finishedTaskIds.add(id);
+    if (runningTasks.delete(id)) changed = true;
+  }
+  if (changed) {
+    renderAgentStatus();
+    if (currentAssistantEl) scheduleRender();
+  }
+}
+
+function clearRunningTasks() {
+  if (runningTasks.size) {
+    runningTasks.clear();
+    renderAgentStatus();
+  }
+  finishedTaskIds.clear();
+}
+
+function renderAgentStatus() {
+  const bar = document.getElementById('agent-status-bar');
+  if (!bar) return;
+  if (runningTasks.size === 0) {
+    bar.style.display = 'none';
+    bar.innerHTML = '';
+    return;
+  }
+  bar.style.display = '';
+  let html = `<span class="agent-status-title">${esc(t('agentsRunning', { count: runningTasks.size }))}</span>`;
+  for (const [id, info] of runningTasks) {
+    const label = info.type || t('subagent');
+    const detail = info.last || info.desc || '';
+    html += `<span class="agent-chip" title="${esc(info.desc || '')}">` +
+      `<span class="agent-spinner"></span>${esc(label)}` +
+      `${detail ? `<span class="agent-chip-detail">${esc(detail.substring(0, 40))}</span>` : ''}` +
+      `</span>`;
+  }
+  bar.innerHTML = html;
 }
 
 function handleResult(data) {
@@ -718,6 +822,7 @@ function handleResult(data) {
   streamBlocks = {};
   currentTurnContent = '';
   currentTurnHasAssistantOutput = false;
+  clearRunningTasks();
   updateUI();
 
   const turnCost = Number(data.total_cost_usd || 0);
@@ -1127,12 +1232,12 @@ function updateUI() {
   btnSend.disabled = !sessionActive || isResponding;
   btnStop.classList.toggle('visible', isResponding);
   btnNewSession.innerHTML = `<span class="btn-prefix">&gt;</span> ${sessionActive ? t('restartSession') : t('newSession')}`;
-  // 会话活跃时禁用配置修改
+  // 会话活跃时禁用配置修改（CLI 和模型可随时切换，下一条消息生效）
   cwdInput.disabled = sessionActive;
   btnBrowse.disabled = sessionActive;
   btnBrowse.style.opacity = sessionActive ? '0.4' : '1';
   const cliSelect = document.getElementById('cli-select');
-  if (cliSelect) cliSelect.disabled = sessionActive;
+  if (cliSelect) cliSelect.disabled = false;
   if (modelSelect) modelSelect.disabled = false;
   const skipPermissions = document.getElementById('skip-permissions');
   if (skipPermissions) skipPermissions.disabled = sessionActive;

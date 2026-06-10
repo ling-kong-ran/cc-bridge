@@ -69,6 +69,18 @@ def persist_result_cost(client_id: str, event: dict) -> dict:
     return event
 
 
+def extract_tool_result_ids(event: dict) -> list[str]:
+    """从 user 事件中提取 tool_result 块的 tool_use_id（用于判断 subagent/工具是否结束）。"""
+    msg = event.get("message") or {}
+    content = msg.get("content")
+    ids = []
+    if isinstance(content, list):
+        for block in content:
+            if isinstance(block, dict) and block.get("type") == "tool_result" and block.get("tool_use_id"):
+                ids.append(block["tool_use_id"])
+    return ids
+
+
 def get_default_model() -> str:
     models = get_available_models()
     return models[0] if models else "claude-sonnet-4-6"
@@ -623,6 +635,14 @@ async def handle_action(body: bytes, writer: asyncio.StreamWriter):
                 await push_event(client_id, "session_id_captured", event)
             elif evt_type == "result":
                 await push_event(client_id, evt_type, persist_result_cost(client_id, event))
+            elif evt_type == "user":
+                # tool_result 表示某个工具调用（含 Task subagent）已结束，只转发 ID，省去大体积内容
+                ids = extract_tool_result_ids(event)
+                if ids:
+                    await push_event(client_id, "tool_result", {
+                        "tool_use_ids": ids,
+                        "parent_tool_use_id": event.get("parent_tool_use_id"),
+                    })
             elif evt_type in ("assistant", "system", "error", "process_ended", "model_changed"):
                 # ccb 高层事件直接按类型推送，前端有对应 listener
                 await push_event(client_id, evt_type, event)
@@ -659,6 +679,13 @@ async def handle_action(body: bytes, writer: asyncio.StreamWriter):
                 await push_event(client_id, "session_id_captured", event)
             elif evt_type == "result":
                 await push_event(client_id, evt_type, persist_result_cost(client_id, event))
+            elif evt_type == "user":
+                ids = extract_tool_result_ids(event)
+                if ids:
+                    await push_event(client_id, "tool_result", {
+                        "tool_use_ids": ids,
+                        "parent_tool_use_id": event.get("parent_tool_use_id"),
+                    })
             elif evt_type in ("assistant", "system", "error", "process_ended", "model_changed"):
                 await push_event(client_id, evt_type, event)
             # 其他事件忽略
