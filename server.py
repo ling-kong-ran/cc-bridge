@@ -28,6 +28,7 @@ from config_manager import (
     get_available_models,
 )
 from session_store import list_sessions, save_session, add_session_cost, delete_session, load_session_history
+import remote_manager
 
 STATIC_DIR = Path(__file__).parent / "static"
 DEFAULT_CWD = str(Path(__file__).parent.resolve())  # 项目根目录作为默认 CWD
@@ -767,6 +768,8 @@ async def handle_action(body: bytes, writer: asyncio.StreamWriter):
         model = data.get("model") or get_default_model()
         cwd = data.get("cwd")
         skip_perms = data.get("skip_permissions", True)
+        remote_target = remote_manager.get_target(data.get("remote_target_id") or "")
+        allow_mutate = bool(data.get("allow_remote_mutate", False))
 
         # 清理旧 session
         old_session = session_manager.get_session(client_id)
@@ -806,7 +809,8 @@ async def handle_action(body: bytes, writer: asyncio.StreamWriter):
                 await push_event(client_id, evt_type, event)
             # 其他事件（hook_started 等）忽略
 
-        await session.start(model=model, cwd=cwd, on_event=on_event, skip_permissions=skip_perms)
+        await session.start(model=model, cwd=cwd, on_event=on_event, skip_permissions=skip_perms,
+                            remote_target=remote_target, allow_mutate=allow_mutate)
         await push_event(client_id, "session_started", {"model": model})
         await send_response(writer, 200, "application/json", b'{"ok":true}')
 
@@ -815,6 +819,8 @@ async def handle_action(body: bytes, writer: asyncio.StreamWriter):
         model = data.get("model") or get_default_model()
         cwd = data.get("cwd")
         skip_perms = data.get("skip_permissions", True)
+        remote_target = remote_manager.get_target(data.get("remote_target_id") or "")
+        allow_mutate = bool(data.get("allow_remote_mutate", False))
 
         # 清理旧 session
         old_session = session_manager.get_session(client_id)
@@ -848,7 +854,8 @@ async def handle_action(body: bytes, writer: asyncio.StreamWriter):
                 await push_event(client_id, evt_type, event)
             # 其他事件忽略
 
-        await session.start(model=model, cwd=cwd, resume_id=resume_id, on_event=on_event_resume, skip_permissions=skip_perms)
+        await session.start(model=model, cwd=cwd, resume_id=resume_id, on_event=on_event_resume, skip_permissions=skip_perms,
+                            remote_target=remote_target, allow_mutate=allow_mutate)
         await push_event(client_id, "session_started", {"model": model, "resumed": True, "session_id": resume_id})
         await send_response(writer, 200, "application/json", b'{"ok":true}')
 
@@ -862,6 +869,9 @@ async def handle_action(body: bytes, writer: asyncio.StreamWriter):
                 meta = client_meta.setdefault(client_id, {})
                 meta["model"] = requested_model
                 await push_event(client_id, "model_changed", {"model": requested_model})
+            # 允许会话中手动开/关远程修复，下一条消息生效
+            if "allow_remote_mutate" in data:
+                session.allow_mutate = bool(data.get("allow_remote_mutate"))
             # 使用最新用户消息作为会话标题
             title = content.strip()[:50]
             client_last_msg[client_id] = title
@@ -926,6 +936,8 @@ async def handle_api_get(path: str, writer: asyncio.StreamWriter, query: dict = 
         }
     elif path == "/api/default-cwd":
         data = {"cwd": DEFAULT_CWD}
+    elif path == "/api/remote-targets":
+        data = {"targets": remote_manager.list_targets(), "password_supported": remote_manager.password_supported()}
     elif path == "/api/sessions":
         data = list_sessions()
     elif path == "/api/file":
@@ -1004,6 +1016,26 @@ async def handle_api_post(path: str, body: bytes, writer: asyncio.StreamWriter):
         return
     elif path == "/api/upload/delete":
         result = delete_uploaded_files(data.get("paths") or [])
+        resp = json.dumps(result, ensure_ascii=False).encode("utf-8")
+        await send_response(writer, 200, "application/json; charset=utf-8", resp)
+        return
+    elif path == "/api/remote-targets":
+        try:
+            saved = remote_manager.save_target(data)
+        except ValueError as exc:
+            resp = json.dumps({"error": str(exc)}, ensure_ascii=False).encode("utf-8")
+            await send_response(writer, 400, "application/json; charset=utf-8", resp)
+            return
+        resp = json.dumps(saved, ensure_ascii=False).encode("utf-8")
+        await send_response(writer, 200, "application/json; charset=utf-8", resp)
+        return
+    elif path == "/api/remote-targets/delete":
+        remote_manager.delete_target(data.get("id", ""))
+        await send_response(writer, 200, "application/json", b'{"ok":true}')
+        return
+    elif path == "/api/remote-targets/test":
+        target = data if data.get("host") else data.get("id", "")
+        result = await asyncio.get_event_loop().run_in_executor(None, remote_manager.test_target, target)
         resp = json.dumps(result, ensure_ascii=False).encode("utf-8")
         await send_response(writer, 200, "application/json; charset=utf-8", resp)
         return

@@ -597,12 +597,14 @@ html.light-theme .select {
 /* ─── Nav ───────────────────────────────────────────────────── */
 .nav {
   padding: 8px 10px;
-  display: flex; gap: 4px;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(72px, 1fr));
+  gap: 4px;
 }
 
 .nav-btn {
-  display: flex; align-items: center; justify-content: center; gap: 7px;
-  flex: 1; padding: 8px 10px;
+  display: flex; align-items: center; justify-content: center; gap: 6px;
+  padding: 8px 8px;
   border: 1px solid transparent;
   border-radius: var(--radius-sm);
   background: transparent;
@@ -610,10 +612,13 @@ html.light-theme .select {
   font-size: 11px;
   font-family: var(--font-mono);
   font-weight: 600;
-  letter-spacing: 0.08em;
+  letter-spacing: 0.06em;
   cursor: pointer;
   transition: all var(--t-fast);
+  min-width: 0;
 }
+
+.nav-btn span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 .nav-btn:hover {
   background: var(--bg-raised);
@@ -2062,4 +2067,116 @@ html.light-theme .agent-status-bar {
     grid-template-columns: 1fr;
     gap: 2px;
   }
+}
+
+/* ─── 远程诊断页 ─────────────────────────────────────────── */
+.remote-target-list { display: grid; gap: 8px; margin-bottom: 12px; }
+
+.remote-target-item {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center; gap: 10px;
+  padding: 10px 12px;
+  background: var(--bg-deep);
+  border: 1px solid var(--border-dim);
+  border-radius: var(--radius-sm);
+}
+
+.remote-target-info { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+
+.remote-target-name {
+  font-family: var(--font-mono); font-size: 12px;
+  color: var(--text-bright);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+
+.remote-target-addr {
+  font-family: var(--font-mono); font-size: 10.5px;
+  color: var(--text-muted);
+}
+
+.remote-target-actions { display: flex; gap: 6px; }
+
+.remote-mini-btn {
+  background: var(--bg-raised);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-xs);
+  color: var(--text-base);
+  font-family: var(--font-mono); font-size: 10.5px;
+  padding: 4px 9px; cursor: pointer;
+  transition: all var(--t-fast);
+}
+
+.remote-mini-btn:hover { border-color: var(--border-glow); color: var(--green); }
+.remote-mini-btn.danger:hover { color: var(--red); border-color: var(--red-dim); }
+
+.remote-target-status {
+  grid-column: 1 / -1;
+  font-family: var(--font-mono); font-size: 11px;
+  color: var(--text-muted);
+  padding-top: 4px; word-break: break-all;
+}
+.remote-target-status.ok { color: var(--green); }
+.remote-target-status.err { color: var(--red); }
+
+.remote-form-actions { display: flex; gap: 8px; align-items: center; margin-top: 6px; }
+
+.remote-form-status {
+  margin-top: 8px;
+  font-family: var(--font-mono); font-size: 11px;
+  color: var(--text-muted);
+  padding: 8px 10px;
+  background: var(--bg-deep);
+  border: 1px solid var(--border-dim);
+  border-radius: var(--radius-sm);
+  word-break: break-all;
+}
+.remote-form-status.ok { color: var(--green); border-color: rgba(var(--accent-rgb), 0.35); }
+.remote-form-status.err { color: var(--red); border-color: var(--red-dim); }
+
+.remote-notes p {
+  font-family: var(--font-mono); font-size: 11.5px; line-height: 1.7;
+  color: var(--text-muted); margin-bottom: 8px;
+}
+.remote-notes p:last-child { margin-bottom: 0; }
+
+/* 远程修复开关：危险态用琥珀/红强调 */
+.toggle-track input:checked ~ .toggle-indicator.danger {
+  background: rgba(232, 167, 48, 0.18);
+  border-color: var(--amber);
+  box-shadow: none;
+}
+.toggle-track input:checked ~ .toggle-indicator.danger::after { background: var(--amber); }
+
+/* ─── 远程目标：粘贴密钥 ─────────────────────────────────── */
+.settings-row.align-top { align-items: start; }
+
+.remote-key-field { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
+
+.remote-key-text {
+  width: 100%;
+  min-height: 96px;
+  resize: vertical;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  line-height: 1.5;
+  white-space: pre;
+  overflow: auto;
+}
+
+.remote-key-hint {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  color: var(--text-ghost);
+  line-height: 1.5;
+}
+
+.remote-key-hint.warn { color: var(--amber); }
+
+.remote-key-badge {
+  color: var(--green-dim);
+  border: 1px solid var(--border-dim);
+  border-radius: var(--radius-xs);
+  padding: 0 4px;
+  font-size: 9.5px;
 }

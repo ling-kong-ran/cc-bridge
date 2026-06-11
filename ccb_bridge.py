@@ -7,7 +7,9 @@ ccb 的 stream-json input 模式不可靠，改为 text stdin + stream-json outp
 import asyncio
 import json
 import os
+import sys
 import time
+import uuid
 from typing import Optional, Callable, Any
 from pathlib import Path
 
@@ -109,6 +111,7 @@ async def discover_slash_commands(
     proc = None
     stderr_lines: list[str] = []
     stderr_task = None
+    probe_session_id = None  # 本次探测启动产生的会话 id，结束后删除其残留 jsonl
 
     async def read_stderr(process: asyncio.subprocess.Process):
         if not process.stderr:
@@ -154,6 +157,7 @@ async def discover_slash_commands(
                 continue
             if event.get("type") == "system" and event.get("subtype") == "init":
                 init_event = event
+                probe_session_id = event.get("session_id") or None
                 break
 
         data = {
@@ -202,6 +206,13 @@ async def discover_slash_commands(
                 await proc.wait()
         if stderr_task:
             stderr_task.cancel()
+        # 删除本次探测启动留下的空会话 jsonl，避免每次刷新都在历史里堆积空"新会话"
+        if probe_session_id:
+            try:
+                from session_store import _delete_session_files
+                _delete_session_files(probe_session_id, run_cwd)
+            except Exception:
+                pass
 
 
 class CCBSession:
@@ -213,9 +224,12 @@ class CCBSession:
         self.cwd: Optional[str] = None
         self.is_running = False
         self.skip_permissions: bool = True  # 默认跳过权限
+        self.remote_target: Optional[dict] = None  # 绑定的远程诊断目标
+        self.allow_mutate: bool = False  # 是否允许远程修复（变更类工具）
         self._proc: Optional[asyncio.subprocess.Process] = None
         self._on_event: Optional[Callable[[dict], Any]] = None
         self._read_task: Optional[asyncio.Task] = None
+        self._mcp_config_path: Optional[Path] = None
 
     async def start(
         self,
@@ -224,6 +238,8 @@ class CCBSession:
         resume_id: Optional[str] = None,
         on_event: Optional[Callable[[dict], Any]] = None,
         skip_permissions: bool = True,
+        remote_target: Optional[dict] = None,
+        allow_mutate: bool = False,
     ):
         """初始化会话参数"""
         self.model = model
@@ -231,7 +247,55 @@ class CCBSession:
         self.session_id = resume_id
         self._on_event = on_event
         self.skip_permissions = skip_permissions
+        self.remote_target = remote_target or None
+        self.allow_mutate = bool(allow_mutate)
         self.is_running = True
+
+    def _build_remote_mcp(self) -> tuple[Optional[str], Optional[str]]:
+        """为绑定了远程目标的会话写出 MCP 配置文件，返回 (配置文件路径, 追加系统提示)。"""
+        if not self.remote_target:
+            return None, None
+
+        bridge_path = str(Path(__file__).parent / "remote_bridge.py")
+        audit_path = str((Path.home() / ".ccb" / "remote_audit.log"))
+        config = {
+            "mcpServers": {
+                "remote": {
+                    "command": sys.executable,
+                    "args": [bridge_path],
+                    "env": {
+                        "CCB_REMOTE_TARGET": json.dumps(self.remote_target, ensure_ascii=False),
+                        "CCB_REMOTE_ALLOW_MUTATE": "1" if self.allow_mutate else "0",
+                        "CCB_REMOTE_AUDIT": audit_path,
+                    },
+                }
+            }
+        }
+        mcp_dir = Path.home() / ".ccb" / "mcp"
+        mcp_dir.mkdir(parents=True, exist_ok=True)
+        if not self._mcp_config_path:
+            self._mcp_config_path = mcp_dir / f"remote_{uuid.uuid4().hex[:8]}.json"
+        self._mcp_config_path.write_text(json.dumps(config, ensure_ascii=False, indent=2), encoding="utf-8")
+        # 配置内含目标密码/密钥环境变量，收紧文件权限
+        try:
+            os.chmod(self._mcp_config_path, 0o600)
+        except OSError:
+            pass
+
+        t = self.remote_target
+        label = t.get("name") or t.get("host", "")
+        mutate_line = (
+            "用户已开启「远程修复」，必要时可用 mcp__remote__remote_exec 执行变更类命令，执行前先说明将要做的改动。"
+            if self.allow_mutate else
+            "当前为只读诊断模式，只能查看；如需变更系统请提示用户在 GUI 开启「远程修复」。"
+        )
+        prompt = (
+            f"本会话用于排查一台远程 Linux 机器（{label}，{t.get('user','')}@{t.get('host','')}），该机器未安装 Claude。"
+            "请优先使用名称以 mcp__remote__ 开头的远程工具（remote_run/remote_tail/remote_read_file/"
+            "remote_grep/remote_list/remote_sysinfo）在目标机上查日志、跑诊断命令，不要用本地 Bash 操作目标机。"
+            + mutate_line
+        )
+        return str(self._mcp_config_path), prompt
 
     async def send_message(self, content: str):
         """发送一条消息：启动 ccb 子进程处理"""
@@ -249,6 +313,12 @@ class CCBSession:
             "--include-partial-messages",
             "--model", self.model,
         ]
+
+        mcp_config, remote_prompt = self._build_remote_mcp()
+        if mcp_config:
+            cmd += ["--mcp-config", mcp_config]
+        if remote_prompt:
+            cmd += ["--append-system-prompt", remote_prompt]
 
         if self.skip_permissions:
             cmd += ["--dangerously-skip-permissions"]
@@ -277,6 +347,13 @@ class CCBSession:
         """终止当前进程"""
         self.is_running = False
         await self._kill_proc()
+        # 清理本会话的临时 MCP 配置文件
+        if self._mcp_config_path:
+            try:
+                self._mcp_config_path.unlink()
+            except OSError:
+                pass
+            self._mcp_config_path = None
 
     async def interrupt(self):
         """仅终止当前回复生成，保留逻辑会话以便继续补充。"""

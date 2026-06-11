@@ -39,6 +39,9 @@ const fontSizeRange = document.getElementById('font-size-range');
 const fontSizeValue = document.getElementById('font-size-value');
 const notificationsToggle = document.getElementById('notifications-toggle');
 const notificationsRow = document.getElementById('notifications-row');
+const remoteTargetSelect = document.getElementById('remote-target-select');
+const remoteAllowMutate = document.getElementById('remote-allow-mutate');
+const remoteMutateRow = document.getElementById('remote-mutate-row');
 const lanAccessToggle = document.getElementById('lan-access-toggle');
 const lanAccessRow = document.getElementById('lan-access-row');
 let currentLanguage = 'en';
@@ -59,6 +62,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   initSSE();
   initInput();
   initCliInstallModal();
+  initRemote();
   loadDefaultCwd();
   loadClis();
   loadModels();
@@ -231,6 +235,227 @@ function formatUsd(value) {
 function getProjectName(cwd) {
   if (!cwd) return '';
   return cwd.replace(/\\/g, '/').split('/').filter(Boolean).pop() || cwd;
+}
+
+// ─── 远程诊断目标 ────────────────────────────────────────────
+let remoteTargets = [];
+let remotePasswordSupported = true;
+
+function initRemote() {
+  remoteTargetSelect?.addEventListener('change', updateRemoteMutateRow);
+  document.getElementById('btn-remote-add')?.addEventListener('click', () => showRemoteForm());
+  document.getElementById('btn-remote-cancel')?.addEventListener('click', hideRemoteForm);
+  document.getElementById('btn-remote-save')?.addEventListener('click', saveRemoteTarget);
+  document.getElementById('btn-remote-test')?.addEventListener('click', () => testRemoteConnection(readRemoteForm()));
+  document.getElementById('remote-form-auth')?.addEventListener('change', updateRemoteAuthVisibility);
+  loadRemoteTargets();
+}
+
+async function loadRemoteTargets() {
+  try {
+    const resp = await fetch('/api/remote-targets');
+    const data = await resp.json();
+    // 兼容旧的数组返回；新版本返回 { targets, password_supported }
+    if (Array.isArray(data)) {
+      remoteTargets = data;
+    } else {
+      remoteTargets = Array.isArray(data.targets) ? data.targets : [];
+      remotePasswordSupported = data.password_supported !== false;
+    }
+  } catch (e) {
+    remoteTargets = [];
+  }
+  renderRemoteTargetList();
+  populateRemoteSelect();
+}
+
+function updateRemoteAuthVisibility() {
+  const method = document.getElementById('remote-form-auth')?.value || 'key';
+  const keyBox = document.getElementById('remote-auth-key');
+  const passBox = document.getElementById('remote-auth-password');
+  if (keyBox) keyBox.style.display = method === 'password' ? 'none' : '';
+  if (passBox) passBox.style.display = method === 'password' ? '' : 'none';
+  const passHint = document.getElementById('remote-pass-hint');
+  if (passHint) {
+    const editing = !!document.getElementById('remote-form-id').value;
+    const tg = remoteTargets.find(x => x.id === document.getElementById('remote-form-id').value);
+    if (!remotePasswordSupported) passHint.textContent = t('remoteSshMissing');
+    else if (editing && tg?.has_password) passHint.textContent = t('remotePasswordSaved');
+    else passHint.textContent = t('remotePasswordHint');
+    passHint.classList.toggle('warn', !remotePasswordSupported);
+  }
+}
+
+function populateRemoteSelect() {
+  if (!remoteTargetSelect) return;
+  const prev = remoteTargetSelect.value;
+  remoteTargetSelect.innerHTML = `<option value="">${esc(t('remoteTargetNone'))}</option>` +
+    remoteTargets.map(tg => `<option value="${esc(tg.id)}">${esc(tg.name || tg.host)}</option>`).join('');
+  if (remoteTargets.some(tg => tg.id === prev)) remoteTargetSelect.value = prev;
+  updateRemoteMutateRow();
+}
+
+function updateRemoteMutateRow() {
+  if (!remoteMutateRow) return;
+  const active = !!(remoteTargetSelect && remoteTargetSelect.value);
+  remoteMutateRow.style.display = active ? '' : 'none';
+  if (!active && remoteAllowMutate) remoteAllowMutate.checked = false;
+}
+
+function renderRemoteTargetList() {
+  const list = document.getElementById('remote-target-list');
+  if (!list) return;
+  if (!remoteTargets.length) {
+    list.innerHTML = `<p class="empty-state">${esc(t('remoteNoTargets'))}</p>`;
+    return;
+  }
+  list.innerHTML = remoteTargets.map(tg => `
+    <div class="remote-target-item" data-id="${esc(tg.id)}">
+      <div class="remote-target-info">
+        <span class="remote-target-name">${esc(tg.name || tg.host)}</span>
+        <span class="remote-target-addr">${esc(tg.user)}@${esc(tg.host)}:${esc(String(tg.port || 22))} · <span class="remote-key-badge">${esc(tg.auth_method === 'password' ? t('remoteAuthPassword') : t('remoteAuthKey'))}</span></span>
+      </div>
+      <div class="remote-target-actions">
+        <button class="remote-mini-btn" data-act="test">${esc(t('remoteTest'))}</button>
+        <button class="remote-mini-btn" data-act="edit">${esc(t('edit'))}</button>
+        <button class="remote-mini-btn danger" data-act="delete">${esc(t('delete'))}</button>
+      </div>
+      <div class="remote-target-status" style="display:none"></div>
+    </div>
+  `).join('');
+  list.querySelectorAll('.remote-target-item').forEach(item => {
+    const id = item.dataset.id;
+    const tg = remoteTargets.find(x => x.id === id);
+    item.querySelector('[data-act="edit"]').addEventListener('click', () => showRemoteForm(tg));
+    item.querySelector('[data-act="delete"]').addEventListener('click', () => deleteRemoteTarget(tg));
+    item.querySelector('[data-act="test"]').addEventListener('click', () => testRemoteConnection(tg, item.querySelector('.remote-target-status')));
+  });
+}
+
+function showRemoteForm(target) {
+  const section = document.getElementById('remote-form-section');
+  if (!section) return;
+  document.getElementById('remote-form-id').value = target?.id || '';
+  document.getElementById('remote-form-name').value = target?.name || '';
+  document.getElementById('remote-form-host').value = target?.host || '';
+  document.getElementById('remote-form-user').value = target?.user || '';
+  document.getElementById('remote-form-port').value = target?.port || 22;
+  document.getElementById('remote-form-key').value = target?.key_path || '';
+  document.getElementById('remote-form-key-text').value = '';
+  document.getElementById('remote-form-password').value = '';
+  document.getElementById('remote-form-auth').value = target?.auth_method || 'key';
+  document.getElementById('remote-form-desc').value = target?.description || '';
+  // 私钥内容从不回传；编辑已配置密钥的目标时提示留空即保持不变
+  const hint = document.getElementById('remote-key-hint');
+  if (hint) hint.textContent = target?.has_key ? t('remoteKeySaved') : t('remoteKeyHint');
+  updateRemoteAuthVisibility();
+  const title = document.getElementById('remote-form-title');
+  if (title) title.textContent = target ? t('remoteEditTarget') : t('remoteNewTarget');
+  setRemoteFormStatus('', '');
+  section.style.display = '';
+  section.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+
+function hideRemoteForm() {
+  const section = document.getElementById('remote-form-section');
+  if (section) section.style.display = 'none';
+}
+
+function readRemoteForm() {
+  return {
+    id: document.getElementById('remote-form-id').value || '',
+    name: document.getElementById('remote-form-name').value.trim(),
+    host: document.getElementById('remote-form-host').value.trim(),
+    user: document.getElementById('remote-form-user').value.trim(),
+    port: Number(document.getElementById('remote-form-port').value || 22),
+    auth_method: document.getElementById('remote-form-auth').value || 'key',
+    key_path: document.getElementById('remote-form-key').value.trim(),
+    key_text: document.getElementById('remote-form-key-text').value,
+    password: document.getElementById('remote-form-password').value,
+    description: document.getElementById('remote-form-desc').value.trim(),
+  };
+}
+
+function setRemoteFormStatus(text, kind) {
+  const status = document.getElementById('remote-form-status');
+  if (!status) return;
+  status.style.display = text ? '' : 'none';
+  status.textContent = text;
+  status.className = `remote-form-status${kind ? ' ' + kind : ''}`;
+}
+
+async function saveRemoteTarget() {
+  const target = readRemoteForm();
+  if (!target.host || !target.user) {
+    setRemoteFormStatus(t('remoteNeedHostUser'), 'err');
+    return;
+  }
+  try {
+    const resp = await fetch('/api/remote-targets', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(target),
+    });
+    if (!resp.ok) {
+      const err = await resp.json().catch(() => ({}));
+      setRemoteFormStatus(err.error || t('remoteSaveFailed'), 'err');
+      return;
+    }
+    await loadRemoteTargets();
+    hideRemoteForm();
+  } catch (e) {
+    setRemoteFormStatus(t('remoteSaveFailed'), 'err');
+  }
+}
+
+async function deleteRemoteTarget(target) {
+  if (!target) return;
+  if (!window.confirm(t('remoteConfirmDelete', { name: target.name || target.host }))) return;
+  try {
+    await fetch('/api/remote-targets/delete', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: target.id }),
+    });
+  } catch (e) { /* ignore */ }
+  await loadRemoteTargets();
+}
+
+async function testRemoteConnection(target, statusEl) {
+  if (!target || !target.host || !target.user) {
+    if (statusEl) { statusEl.style.display = ''; statusEl.textContent = t('remoteNeedHostUser'); statusEl.className = 'remote-target-status err'; }
+    else setRemoteFormStatus(t('remoteNeedHostUser'), 'err');
+    return;
+  }
+  const setStatus = (text, kind) => {
+    if (statusEl) { statusEl.style.display = ''; statusEl.textContent = text; statusEl.className = `remote-target-status${kind ? ' ' + kind : ''}`; }
+    else setRemoteFormStatus(text, kind);
+  };
+  setStatus(t('remoteTesting'), '');
+  try {
+    const resp = await fetch('/api/remote-targets/test', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(target),
+    });
+    const result = await resp.json();
+    if (result.ok) {
+      setStatus(t('remoteTestOk'), 'ok');
+    } else {
+      const reasons = {
+        ssh_not_found: t('remoteSshMissing'),
+        timeout: t('remoteTestTimeout'),
+        missing_host_or_user: t('remoteNeedHostUser'),
+        missing_password: t('remoteNeedPassword'),
+        auth_failed: t('remoteAuthFailed'),
+        target_not_found: t('remoteSaveFailed'),
+      };
+      const base = reasons[result.error] || t('remoteTestFail');
+      setStatus(result.detail ? `${base} — ${result.detail}` : base, 'err');
+    }
+  } catch (e) {
+    setStatus(t('remoteTestFail'), 'err');
+  }
 }
 
 function initFocusConfigReload() {
@@ -1435,7 +1660,7 @@ function sendMessage() {
   if (isSlashCommand(originalContent)) {
     addSystemMsg(t('commandRunning', { command: getSlashCommandName(originalContent) }));
   }
-  sendAction('send_message', { content, model: modelSelect.value });
+  sendAction('send_message', { content, model: modelSelect.value, allow_remote_mutate: !!remoteAllowMutate?.checked });
   inputEl.value = '';
   inputEl.style.height = 'auto';
 }
@@ -1485,6 +1710,8 @@ function startNewSession() {
     model: modelSelect.value,
     cwd: cwdInput.value.trim() || null,
     skip_permissions: document.getElementById('skip-permissions').checked,
+    remote_target_id: remoteTargetSelect?.value || '',
+    allow_remote_mutate: !!remoteAllowMutate?.checked,
   });
   loadSessions();
 }
@@ -1502,6 +1729,8 @@ function updateUI() {
   if (modelSelect) modelSelect.disabled = false;
   const skipPermissions = document.getElementById('skip-permissions');
   if (skipPermissions) skipPermissions.disabled = sessionActive;
+  // 远程目标绑定在会话创建时确定，会话中锁定；远程修复开关可随时切换（下一条消息生效）
+  if (remoteTargetSelect) remoteTargetSelect.disabled = sessionActive;
 }
 
 function scrollToBottom() {
@@ -1762,6 +1991,8 @@ async function resumeSession(sessionId, cwd, model, savedCost = 0) {
     model: model || modelSelect.value,
     cwd: cwd || cwdInput.value.trim() || null,
     skip_permissions: document.getElementById('skip-permissions').checked,
+    remote_target_id: remoteTargetSelect?.value || '',
+    allow_remote_mutate: !!remoteAllowMutate?.checked,
   });
 
   if (result && result.ok) {
