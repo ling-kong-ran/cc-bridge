@@ -157,7 +157,7 @@ async def discover_slash_commands(
                 continue
             if event.get("type") == "system" and event.get("subtype") == "init":
                 init_event = event
-                probe_session_id = event.get("session_id") or None
+                probe_session_id = event.get("session_id") or event.get("sessionId") or None
                 break
 
         data = {

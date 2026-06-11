@@ -158,7 +158,10 @@ def parse_session_jsonl(jsonl_path: Path) -> dict | None:
 
     # 探测类启动（如读取 slash 命令的 /help 短命会话）只会留下没有真实用户
     # 消息、也没有 last-prompt 的空 jsonl。跳过它们，避免列表里冒出空"新会话"。
-    if not last_prompt and not title:
+    if (
+        not last_prompt
+        and (not title or title == "Unknown skill: help")
+    ):
         return None
 
     return {
