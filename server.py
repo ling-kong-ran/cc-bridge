@@ -873,7 +873,12 @@ async def handle_action(body: bytes, writer: asyncio.StreamWriter):
                 meta = client_meta.setdefault(client_id, {})
                 meta["model"] = requested_model
                 await push_event(client_id, "model_changed", {"model": requested_model})
-            # 允许会话中手动开/关读写模式，下一条消息生效
+            # 允许会话中手动切换远程目标和读写模式，下一条消息生效
+            if "remote_target_id" in data:
+                remote_target = remote_manager.get_target(data.get("remote_target_id") or "")
+                session.remote_target = remote_target or None
+                meta = client_meta.setdefault(client_id, {})
+                meta["remote_target_id"] = (remote_target or {}).get("id", "")
             if "allow_remote_mutate" in data:
                 session.allow_mutate = bool(data.get("allow_remote_mutate"))
             # 使用最新用户消息作为会话标题
