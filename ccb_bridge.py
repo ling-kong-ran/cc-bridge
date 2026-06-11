@@ -285,9 +285,9 @@ class CCBSession:
         t = self.remote_target
         label = t.get("name") or t.get("host", "")
         mutate_line = (
-            "用户已开启「读写模式」，必要时可用 mcp__remote__remote_exec 执行变更类命令，执行前先说明将要做的改动。"
+            "用户已开启「允许远程写入」，必要时可用 mcp__remote__remote_exec 执行变更类命令，执行前先说明将要做的改动。"
             if self.allow_mutate else
-            "当前为只读模式，只能查看；如需变更系统请提示用户在 GUI 开启「读写模式」。"
+            "当前为只读模式，只能查看；如需变更系统请提示用户在 GUI 开启「允许远程写入」。"
         )
         prompt = (
             f"本会话用于排查一台远程 Linux 机器（{label}，{t.get('user','')}@{t.get('host','')}），该机器未安装 Claude。"

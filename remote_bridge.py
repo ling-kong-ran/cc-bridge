@@ -107,7 +107,7 @@ def _readonly_violation(command: str) -> str:
         return "命令为空"
     for tok in _READONLY_FORBIDDEN_TOKENS:
         if tok in stripped:
-            return f"只读模式禁止使用 `{tok.strip()}`，如需变更请在 GUI 开启读写模式"
+            return f"只读模式禁止使用 `{tok.strip()}`，如需变更请在 GUI 开启允许远程写入"
     try:
         parts = shlex.split(stripped)
     except ValueError:
@@ -242,7 +242,7 @@ def tool_remote_exec(args: dict) -> dict:
     if not command:
         return {"ok": False, "text": "command 不能为空"}
     if not ALLOW_MUTATE:
-        return {"ok": False, "text": "读写模式未开启：请在 GUI 中为本会话打开「读写模式」后重试"}
+        return {"ok": False, "text": "未开启允许远程写入：请在 GUI 中为本会话打开「允许远程写入」后重试"}
     return _run_remote(command, mode="mutate")
 
 
@@ -270,7 +270,7 @@ def _build_tools():
     ]
     if ALLOW_MUTATE:
         tools.append((
-            "remote_exec", "在远程机器上以读写模式执行可变更系统的命令（重启服务、改配置等）。仅在用户开启「读写模式」后可用，请谨慎使用。",
+            "remote_exec", "在远程机器上执行可变更系统的命令（重启服务、改配置等）。仅在用户开启「允许远程写入」后可用，请谨慎使用。",
             {"type": "object", "properties": {"command": {"type": "string", "description": "要执行的命令"}}, "required": ["command"]},
             tool_remote_exec, True))
     return tools
