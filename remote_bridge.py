@@ -1,12 +1,12 @@
 """
 Remote Bridge - 一个用 Python 标准库实现的 stdio MCP server。
 
-它向 Claude Code CLI 暴露一组「远程诊断/修复」工具，内部通过系统自带的 ssh 客户端
+它向 Claude Code CLI 暴露一组「远程只读/读写」工具，内部通过系统自带的 ssh 客户端
 在目标 Linux 机器上执行命令。target 端零安装（只需开启 sshd）。
 
 由 ccb-gui 在启动 CLI 时通过 --mcp-config 加载。运行所需信息从环境变量读取：
   CCB_REMOTE_TARGET        目标机器 JSON（host/user/port/key_path…）
-  CCB_REMOTE_ALLOW_MUTATE  "1" 时额外暴露可变更（远程修复）工具，默认只读
+  CCB_REMOTE_ALLOW_MUTATE  "1" 时额外暴露可变更（读写模式）工具，默认只读模式
   CCB_REMOTE_AUDIT         审计日志路径（可选）
 
 协议：MCP 走 stdio + 行分隔的 JSON-RPC 2.0。stdout 只输出协议消息，日志一律走 stderr。
@@ -47,7 +47,7 @@ SERVER_VERSION = "0.1.0"
 MAX_OUTPUT_CHARS = 60_000
 DEFAULT_TIMEOUT = 60
 
-# 只读模式允许的命令首词（远程诊断常用、本身不改系统）
+# 只读模式允许的命令首词（常用查看命令、本身不改系统）
 READ_ONLY_ALLOW = {
     "cat", "head", "tail", "ls", "stat", "file", "wc", "grep", "egrep", "zgrep",
     "find", "ps", "top", "df", "du", "free", "uptime", "uname", "hostname",
@@ -107,7 +107,7 @@ def _readonly_violation(command: str) -> str:
         return "命令为空"
     for tok in _READONLY_FORBIDDEN_TOKENS:
         if tok in stripped:
-            return f"只读模式禁止使用 `{tok.strip()}`，如需变更请在 GUI 开启远程修复"
+            return f"只读模式禁止使用 `{tok.strip()}`，如需变更请在 GUI 开启读写模式"
     try:
         parts = shlex.split(stripped)
     except ValueError:
@@ -242,14 +242,14 @@ def tool_remote_exec(args: dict) -> dict:
     if not command:
         return {"ok": False, "text": "command 不能为空"}
     if not ALLOW_MUTATE:
-        return {"ok": False, "text": "远程修复未开启：请在 GUI 中为本会话打开「允许远程修复」后重试"}
+        return {"ok": False, "text": "读写模式未开启：请在 GUI 中为本会话打开「读写模式」后重试"}
     return _run_remote(command, mode="mutate")
 
 
 # 工具注册表：name -> (描述, inputSchema, 处理函数, 是否需要 mutate)
 def _build_tools():
     tools = [
-        ("remote_run", "在远程 Linux 机器上执行只读诊断命令（cat/tail/grep/systemctl status 等），用于排查问题。",
+        ("remote_run", "在远程 Linux 机器上执行只读命令（cat/tail/grep/systemctl status 等），用于查看问题。",
          {"type": "object", "properties": {"command": {"type": "string", "description": "要执行的只读 shell 命令"}}, "required": ["command"]},
          tool_remote_run, False),
         ("remote_read_file", "读取远程机器上某个文件的内容（默认最多 200KB）。",
@@ -270,7 +270,7 @@ def _build_tools():
     ]
     if ALLOW_MUTATE:
         tools.append((
-            "remote_exec", "在远程机器上执行可变更系统的命令（重启服务、改配置等）用于修复问题。仅在用户开启「允许远程修复」后可用，请谨慎使用。",
+            "remote_exec", "在远程机器上以读写模式执行可变更系统的命令（重启服务、改配置等）。仅在用户开启「读写模式」后可用，请谨慎使用。",
             {"type": "object", "properties": {"command": {"type": "string", "description": "要执行的命令"}}, "required": ["command"]},
             tool_remote_exec, True))
     return tools

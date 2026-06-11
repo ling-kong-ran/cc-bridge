@@ -1,5 +1,5 @@
 """
-Remote Manager - 远程诊断目标机器（Linux/SSH）的配置与连通性测试
+Remote Manager - 远程目标机器（Linux/SSH）的配置与连通性测试
 
 目标信息持久化在 ~/.ccb/remote_targets.json。
 默认所有远端操作都走系统自带的 ssh 客户端 subprocess（server 端零三方依赖）：

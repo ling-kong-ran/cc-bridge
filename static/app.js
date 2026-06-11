@@ -1734,7 +1734,7 @@ function updateUI() {
   if (modelSelect) modelSelect.disabled = false;
   const skipPermissions = document.getElementById('skip-permissions');
   if (skipPermissions) skipPermissions.disabled = sessionActive;
-  // 远程目标绑定在会话创建时确定，会话中锁定；远程修复开关可随时切换（下一条消息生效）
+  // 远程目标绑定在会话创建时确定，会话中锁定；读写模式开关可随时切换（下一条消息生效）
   if (remoteTargetSelect) remoteTargetSelect.disabled = sessionActive;
 }
 

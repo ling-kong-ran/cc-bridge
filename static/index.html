@@ -81,7 +81,7 @@
                 <input type="checkbox" id="remote-allow-mutate">
                 <span class="toggle-indicator danger"></span>
               </span>
-              <span class="toggle-text" data-i18n="allowRemoteFix">Allow remote fixes</span>
+              <span class="toggle-text" data-i18n="allowRemoteFix">Read-write mode</span>
             </label>
           </div>
         </details>
@@ -272,8 +272,8 @@
       <!-- 远程诊断页 -->
       <div id="page-remote" class="page config-page">
         <div class="chat-topbar">
-          <span class="topbar-label" data-i18n="remoteDiag">Remote Diagnostics</span>
-          <span class="topbar-model" data-i18n="remoteDiagHint">Inspect &amp; fix Linux hosts over SSH</span>
+          <span class="topbar-label" data-i18n="remoteDiag">Remote Access</span>
+          <span class="topbar-model" data-i18n="remoteDiagHint">Use SSH in read-only / read-write mode</span>
         </div>
         <div class="config-inner">
           <section class="config-section">
@@ -356,7 +356,7 @@
             <h3 class="config-title"><span class="title-prefix">[03]</span> <span data-i18n="remoteSecurity">Security &amp; Usage</span></h3>
             <div class="config-card remote-notes">
               <p data-i18n="remoteNoteUsage">Pick a target under runtime settings before starting a session. The agent will inspect that host through SSH tools instead of the local machine.</p>
-              <p data-i18n="remoteNoteReadonly">Read-only by default (logs, status, sysinfo). Enable "Allow remote fixes" to let the agent run changing commands; every remote command is written to ~/.ccb/remote_audit.log.</p>
+              <p data-i18n="remoteNoteReadonly">Default is read-only mode (logs, status, sysinfo). Enable "Read-write mode" to let the agent run changing commands; every remote command is written to ~/.ccb/remote_audit.log.</p>
               <p data-i18n="remoteNotePrereq">The target only needs an SSH server. Use key-based auth and a least-privilege account; restrict its sshd to this machine.</p>
             </div>
           </section>

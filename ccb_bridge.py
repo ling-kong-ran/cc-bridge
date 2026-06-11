@@ -224,8 +224,8 @@ class CCBSession:
         self.cwd: Optional[str] = None
         self.is_running = False
         self.skip_permissions: bool = True  # 默认跳过权限
-        self.remote_target: Optional[dict] = None  # 绑定的远程诊断目标
-        self.allow_mutate: bool = False  # 是否允许远程修复（变更类工具）
+        self.remote_target: Optional[dict] = None  # 绑定的远程目标
+        self.allow_mutate: bool = False  # 是否允许读写模式（变更类工具）
         self._proc: Optional[asyncio.subprocess.Process] = None
         self._on_event: Optional[Callable[[dict], Any]] = None
         self._read_task: Optional[asyncio.Task] = None
@@ -285,14 +285,14 @@ class CCBSession:
         t = self.remote_target
         label = t.get("name") or t.get("host", "")
         mutate_line = (
-            "用户已开启「远程修复」，必要时可用 mcp__remote__remote_exec 执行变更类命令，执行前先说明将要做的改动。"
+            "用户已开启「读写模式」，必要时可用 mcp__remote__remote_exec 执行变更类命令，执行前先说明将要做的改动。"
             if self.allow_mutate else
-            "当前为只读诊断模式，只能查看；如需变更系统请提示用户在 GUI 开启「远程修复」。"
+            "当前为只读模式，只能查看；如需变更系统请提示用户在 GUI 开启「读写模式」。"
         )
         prompt = (
             f"本会话用于排查一台远程 Linux 机器（{label}，{t.get('user','')}@{t.get('host','')}），该机器未安装 Claude。"
             "请优先使用名称以 mcp__remote__ 开头的远程工具（remote_run/remote_tail/remote_read_file/"
-            "remote_grep/remote_list/remote_sysinfo）在目标机上查日志、跑诊断命令，不要用本地 Bash 操作目标机。"
+            "remote_grep/remote_list/remote_sysinfo）在目标机上查看日志、跑只读命令，不要用本地 Bash 操作目标机。"
             + mutate_line
         )
         return str(self._mcp_config_path), prompt

@@ -2140,7 +2140,7 @@ html.light-theme .agent-status-bar {
 }
 .remote-notes p:last-child { margin-bottom: 0; }
 
-/* 远程修复开关：危险态用琥珀/红强调 */
+/* 读写模式开关：危险态用琥珀/红强调 */
 .toggle-track input:checked ~ .toggle-indicator.danger {
   background: rgba(232, 167, 48, 0.18);
   border-color: var(--amber);
