@@ -249,43 +249,45 @@ def save_session(session_id: str, title: str, model: str, cwd: str,
     return entry
 
 
-def add_session_cost(session_id: str, cost_usd: float) -> float:
-    """累加会话费用并返回最新累计值。"""
-    if not session_id or cost_usd <= 0:
-        return 0
+def add_session_usage(session_id: str, cost_usd: float = 0, tokens: Optional[dict] = None) -> dict:
+    """一次性累加会话费用和 token 用量，减少重复读写。"""
+    try:
+        cost = max(0, float(cost_usd or 0))
+    except (TypeError, ValueError):
+        cost = 0
+    usage = normalize_tokens(tokens)
+    if not session_id or (cost <= 0 and not any(usage.values())):
+        return {"total_cost_usd": 0, "total_tokens": empty_tokens()}
 
     sessions = _load()
     now = datetime.now().isoformat(timespec="seconds")
     for s in sessions:
         if s["session_id"] == session_id:
-            total = float(s.get("total_cost_usd") or 0) + float(cost_usd)
-            s["total_cost_usd"] = round(total, 8)
+            if cost > 0:
+                s["total_cost_usd"] = round(float(s.get("total_cost_usd") or 0) + cost, 8)
+            total_tokens = normalize_tokens(s.get("total_tokens"))
+            if any(usage.values()):
+                for key, value in usage.items():
+                    total_tokens[key] += value
+                s["total_tokens"] = total_tokens
             s["updated_at"] = now
             _save(sessions)
-            return s["total_cost_usd"]
+            return {
+                "total_cost_usd": float(s.get("total_cost_usd") or 0),
+                "total_tokens": normalize_tokens(s.get("total_tokens")),
+            }
 
-    return 0
+    return {"total_cost_usd": 0, "total_tokens": empty_tokens()}
+
+
+def add_session_cost(session_id: str, cost_usd: float) -> float:
+    """累加会话费用并返回最新累计值。"""
+    return float(add_session_usage(session_id, cost_usd=cost_usd).get("total_cost_usd") or 0)
 
 
 def add_session_tokens(session_id: str, tokens: dict) -> dict:
     """累加会话 token 用量并返回最新累计值。"""
-    usage = normalize_tokens(tokens)
-    if not session_id or not any(usage.values()):
-        return empty_tokens()
-
-    sessions = _load()
-    now = datetime.now().isoformat(timespec="seconds")
-    for s in sessions:
-        if s["session_id"] == session_id:
-            total = normalize_tokens(s.get("total_tokens"))
-            for key, value in usage.items():
-                total[key] += value
-            s["total_tokens"] = total
-            s["updated_at"] = now
-            _save(sessions)
-            return total
-
-    return empty_tokens()
+    return normalize_tokens(add_session_usage(session_id, tokens=tokens).get("total_tokens"))
 
 
 def _delete_session_files(session_id: str, cwd: str = "") -> bool:
@@ -353,11 +355,13 @@ def get_session(session_id: str) -> Optional[dict]:
     return None
 
 
-def rename_session(session_id: str, title: str) -> bool:
+def rename_session(session_id: str, title: str) -> tuple[bool, str]:
     """手动重命名会话标题。"""
     title = (title or "").strip()[:80]
-    if not session_id or not title:
-        return False
+    if not session_id:
+        return False, "missing_session_id"
+    if not title:
+        return False, "empty_title"
 
     sessions = _load()
     now = datetime.now().isoformat(timespec="seconds")
@@ -367,8 +371,20 @@ def rename_session(session_id: str, title: str) -> bool:
             s["manual_title"] = True
             s["updated_at"] = now
             _save(sessions)
-            return True
-    return False
+            return True, ""
+
+    discovered = next((s for s in discover_local_sessions() if s.get("session_id") == session_id), None)
+    if not discovered:
+        return False, "not_found"
+
+    discovered["title"] = title
+    discovered["manual_title"] = True
+    discovered["total_cost_usd"] = float(discovered.get("total_cost_usd") or 0)
+    discovered["total_tokens"] = normalize_tokens(discovered.get("total_tokens"))
+    discovered["updated_at"] = now
+    sessions.insert(0, discovered)
+    _save(sessions)
+    return True, ""
 
 
 def _sanitize_cwd(cwd: str) -> str:

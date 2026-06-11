@@ -1995,17 +1995,20 @@ async function renameSession(sessionId, title) {
       body: JSON.stringify({ session_id: sessionId, title }),
     });
     const data = await resp.json();
-    if (!data.ok) throw new Error('rename failed');
+    if (!data.ok) throw new Error(data.error || 'renameFailed');
     await loadSessions();
   } catch (e) {
-    addSystemMsg(t('renameFailed'), true);
+    addSystemMsg(t(e.message || 'renameFailed') || t('renameFailed'), true);
   }
 }
 
 function filterSessions(sessions) {
-  const keyword = (sessionSearchInput?.value || '').trim().toLowerCase();
-  if (!keyword) return sessions;
-  return sessions.filter(s => [s.title, s.cwd, s.model].some(value => String(value || '').toLowerCase().includes(keyword)));
+  const keywords = (sessionSearchInput?.value || '').trim().toLowerCase().split(/\s+/).filter(Boolean);
+  if (!keywords.length) return sessions;
+  return sessions.filter(s => {
+    const haystack = [s.title, s.cwd, s.model, s.updated_at, s.remote_target_id].map(value => String(value || '').toLowerCase());
+    return keywords.every(keyword => haystack.some(value => value.includes(keyword)));
+  });
 }
 
 function renderSessionItem(s) {

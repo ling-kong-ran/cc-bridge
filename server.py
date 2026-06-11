@@ -27,7 +27,7 @@ from config_manager import (
     list_agents,
     get_available_models,
 )
-from session_store import list_sessions, save_session, add_session_cost, add_session_tokens, delete_session, load_session_history, rename_session
+from session_store import list_sessions, save_session, add_session_usage, delete_session, load_session_history, rename_session
 import remote_manager
 
 STATIC_DIR = Path(__file__).parent / "static"
@@ -204,15 +204,15 @@ def persist_result_usage(client_id: str, event: dict) -> dict:
         return event
 
     updated = dict(event)
-    if turn_cost > 0:
-        total_cost = add_session_cost(sid, turn_cost)
+    if turn_cost > 0 or any(turn_tokens.values()):
+        totals = add_session_usage(sid, turn_cost, turn_tokens)
+        total_cost = float(totals.get("total_cost_usd") or 0)
+        total_tokens = totals.get("total_tokens") or {}
         if total_cost > 0:
             updated["session_total_cost_usd"] = total_cost
-
-    if any(turn_tokens.values()):
-        total_tokens = add_session_tokens(sid, turn_tokens)
         if any(total_tokens.values()):
             updated["session_total_tokens"] = total_tokens
+        if any(turn_tokens.values()):
             updated["turn_tokens"] = turn_tokens
 
     return updated
@@ -1051,9 +1051,9 @@ async def handle_api_post(path: str, body: bytes, writer: asyncio.StreamWriter):
         await send_response(writer, 200, "application/json", b'{"ok":true}')
         return
     elif path == "/api/sessions/rename":
-        ok = rename_session(data.get("session_id", ""), data.get("title", ""))
+        ok, error = rename_session(data.get("session_id", ""), data.get("title", ""))
         status = 200 if ok else 400
-        resp = json.dumps({"ok": ok}, ensure_ascii=False).encode("utf-8")
+        resp = json.dumps({"ok": ok, "error": error}, ensure_ascii=False).encode("utf-8")
         await send_response(writer, status, "application/json; charset=utf-8", resp)
         return
     elif path == "/api/sessions/history":
@@ -1138,7 +1138,16 @@ async def handle_static(path: str, writer: asyncio.StreamWriter):
 
 
 async def send_response(writer: asyncio.StreamWriter, status: int, content_type: str, body: bytes):
-    status_text = {200: "OK", 400: "Bad Request", 403: "Forbidden", 404: "Not Found", 500: "Internal Server Error"}
+    status_text = {
+        200: "OK",
+        201: "Created",
+        204: "No Content",
+        400: "Bad Request",
+        403: "Forbidden",
+        404: "Not Found",
+        413: "Payload Too Large",
+        500: "Internal Server Error",
+    }
     response = (
         f"HTTP/1.1 {status} {status_text.get(status, 'Unknown')}\r\n"
         f"Content-Type: {content_type}\r\n"
