@@ -79,6 +79,7 @@ def list_sessions() -> list[dict]:
             merged["model"] = discovered.get("model") or existing.get("model", "")
             merged["cwd"] = discovered.get("cwd") or existing.get("cwd", "")
             merged["total_cost_usd"] = float(existing.get("total_cost_usd") or 0)
+            merged["remote_target_id"] = existing.get("remote_target_id", "")
             merged["created_at"] = existing.get("created_at") or discovered.get("created_at", "")
             merged["source"] = existing.get("source") or "gui"
         sessions_by_id[sid] = merged
