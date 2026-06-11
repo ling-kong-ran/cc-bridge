@@ -10,6 +10,9 @@ from typing import Optional
 
 STORE_PATH = Path.home() / ".claude" / "gui_sessions.json"
 PROJECTS_DIR = Path.home() / ".claude" / "projects"
+HIDDEN_PATH = Path.home() / ".claude" / "gui_hidden_sessions.json"
+
+
 def empty_tokens() -> dict:
     return {"input": 0, "output": 0, "cache_creation": 0, "cache_read": 0}
 
@@ -91,7 +94,10 @@ def list_sessions() -> list[dict]:
         existing = sessions_by_id.get(sid, {})
         merged = dict(discovered)
         if existing:
-            merged["title"] = discovered.get("title") or existing.get("title", "")
+            if existing.get("manual_title"):
+                merged["title"] = existing.get("title", "")
+            else:
+                merged["title"] = discovered.get("title") or existing.get("title", "")
             merged["model"] = discovered.get("model") or existing.get("model", "")
             merged["cwd"] = discovered.get("cwd") or existing.get("cwd", "")
             merged["total_cost_usd"] = float(existing.get("total_cost_usd") or 0)
