@@ -991,7 +991,8 @@ async def handle_api_post(path: str, body: bytes, writer: asyncio.StreamWriter):
         return
     elif path == "/api/sessions/delete":
         sid = data.get("session_id", "")
-        delete_session(sid)
+        cwd = data.get("cwd", "")
+        delete_session(sid, cwd)
         await send_response(writer, 200, "application/json", b'{"ok":true}')
         return
     elif path == "/api/sessions/history":

@@ -125,5 +125,6 @@
   "notifyDurationMinutes": "{minutes}m elapsed",
   "notifyDurationMinutesSeconds": "{minutes}m {seconds}s elapsed",
   "notifyCost": "Cost ${cost}",
-  "notifyAttachmentPrompt": "Sent {count} attachments"
+  "notifyAttachmentPrompt": "Sent {count} attachments",
+  "confirmDeleteSession": "Delete session \"{title}\"? This permanently removes its local transcript file and cannot be undone."
 }

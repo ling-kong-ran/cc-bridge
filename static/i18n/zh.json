@@ -125,5 +125,6 @@
   "notifyDurationMinutes": "耗时 {minutes} 分钟",
   "notifyDurationMinutesSeconds": "耗时 {minutes} 分 {seconds} 秒",
   "notifyCost": "费用 ${cost}",
-  "notifyAttachmentPrompt": "发送了 {count} 个附件"
+  "notifyAttachmentPrompt": "发送了 {count} 个附件",
+  "confirmDeleteSession": "确定删除会话「{title}」吗？将永久删除该会话的本地记录文件，无法恢复。"
 }

@@ -1644,10 +1644,12 @@ function renderSessionList(sessions) {
     });
     item.querySelector('.session-item-delete').addEventListener('click', async (e) => {
       e.stopPropagation();
+      const title = item.querySelector('.session-item-title')?.textContent?.trim() || t('newChat');
+      if (!window.confirm(t('confirmDeleteSession', { title }))) return;
       await fetch('/api/sessions/delete', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ session_id: item.dataset.sid }),
+        body: JSON.stringify({ session_id: item.dataset.sid, cwd: item.dataset.cwd || '' }),
       });
       loadSessions();
     });

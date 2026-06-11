@@ -10,6 +10,26 @@ from typing import Optional
 
 STORE_PATH = Path.home() / ".claude" / "gui_sessions.json"
 PROJECTS_DIR = Path.home() / ".claude" / "projects"
+HIDDEN_PATH = Path.home() / ".claude" / "gui_hidden_sessions.json"
+
+
+def _load_hidden() -> set[str]:
+    """读取被隐藏（已从 GUI 删除）的会话 id 集合。"""
+    if not HIDDEN_PATH.exists():
+        return set()
+    try:
+        data = json.loads(HIDDEN_PATH.read_text(encoding="utf-8"))
+        if isinstance(data, list):
+            return {str(x) for x in data if x}
+    except (json.JSONDecodeError, OSError):
+        pass
+    return set()
+
+
+def _save_hidden(hidden: set[str]):
+    HIDDEN_PATH.parent.mkdir(parents=True, exist_ok=True)
+    HIDDEN_PATH.write_text(json.dumps(sorted(hidden), ensure_ascii=False, indent=2), encoding="utf-8")
+
 
 
 def _load() -> list[dict]:
@@ -29,6 +49,7 @@ def _save(sessions: list[dict]):
 def list_sessions() -> list[dict]:
     """返回本机所有历史会话，按底层 jsonl 修改时间倒序。"""
     indexed_sessions = _load()
+    hidden = _load_hidden()
     changed = False
     for s in indexed_sessions:
         if "total_cost_usd" not in s:
@@ -44,12 +65,12 @@ def list_sessions() -> list[dict]:
     sessions_by_id = {
         s.get("session_id"): dict(s)
         for s in indexed_sessions
-        if s.get("session_id")
+        if s.get("session_id") and s.get("session_id") not in hidden
     }
 
     for discovered in discover_local_sessions():
         sid = discovered.get("session_id")
-        if not sid:
+        if not sid or sid in hidden:
             continue
         existing = sessions_by_id.get(sid, {})
         merged = dict(discovered)
@@ -153,6 +174,12 @@ def save_session(session_id: str, title: str, model: str, cwd: str) -> dict:
     sessions = _load()
     now = datetime.now().isoformat(timespec="seconds")
 
+    # 若该会话之前被删除（隐藏），重新激活时取消隐藏
+    hidden = _load_hidden()
+    if session_id in hidden:
+        hidden.discard(session_id)
+        _save_hidden(hidden)
+
     # 查找已有记录
     for s in sessions:
         if s["session_id"] == session_id:
@@ -197,14 +224,61 @@ def add_session_cost(session_id: str, cost_usd: float) -> float:
     return 0
 
 
-def delete_session(session_id: str) -> bool:
-    """删除会话记录"""
+def _delete_session_files(session_id: str, cwd: str = "") -> bool:
+    """删除会话的本地转录文件 ~/.claude/projects/<dir>/<session_id>.jsonl。
+
+    优先用 cwd 推导路径，同时扫描所有项目目录兜底（cwd 可能缺失或与实际目录不一致）。
+    返回是否至少删除了一个文件。
+    """
+    targets = []
+    if cwd:
+        targets.append(_jsonl_path(session_id, cwd))
+    if PROJECTS_DIR.exists():
+        try:
+            for project_dir in PROJECTS_DIR.iterdir():
+                if project_dir.is_dir():
+                    targets.append(project_dir / f"{session_id}.jsonl")
+        except OSError:
+            pass
+
+    deleted = False
+    seen = set()
+    for path in targets:
+        key = str(path)
+        if key in seen:
+            continue
+        seen.add(key)
+        try:
+            if path.exists() and path.is_file():
+                path.unlink()
+                deleted = True
+        except OSError:
+            pass
+    return deleted
+
+
+def delete_session(session_id: str, cwd: str = "") -> bool:
+    """彻底删除会话：移除 GUI 索引并删除本地转录文件，不可恢复。
+
+    若转录文件因被占用等原因无法删除，则记入隐藏集合，保证其不再出现在列表中。
+    """
+    if not session_id:
+        return False
+
     sessions = _load()
     new_sessions = [s for s in sessions if s["session_id"] != session_id]
     if len(new_sessions) < len(sessions):
         _save(new_sessions)
-        return True
-    return False
+
+    removed_file = _delete_session_files(session_id, cwd)
+
+    if not removed_file:
+        # 文件未能删除（可能正被占用），隐藏以免重新出现
+        hidden = _load_hidden()
+        if session_id not in hidden:
+            hidden.add(session_id)
+            _save_hidden(hidden)
+    return True
 
 
 def get_session(session_id: str) -> Optional[dict]:
