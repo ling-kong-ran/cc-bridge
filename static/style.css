@@ -1,5 +1,4 @@
 /* CCB GUI — Phosphor Terminal Aesthetic */
-@import url('https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700;800&family=Syne+Mono&display=swap');
 
 *, *::before, *::after {
   margin: 0; padding: 0;
@@ -473,6 +472,12 @@ html.light-theme .select {
   padding: 2px 2px; margin-top: 3px;
 }
 
+.session-search {
+  margin-top: 5px;
+  margin-bottom: 5px;
+  font-size: 12px;
+}
+
 .session-empty {
   font-size: 10px; color: var(--text-ghost);
   padding: 10px 6px; letter-spacing: 0.06em;
@@ -583,7 +588,10 @@ html.light-theme .select {
   margin-top: 1px; letter-spacing: 0.04em;
 }
 
-.session-item-delete {
+.session-item-actions { display: flex; gap: 2px; }
+
+.session-item-delete,
+.session-item-rename {
   background: none; border: none;
   color: var(--text-ghost); font-size: 14px;
   cursor: pointer; padding: 0 3px;
@@ -591,8 +599,10 @@ html.light-theme .select {
   border-radius: 3px; line-height: 1;
 }
 
-.session-item:hover .session-item-delete { opacity: 1; }
+.session-item:hover .session-item-delete,
+.session-item:hover .session-item-rename { opacity: 1; }
 .session-item-delete:hover { color: var(--red); background: rgba(255,64,64,0.1); }
+.session-item-rename:hover { color: var(--amber); background: rgba(255,191,71,0.1); }
 
 /* ─── Nav ───────────────────────────────────────────────────── */
 .nav {
@@ -703,7 +713,23 @@ html.light-theme .select {
   color: var(--green-dim);
   letter-spacing: 0.06em;
   opacity: 0.85;
+  margin-left: auto;
 }
+
+.topbar-action {
+  margin-left: 10px;
+  border: 1px solid var(--border-dim);
+  border-radius: var(--radius-xs);
+  background: transparent;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  padding: 4px 7px;
+  cursor: pointer;
+}
+
+.topbar-action:hover { border-color: var(--amber); color: var(--amber); }
 
 /* ─── Page ──────────────────────────────────────────────────── */
 .page {

@@ -493,9 +493,10 @@ class SessionManager:
         self.sessions: dict[str, CCBSession] = {}
         self._counter = 0
 
-    def create_session(self) -> tuple[str, CCBSession]:
-        self._counter += 1
-        client_id = f"session_{self._counter}"
+    def create_session(self, client_id: Optional[str] = None) -> tuple[str, CCBSession]:
+        if not client_id:
+            self._counter += 1
+            client_id = f"session_{self._counter}"
         session = CCBSession()
         self.sessions[client_id] = session
         return client_id, session

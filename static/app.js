@@ -12,6 +12,7 @@ let currentAssistantEl = null;
 let currentContent = [];
 let streamBlocks = {};
 let totalCost = 0;
+let totalTokens = emptyTokenUsage();
 let currentSessionId = null; // ccb 的 session UUID
 const sessionGroupOpenState = new Map();
 let connectionOnline = false;
@@ -20,6 +21,7 @@ let currentTurnHasAssistantOutput = false;
 let currentTurnStartedAt = 0;
 let currentTurnAttachmentCount = 0;
 let lastFocusConfigReloadAt = 0;
+let cachedSessions = [];
 
 // ─── DOM ─────────────────────────────────────────────────────
 const messagesEl = document.getElementById('messages');
@@ -32,7 +34,11 @@ const cwdInput = document.getElementById('cwd-input');
 const connectionStatus = document.getElementById('connection-status');
 const costDisplay = document.getElementById('cost-display');
 const costValue = document.getElementById('cost-value');
+const tokenDisplay = document.getElementById('token-display');
+const tokenValue = document.getElementById('token-value');
+const sessionSearchInput = document.getElementById('session-search');
 const btnThemeToggle = document.getElementById('btn-theme-toggle');
+const btnExportChat = document.getElementById('btn-export-chat');
 const themeToggleText = document.getElementById('theme-toggle-text');
 const languageSelect = document.getElementById('language-select');
 const fontSizeRange = document.getElementById('font-size-range');
@@ -96,6 +102,7 @@ function initInterfaceSettings() {
     applyLanguage(languageSelect.value || 'en').then(() => {
       loadConfig();
       loadSessions();
+      renderSessionList(cachedSessions);
     });
   });
   fontSizeRange?.addEventListener('input', () => {
@@ -232,9 +239,11 @@ function formatUsd(value) {
   return t('notifyCost', { cost: cost.toFixed(4) });
 }
 
-function getProjectName(cwd) {
-  if (!cwd) return '';
-  return cwd.replace(/\\/g, '/').split('/').filter(Boolean).pop() || cwd;
+function getProjectName(cwd, fallback = '') {
+  if (!cwd) return fallback;
+  const normalized = cwd.replace(/[\\\/]+$/, '');
+  const parts = normalized.split(/[\\\/]+/).filter(Boolean);
+  return parts[parts.length - 1] || normalized || fallback;
 }
 
 // ─── 远程诊断目标 ────────────────────────────────────────────
@@ -842,6 +851,11 @@ function initMobileLayout() {
 
 // ─── SSE 连接 ────────────────────────────────────────────────
 function initSSE() {
+  if (eventSource) {
+    eventSource.close();
+    eventSource = null;
+  }
+
   // 生成唯一客户端 ID
   clientId = 'c_' + Math.random().toString(36).substring(2, 10);
   eventSource = new EventSource(`/sse?id=${clientId}`);
@@ -862,7 +876,7 @@ function initSSE() {
     // 恢复远程目标选择（刷新后 resume 时后端会回传 remote_target_id）
     if (data.remote_target_id && remoteTargetSelect) {
       remoteTargetSelect.value = data.remote_target_id;
-      updateRemoteAuthVisibility();
+      updateRemoteMutateRow();
     }
     addSystemMsg(modelLabel ? t('sessionStarted', { model: modelLabel }) : t('sessionStartedPlain'));
   });
@@ -1278,6 +1292,8 @@ function handleResult(data) {
   const hadAssistantOutput = currentTurnHasAssistantOutput;
   const turnCost = Number(data.total_cost_usd || 0);
   const persistedCost = Number(data.session_total_cost_usd || 0);
+  const turnTokens = normalizeTokenUsage(data.turn_tokens || data.usage || data);
+  const persistedTokens = normalizeTokenUsage(data.session_total_tokens);
   isResponding = false;
   currentAssistantEl = null;
   currentContent = [];
@@ -1303,6 +1319,14 @@ function handleResult(data) {
   } else if (Number.isFinite(turnCost) && turnCost > 0) {
     totalCost += turnCost;
     renderCost();
+  }
+
+  if (hasTokenUsage(persistedTokens)) {
+    totalTokens = persistedTokens;
+    renderTokens();
+  } else if (hasTokenUsage(turnTokens)) {
+    totalTokens = addTokenUsage(totalTokens, turnTokens);
+    renderTokens();
   }
 
   if (data.is_error && data.errors) {
@@ -1390,6 +1414,9 @@ function initInput() {
   btnSend.addEventListener('click', sendMessage);
   btnStop.addEventListener('click', () => sendAction('interrupt'));
   btnNewSession.addEventListener('click', startNewSession);
+  btnExportChat?.addEventListener('click', copyConversationMarkdown);
+  sessionSearchInput?.addEventListener('input', () => renderSessionList(cachedSessions));
+  document.addEventListener('keydown', handleGlobalShortcuts);
   document.getElementById('welcome-new-session')?.addEventListener('click', startNewSession);
   modelSelect.addEventListener('change', loadSlashCommands);
   cwdInput.addEventListener('change', loadSlashCommands);
@@ -1414,6 +1441,60 @@ function initInput() {
   });
 
   loadSlashCommands();
+}
+
+async function copyConversationMarkdown() {
+  const markdown = buildConversationMarkdown();
+  if (!markdown) {
+    addSystemMsg(t('nothingToExport'), true);
+    return;
+  }
+  try {
+    await navigator.clipboard.writeText(markdown);
+    addSystemMsg(t('markdownCopied'));
+  } catch (e) {
+    addSystemMsg(t('copyFailed'), true);
+  }
+}
+
+function buildConversationMarkdown() {
+  const lines = [];
+  messagesEl.querySelectorAll('.message, .system-msg').forEach(el => {
+    if (el.classList.contains('user')) {
+      lines.push(`## User\n\n${domText(el)}`);
+    } else if (el.classList.contains('assistant')) {
+      lines.push(`## Assistant\n\n${domText(el)}`);
+    } else if (el.classList.contains('system-msg')) {
+      lines.push(`> ${domText(el).replace(/\n/g, '\n> ')}`);
+    }
+  });
+  return lines.filter(Boolean).join('\n\n');
+}
+
+function domText(el) {
+  return (el.querySelector('.msg-content') || el).innerText.trim();
+}
+
+function handleGlobalShortcuts(e) {
+  if (!(e.ctrlKey || e.metaKey) || e.shiftKey || e.altKey) return;
+  const key = e.key.toLowerCase();
+  if (key === 'k') {
+    e.preventDefault();
+    sessionSearchInput?.focus();
+    sessionSearchInput?.select();
+  } else if (key === 'n') {
+    e.preventDefault();
+    startNewSession();
+  } else if (key === 'enter') {
+    e.preventDefault();
+    sendMessage();
+  } else if (key === '.') {
+    e.preventDefault();
+    sendAction('interrupt');
+  } else if (key === 'e') {
+    e.preventDefault();
+    copyConversationMarkdown();
+  }
 }
 
 function initInputFileDrop() {
@@ -1701,8 +1782,10 @@ function startNewSession() {
     currentContent = [];
     streamBlocks = {};
     totalCost = 0;
+    totalTokens = emptyTokenUsage();
     currentSessionId = null;
     renderCost();
+    renderTokens();
     addSystemMsg(t('stoppedEditable'));
     return;
   }
@@ -1819,8 +1902,8 @@ function renderAgents(agents) {
 // ─── 会话管理 ─────────────────────────────────────────────────
 async function loadSessions() {
   try {
-    const sessions = await (await fetch('/api/sessions')).json();
-    renderSessionList(sessions);
+    cachedSessions = await (await fetch('/api/sessions')).json();
+    renderSessionList(cachedSessions);
   } catch (e) {
     console.error('历史会话加载失败:', e);
   }
@@ -1828,12 +1911,13 @@ async function loadSessions() {
 
 function renderSessionList(sessions) {
   const el = document.getElementById('session-list');
-  if (!sessions || !sessions.length) {
-    el.innerHTML = `<div class="session-empty">${esc(t('noHistory'))}</div>`;
+  const filtered = filterSessions(sessions || []);
+  if (!filtered.length) {
+    el.innerHTML = `<div class="session-empty">${esc(t(sessions?.length ? 'noMatches' : 'noHistory'))}</div>`;
     return;
   }
 
-  const groups = groupSessionsByCwd(sessions);
+  const groups = groupSessionsByCwd(filtered);
 
   el.innerHTML = groups.map(group => {
     const forcedOpen = group.sessions.some(s => s.session_id === currentSessionId);
@@ -1878,8 +1962,9 @@ function renderSessionList(sessions) {
 
   el.querySelectorAll('.session-item').forEach(item => {
     item.addEventListener('click', (e) => {
-      if (e.target.classList.contains('session-item-delete')) return;
-      resumeSession(item.dataset.sid, item.dataset.cwd, item.dataset.model, Number(item.dataset.cost || 0), item.dataset.remoteTarget || '');
+      if (e.target.classList.contains('session-item-delete') || e.target.classList.contains('session-item-rename')) return;
+      const tokens = safeJsonParse(item.dataset.tokens, null);
+      resumeSession(item.dataset.sid, item.dataset.cwd, item.dataset.model, Number(item.dataset.cost || 0), item.dataset.remoteTarget || '', tokens);
     });
     item.querySelector('.session-item-delete').addEventListener('click', async (e) => {
       e.stopPropagation();
@@ -1892,7 +1977,35 @@ function renderSessionList(sessions) {
       });
       loadSessions();
     });
+    item.querySelector('.session-item-rename').addEventListener('click', async (e) => {
+      e.stopPropagation();
+      const currentTitle = item.querySelector('.session-item-title')?.textContent?.trim() || '';
+      const nextTitle = window.prompt(t('renameSessionPrompt'), currentTitle);
+      if (!nextTitle || nextTitle.trim() === currentTitle) return;
+      await renameSession(item.dataset.sid, nextTitle.trim());
+    });
   });
+}
+
+async function renameSession(sessionId, title) {
+  try {
+    const resp = await fetch('/api/sessions/rename', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ session_id: sessionId, title }),
+    });
+    const data = await resp.json();
+    if (!data.ok) throw new Error('rename failed');
+    await loadSessions();
+  } catch (e) {
+    addSystemMsg(t('renameFailed'), true);
+  }
+}
+
+function filterSessions(sessions) {
+  const keyword = (sessionSearchInput?.value || '').trim().toLowerCase();
+  if (!keyword) return sessions;
+  return sessions.filter(s => [s.title, s.cwd, s.model].some(value => String(value || '').toLowerCase().includes(keyword)));
 }
 
 function renderSessionItem(s) {
@@ -1900,13 +2013,18 @@ function renderSessionItem(s) {
   const title = s.title || t('newChat');
   const time = formatTime(s.updated_at);
   const savedCost = Number(s.total_cost_usd || 0);
+  const savedTokens = normalizeTokenUsage(s.total_tokens);
+  const tokenTotal = tokenUsageTotal(savedTokens);
   const modelLabel = getDisplayModelName(s.model || '', false);
-  return `<div class="session-item${isActive ? ' active' : ''}" data-sid="${esc(s.session_id)}" data-cwd="${esc(s.cwd)}" data-model="${esc(s.model)}" data-cost="${esc(savedCost)}" data-remote-target="${esc(s.remote_target_id || '')}">
+  return `<div class="session-item${isActive ? ' active' : ''}" data-sid="${esc(s.session_id)}" data-cwd="${esc(s.cwd)}" data-model="${esc(s.model)}" data-cost="${esc(savedCost)}" data-tokens="${esc(JSON.stringify(savedTokens))}" data-remote-target="${esc(s.remote_target_id || '')}">
     <div class="session-item-main">
       <div class="session-item-title">${esc(title)}</div>
-      <div class="session-item-meta">${modelLabel ? `${esc(modelLabel)} · ` : ''}${esc(time)}${savedCost > 0 ? ` · $${savedCost.toFixed(4)}` : ''}</div>
+      <div class="session-item-meta">${modelLabel ? `${esc(modelLabel)} · ` : ''}${esc(time)}${savedCost > 0 ? ` · $${savedCost.toFixed(4)}` : ''}${tokenTotal > 0 ? ` · ${formatTokenCount(tokenTotal)} tok` : ''}</div>
     </div>
-    <button class="session-item-delete" title="${esc(t('delete'))}">&times;</button>
+    <div class="session-item-actions">
+      <button class="session-item-rename" title="${esc(t('rename'))}">✎</button>
+      <button class="session-item-delete" title="${esc(t('delete'))}">&times;</button>
+    </div>
   </div>`;
 }
 
@@ -1919,7 +2037,7 @@ function groupSessionsByCwd(sessions) {
       map.set(key, {
         key,
         cwd,
-        name: getProjectName(cwd),
+        name: getProjectName(cwd, t('unsetCwd')),
         latest: session.updated_at || '',
         sessions: [],
       });
@@ -1950,14 +2068,7 @@ function openCurrentCwdSessionGroup() {
   sessionGroupOpenState.set(normalizeCwdKey(current), true);
 }
 
-function getProjectName(cwd) {
-  if (!cwd) return t('unsetCwd');
-  const normalized = cwd.replace(/[\\\/]+$/, '');
-  const parts = normalized.split(/[\\\/]+/).filter(Boolean);
-  return parts[parts.length - 1] || normalized || t('unsetCwd');
-}
-
-async function resumeSession(sessionId, cwd, model, savedCost = 0, remoteTargetId = '') {
+async function resumeSession(sessionId, cwd, model, savedCost = 0, remoteTargetId = '', savedTokens = null) {
   if (!clientId) {
     addSystemMsg(t('notConnected'), true);
     return;
@@ -1970,7 +2081,9 @@ async function resumeSession(sessionId, cwd, model, savedCost = 0, remoteTargetI
   streamBlocks = {};
   currentSessionId = sessionId;
   totalCost = Number.isFinite(savedCost) ? savedCost : 0;
+  totalTokens = normalizeTokenUsage(savedTokens);
   renderCost();
+  renderTokens();
 
   // 设置 UI
   if (cwd) cwdInput.value = cwd;
@@ -1979,9 +2092,9 @@ async function resumeSession(sessionId, cwd, model, savedCost = 0, remoteTargetI
     modelSelect.value = model;
   }
   // 恢复远程目标选择
-  if (remoteTargetId && remoteTargetSelect) {
-    remoteTargetSelect.value = remoteTargetId;
-    updateRemoteAuthVisibility();
+  if (remoteTargetSelect) {
+    remoteTargetSelect.value = remoteTargetId || '';
+    updateRemoteMutateRow();
   }
 
   addSystemMsg(t('restoring'));
@@ -2064,11 +2177,15 @@ function formatTime(isoStr) {
 function renderMd(text) {
   if (!text) return '';
 
-  let html = esc(text);
-
-  html = html.replace(/```(\w*)\n([\s\S]*?)```/g, (_, lang, code) => {
-    return `<pre><code class="lang-${lang}">${code}</code></pre>`;
+  const codeBlocks = [];
+  let html = String(text).replace(/```(\w*)\n([\s\S]*?)```/g, (_, lang, code) => {
+    const token = `\u0000CODE_BLOCK_${codeBlocks.length}\u0000`;
+    codeBlocks.push(`<pre><code class="lang-${esc(lang)}">${esc(code)}</code></pre>`);
+    return token;
   });
+
+  html = esc(html);
+
   html = html.replace(/`([^`]+)`/g, '<code>$1</code>');
   html = html.replace(/^#### (.+)$/gm, '<h4>$1</h4>');
   html = html.replace(/^### (.+)$/gm, '<h3>$1</h3>');
@@ -2076,7 +2193,10 @@ function renderMd(text) {
   html = html.replace(/^# (.+)$/gm, '<h1>$1</h1>');
   html = html.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
   html = html.replace(/\*(.+?)\*/g, '<em>$1</em>');
-  html = html.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank">$1</a>');
+  html = html.replace(/\[([^\]]+)\]\(([^)]+)\)/g, (_, label, href) => {
+    const safeHref = sanitizeLinkHref(href);
+    return `<a href="${safeHref}" target="_blank" rel="noopener noreferrer">${label}</a>`;
+  });
   html = html.replace(/^- (.+)$/gm, '<li>$1</li>');
   html = html.replace(/(<li>.*<\/li>\n?)+/g, '<ul>$&</ul>');
   html = html.replace(/^\d+\. (.+)$/gm, '<li>$1</li>');
@@ -2095,6 +2215,9 @@ function renderMd(text) {
   html = html.replace(/<p>(<blockquote>)/g, '$1');
   html = html.replace(/(<\/blockquote>)<\/p>/g, '$1');
   html = html.replace(/<p>(<hr>)<\/p>/g, '$1');
+  codeBlocks.forEach((block, index) => {
+    html = html.replace(`\u0000CODE_BLOCK_${index}\u0000`, block);
+  });
   return html;
 }
 
@@ -2105,6 +2228,12 @@ function esc(str) {
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;');
+}
+
+function sanitizeLinkHref(href) {
+  const value = String(href || '').trim().replace(/&amp;/g, '&');
+  if (/^(https?:|mailto:)/i.test(value)) return esc(value);
+  return '#';
 }
 
 // ─── 目录选择器 ──────────────────────────────────────────────
@@ -2282,7 +2411,7 @@ async function navigateFilePicker(path) {
 }
 
 function hasModelOption(model) {
-  if (!model) return;
+  if (!model) return false;
   for (const opt of modelSelect.options) {
     if (opt.value === model) return true;
   }
@@ -2292,6 +2421,80 @@ function hasModelOption(model) {
 function renderCost() {
   costDisplay.style.display = totalCost > 0 ? 'block' : 'none';
   costValue.textContent = totalCost.toFixed(4);
+}
+
+function emptyTokenUsage() {
+  return { input: 0, output: 0, cache_creation: 0, cache_read: 0 };
+}
+
+function normalizeTokenUsage(value) {
+  const usage = emptyTokenUsage();
+  if (!value || typeof value !== 'object') return usage;
+  usage.input = readTokenField(value, 'input', 'input_tokens');
+  usage.output = readTokenField(value, 'output', 'output_tokens');
+  usage.cache_creation = readTokenField(value, 'cache_creation', 'cache_creation_input_tokens', 'cache_creation_tokens');
+  usage.cache_read = readTokenField(value, 'cache_read', 'cache_read_input_tokens', 'cache_read_tokens');
+  return usage;
+}
+
+function readTokenField(value, ...keys) {
+  for (const key of keys) {
+    const n = Number(value[key] || 0);
+    if (Number.isFinite(n) && n > 0) return Math.trunc(n);
+  }
+  return 0;
+}
+
+function addTokenUsage(a, b) {
+  const left = normalizeTokenUsage(a);
+  const right = normalizeTokenUsage(b);
+  return {
+    input: left.input + right.input,
+    output: left.output + right.output,
+    cache_creation: left.cache_creation + right.cache_creation,
+    cache_read: left.cache_read + right.cache_read,
+  };
+}
+
+function hasTokenUsage(usage) {
+  return tokenUsageTotal(usage) > 0;
+}
+
+function tokenUsageTotal(usage) {
+  const value = normalizeTokenUsage(usage);
+  return value.input + value.output + value.cache_creation + value.cache_read;
+}
+
+function renderTokens() {
+  const total = tokenUsageTotal(totalTokens);
+  tokenDisplay.style.display = total > 0 ? 'block' : 'none';
+  tokenValue.textContent = formatTokenUsage(totalTokens);
+}
+
+function formatTokenUsage(usage) {
+  const value = normalizeTokenUsage(usage);
+  const main = value.input + value.output;
+  const cache = value.cache_creation + value.cache_read;
+  const parts = [];
+  if (main > 0) parts.push(formatTokenCount(main));
+  if (cache > 0) parts.push(t('cachedTokens', { count: formatTokenCount(cache) }));
+  return parts.join(' · ') || '0';
+}
+
+function formatTokenCount(value) {
+  const n = Number(value || 0);
+  if (!Number.isFinite(n)) return '0';
+  if (n >= 1000000) return `${(n / 1000000).toFixed(1)}M`;
+  if (n >= 1000) return `${(n / 1000).toFixed(1)}K`;
+  return String(Math.trunc(n));
+}
+
+function safeJsonParse(text, fallback = null) {
+  try {
+    return JSON.parse(text);
+  } catch (e) {
+    return fallback;
+  }
 }
 
 function formatModelName(model) {

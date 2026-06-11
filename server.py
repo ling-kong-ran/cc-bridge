@@ -27,7 +27,7 @@ from config_manager import (
     list_agents,
     get_available_models,
 )
-from session_store import list_sessions, save_session, add_session_cost, delete_session, load_session_history
+from session_store import list_sessions, save_session, add_session_cost, add_session_tokens, delete_session, load_session_history, rename_session
 import remote_manager
 
 STATIC_DIR = Path(__file__).parent / "static"
@@ -35,6 +35,7 @@ DEFAULT_CWD = str(Path(__file__).parent.resolve())  # 项目根目录作为默�
 HOST = "0.0.0.0"  # 监听所有网卡，允许局域网设备访问
 BROWSER_HOST = "127.0.0.1"
 DEFAULT_PORT = 17878
+MAX_REQUEST_BODY_BYTES = 100 * 1024 * 1024
 
 
 def get_lan_ips() -> list[str]:
@@ -165,25 +166,56 @@ client_meta: dict[str, dict] = {}
 client_ips: dict[str, str] = {}
 
 
-def persist_result_cost(client_id: str, event: dict) -> dict:
-    """把单轮 result 费用累加到当前会话，并把累计值附加给前端。"""
+def extract_result_tokens(event: dict) -> dict:
+    """从 result 事件中提取本轮 token 用量。"""
+    usage = event.get("usage") if isinstance(event.get("usage"), dict) else {}
+
+    def read_int(*keys: str) -> int:
+        for key in keys:
+            value = usage.get(key)
+            if value is None:
+                value = event.get(key)
+            try:
+                number = int(value or 0)
+            except (TypeError, ValueError):
+                number = 0
+            if number > 0:
+                return number
+        return 0
+
+    return {
+        "input": read_int("input_tokens"),
+        "output": read_int("output_tokens"),
+        "cache_creation": read_int("cache_creation_input_tokens", "cache_creation_tokens"),
+        "cache_read": read_int("cache_read_input_tokens", "cache_read_tokens"),
+    }
+
+
+def persist_result_usage(client_id: str, event: dict) -> dict:
+    """把单轮 result 费用和 token 用量累加到当前会话，并把累计值附加给前端。"""
     try:
         turn_cost = float(event.get("total_cost_usd") or 0)
     except (TypeError, ValueError):
         turn_cost = 0
-
-    if turn_cost <= 0:
-        return event
+    turn_tokens = extract_result_tokens(event)
 
     sid = event.get("session_id") or client_session_ids.get(client_id)
     if not sid:
         return event
 
-    total_cost = add_session_cost(sid, turn_cost)
-    if total_cost > 0:
-        event = dict(event)
-        event["session_total_cost_usd"] = total_cost
-    return event
+    updated = dict(event)
+    if turn_cost > 0:
+        total_cost = add_session_cost(sid, turn_cost)
+        if total_cost > 0:
+            updated["session_total_cost_usd"] = total_cost
+
+    if any(turn_tokens.values()):
+        total_tokens = add_session_tokens(sid, turn_tokens)
+        if any(total_tokens.values()):
+            updated["session_total_tokens"] = total_tokens
+            updated["turn_tokens"] = turn_tokens
+
+    return updated
 
 
 def extract_tool_result_ids(event: dict) -> list[str]:
@@ -490,7 +522,7 @@ def is_allowed_upload_path(path: str) -> Path | None:
     try:
         fp = Path(path).resolve()
         fallback = UPLOAD_DIR_FALLBACK.resolve()
-        is_fallback = str(fp).startswith(str(fallback))
+        is_fallback = fp == fallback or fallback in fp.parents
         is_gui_upload = any(part == ".gui-uploads" for part in fp.parts)
         if not (is_fallback or is_gui_upload):
             return None
@@ -647,6 +679,9 @@ async def handle_http(reader: asyncio.StreamReader, writer: asyncio.StreamWriter
         # 读取 body
         body = b""
         content_length = int(headers.get("content-length", 0))
+        if content_length > MAX_REQUEST_BODY_BYTES:
+            await send_response(writer, 413, "application/json", b'{"error":"request too large"}')
+            return
         if content_length > 0:
             body = await reader.readexactly(content_length)
 
@@ -776,8 +811,7 @@ async def handle_action(body: bytes, writer: asyncio.StreamWriter):
         if old_session:
             await old_session.stop()
 
-        _, session = session_manager.create_session()
-        session_manager.sessions[client_id] = session
+        _, session = session_manager.create_session(client_id)
 
         # 记录元数据
         remote_target_id = (remote_target or {}).get("id", "")
@@ -797,7 +831,7 @@ async def handle_action(body: bytes, writer: asyncio.StreamWriter):
                              remote_target_id=meta.get("remote_target_id", ""))
                 await push_event(client_id, "session_id_captured", event)
             elif evt_type == "result":
-                await push_event(client_id, evt_type, persist_result_cost(client_id, event))
+                await push_event(client_id, evt_type, persist_result_usage(client_id, event))
             elif evt_type == "user":
                 # tool_result 表示某个工具调用（含 Task subagent）已结束，只转发 ID，省去大体积内容
                 ids = extract_tool_result_ids(event)
@@ -830,8 +864,7 @@ async def handle_action(body: bytes, writer: asyncio.StreamWriter):
         if old_session:
             await old_session.stop()
 
-        _, session = session_manager.create_session()
-        session_manager.sessions[client_id] = session
+        _, session = session_manager.create_session(client_id)
 
         client_meta[client_id] = {"model": model, "cwd": cwd, "remote_target_id": remote_target_id}
         client_session_ids[client_id] = resume_id
@@ -846,7 +879,7 @@ async def handle_action(body: bytes, writer: asyncio.StreamWriter):
                              remote_target_id=meta.get("remote_target_id", ""))
                 await push_event(client_id, "session_id_captured", event)
             elif evt_type == "result":
-                await push_event(client_id, evt_type, persist_result_cost(client_id, event))
+                await push_event(client_id, evt_type, persist_result_usage(client_id, event))
             elif evt_type == "user":
                 ids = extract_tool_result_ids(event)
                 if ids:
@@ -1016,6 +1049,12 @@ async def handle_api_post(path: str, body: bytes, writer: asyncio.StreamWriter):
         cwd = data.get("cwd", "")
         delete_session(sid, cwd)
         await send_response(writer, 200, "application/json", b'{"ok":true}')
+        return
+    elif path == "/api/sessions/rename":
+        ok = rename_session(data.get("session_id", ""), data.get("title", ""))
+        status = 200 if ok else 400
+        resp = json.dumps({"ok": ok}, ensure_ascii=False).encode("utf-8")
+        await send_response(writer, status, "application/json; charset=utf-8", resp)
         return
     elif path == "/api/sessions/history":
         sid = data.get("session_id", "")

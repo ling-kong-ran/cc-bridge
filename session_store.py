@@ -10,7 +10,20 @@ from typing import Optional
 
 STORE_PATH = Path.home() / ".claude" / "gui_sessions.json"
 PROJECTS_DIR = Path.home() / ".claude" / "projects"
-HIDDEN_PATH = Path.home() / ".claude" / "gui_hidden_sessions.json"
+def empty_tokens() -> dict:
+    return {"input": 0, "output": 0, "cache_creation": 0, "cache_read": 0}
+
+
+def normalize_tokens(tokens: Optional[dict]) -> dict:
+    result = empty_tokens()
+    if not isinstance(tokens, dict):
+        return result
+    for key in result:
+        try:
+            result[key] = max(0, int(tokens.get(key) or 0))
+        except (TypeError, ValueError):
+            result[key] = 0
+    return result
 
 
 def _load_hidden() -> set[str]:
@@ -55,8 +68,11 @@ def list_sessions() -> list[dict]:
         if "total_cost_usd" not in s:
             s["total_cost_usd"] = 0
             changed = True
+        if "total_tokens" not in s:
+            s["total_tokens"] = empty_tokens()
+            changed = True
         last_user_msg = get_last_user_message(s.get("session_id", ""), s.get("cwd", ""))
-        if last_user_msg and s.get("title") != last_user_msg[:50]:
+        if not s.get("manual_title") and last_user_msg and s.get("title") != last_user_msg[:50]:
             s["title"] = last_user_msg[:50]
             changed = True
     if changed:
@@ -79,7 +95,9 @@ def list_sessions() -> list[dict]:
             merged["model"] = discovered.get("model") or existing.get("model", "")
             merged["cwd"] = discovered.get("cwd") or existing.get("cwd", "")
             merged["total_cost_usd"] = float(existing.get("total_cost_usd") or 0)
+            merged["total_tokens"] = normalize_tokens(existing.get("total_tokens"))
             merged["remote_target_id"] = existing.get("remote_target_id", "")
+            merged["manual_title"] = bool(existing.get("manual_title"))
             merged["created_at"] = existing.get("created_at") or discovered.get("created_at", "")
             merged["source"] = existing.get("source") or "gui"
         sessions_by_id[sid] = merged
@@ -171,6 +189,7 @@ def parse_session_jsonl(jsonl_path: Path) -> dict | None:
         "model": model,
         "cwd": cwd,
         "total_cost_usd": 0,
+        "total_tokens": empty_tokens(),
         "created_at": first_ts or updated_at,
         "updated_at": updated_at,
         "mtime": mtime,
@@ -193,13 +212,17 @@ def save_session(session_id: str, title: str, model: str, cwd: str,
     # 查找已有记录
     for s in sessions:
         if s["session_id"] == session_id:
-            s["title"] = title or s.get("title", "")
+            if title:
+                s["title"] = title
+                s["manual_title"] = False
+            else:
+                s["title"] = s.get("title", "")
             s["model"] = model
             s["cwd"] = cwd
             s["total_cost_usd"] = float(s.get("total_cost_usd") or 0)
+            s["total_tokens"] = normalize_tokens(s.get("total_tokens"))
             s["updated_at"] = now
-            if remote_target_id:
-                s["remote_target_id"] = remote_target_id
+            s["remote_target_id"] = remote_target_id
             _save(sessions)
             return s
 
@@ -210,6 +233,7 @@ def save_session(session_id: str, title: str, model: str, cwd: str,
         "model": model,
         "cwd": cwd,
         "total_cost_usd": 0,
+        "total_tokens": empty_tokens(),
         "remote_target_id": remote_target_id,
         "created_at": now,
         "updated_at": now,
@@ -235,6 +259,27 @@ def add_session_cost(session_id: str, cost_usd: float) -> float:
             return s["total_cost_usd"]
 
     return 0
+
+
+def add_session_tokens(session_id: str, tokens: dict) -> dict:
+    """累加会话 token 用量并返回最新累计值。"""
+    usage = normalize_tokens(tokens)
+    if not session_id or not any(usage.values()):
+        return empty_tokens()
+
+    sessions = _load()
+    now = datetime.now().isoformat(timespec="seconds")
+    for s in sessions:
+        if s["session_id"] == session_id:
+            total = normalize_tokens(s.get("total_tokens"))
+            for key, value in usage.items():
+                total[key] += value
+            s["total_tokens"] = total
+            s["updated_at"] = now
+            _save(sessions)
+            return total
+
+    return empty_tokens()
 
 
 def _delete_session_files(session_id: str, cwd: str = "") -> bool:
@@ -300,6 +345,24 @@ def get_session(session_id: str) -> Optional[dict]:
         if s["session_id"] == session_id:
             return s
     return None
+
+
+def rename_session(session_id: str, title: str) -> bool:
+    """手动重命名会话标题。"""
+    title = (title or "").strip()[:80]
+    if not session_id or not title:
+        return False
+
+    sessions = _load()
+    now = datetime.now().isoformat(timespec="seconds")
+    for s in sessions:
+        if s["session_id"] == session_id:
+            s["title"] = title
+            s["manual_title"] = True
+            s["updated_at"] = now
+            _save(sessions)
+            return True
+    return False
 
 
 def _sanitize_cwd(cwd: str) -> str:

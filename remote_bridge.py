@@ -51,7 +51,7 @@ DEFAULT_TIMEOUT = 60
 READ_ONLY_ALLOW = {
     "cat", "head", "tail", "ls", "stat", "file", "wc", "grep", "egrep", "zgrep",
     "find", "ps", "top", "df", "du", "free", "uptime", "uname", "hostname",
-    "whoami", "id", "date", "env", "printenv", "which", "echo", "pwd",
+    "whoami", "id", "date", "printenv", "which", "echo", "pwd",
     "journalctl", "dmesg", "systemctl", "service", "ss", "netstat", "ip",
     "ifconfig", "ping", "lsof", "vmstat", "iostat", "sar", "awk", "sed",
     "sort", "uniq", "cut", "tr", "nl", "tac", "getent", "lsblk", "mount",
