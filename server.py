@@ -9,6 +9,7 @@ import os
 import sys
 import socket
 import uuid
+import ipaddress
 from pathlib import Path
 from urllib.parse import urlparse, parse_qs
 
@@ -59,6 +60,92 @@ def get_lan_ips() -> list[str]:
 
     return ips
 
+
+def is_localhost_ip(ip: str) -> bool:
+    """判断请求来源是否为本机地址。"""
+    try:
+        return ipaddress.ip_address(ip).is_loopback
+    except ValueError:
+        return False
+
+
+def lan_access_enabled() -> bool:
+    """读取是否允许非 localhost 访问。"""
+    return bool(get_gui_settings().get("lan_access_enabled", True))
+
+
+def get_client_ip(writer: asyncio.StreamWriter) -> str:
+    peer = writer.get_extra_info("peername")
+    if isinstance(peer, tuple) and peer:
+        return str(peer[0])
+    return ""
+
+
+def get_access_context(writer: asyncio.StreamWriter) -> dict:
+    client_ip = get_client_ip(writer)
+    return {
+        "client_ip": client_ip,
+        "is_localhost": is_localhost_ip(client_ip),
+        "lan_access_enabled": lan_access_enabled(),
+    }
+
+
+def is_request_allowed(writer: asyncio.StreamWriter) -> bool:
+    context = get_access_context(writer)
+    return context["is_localhost"] or context["lan_access_enabled"]
+
+
+def is_client_allowed(client_id: str) -> bool:
+    ip = client_ips.get(client_id, "")
+    return is_localhost_ip(ip) or lan_access_enabled()
+
+
+def bind_client_ip(client_id: str, writer: asyncio.StreamWriter) -> bool:
+    """把 client_id 绑定到首次连接来源，避免复用 client_id 绕过本地 CLI 权限。"""
+    ip = get_client_ip(writer)
+    if not client_id or not ip:
+        return False
+    bound_ip = client_ips.get(client_id)
+    if bound_ip and bound_ip != ip:
+        return False
+    client_ips[client_id] = ip
+    return True
+
+
+def is_cli_access_allowed(client_id: str, writer: asyncio.StreamWriter) -> bool:
+    if not bind_client_ip(client_id, writer):
+        return False
+    return is_client_allowed(client_id)
+
+
+async def reject_client_access(client_id: str, writer: asyncio.StreamWriter):
+    """拒绝已越权的客户端，并确保无法继续驱动本地 CLI。"""
+    session = session_manager.get_session(client_id)
+    if session:
+        await session.stop()
+        await session_manager.remove_session(client_id)
+    client_meta.pop(client_id, None)
+    client_last_msg.pop(client_id, None)
+    client_session_ids.pop(client_id, None)
+    client_ips.pop(client_id, None)
+    await send_response(writer, 403, "application/json", b'{"ok":false,"error":"LAN access disabled"}')
+
+
+async def revoke_lan_clients():
+    """关闭所有非 localhost 客户端的本地 CLI 会话。"""
+    for client_id, ip in list(client_ips.items()):
+        if is_localhost_ip(ip):
+            continue
+        session = session_manager.get_session(client_id)
+        if session:
+            await session.stop()
+            await session_manager.remove_session(client_id)
+        client_meta.pop(client_id, None)
+        client_last_msg.pop(client_id, None)
+        client_session_ids.pop(client_id, None)
+        await push_event(client_id, "error", {"message": "LAN access disabled"})
+        await push_event(client_id, "session_stopped", {})
+
 session_manager = SessionManager()
 
 # SSE 客户端连接池: client_id -> asyncio.Queue
@@ -72,6 +159,9 @@ client_session_ids: dict[str, str] = {}
 
 # 每个 client 的会话参数（model, cwd）
 client_meta: dict[str, dict] = {}
+
+# 每个 client 的来源 IP，用于局域网访问开关生效后收紧已有连接
+client_ips: dict[str, str] = {}
 
 
 def persist_result_cost(client_id: str, event: dict) -> dict:
@@ -564,6 +654,10 @@ async def handle_http(reader: asyncio.StreamReader, writer: asyncio.StreamWriter
         route_path = parsed.path
         query = parse_qs(parsed.query)
 
+        if not is_request_allowed(writer):
+            await send_response(writer, 403, "text/plain", b"LAN access disabled")
+            return
+
         if route_path == "/sse":
             await handle_sse(query, writer)
             return  # SSE 连接由 handle_sse 管理生命周期
@@ -617,6 +711,7 @@ async def handle_sse(query: dict, writer: asyncio.StreamWriter):
     # 注册客户端
     queue: asyncio.Queue = asyncio.Queue()
     sse_clients[client_id] = queue
+    client_ips[client_id] = get_client_ip(writer)
 
     # 发送初始 connected 事件
     await _sse_write(writer, "connected", {"client_id": client_id})
@@ -635,6 +730,7 @@ async def handle_sse(query: dict, writer: asyncio.StreamWriter):
         pass
     finally:
         sse_clients.pop(client_id, None)
+        client_ips.pop(client_id, None)
         # 清理关联的 ccb session
         await session_manager.remove_session(client_id)
         try:
@@ -662,6 +758,10 @@ async def handle_action(body: bytes, writer: asyncio.StreamWriter):
 
     client_id = data.get("client_id", "")
     action = data.get("action", "")
+
+    if not is_cli_access_allowed(client_id, writer):
+        await reject_client_access(client_id, writer)
+        return
 
     if action == "new_session":
         model = data.get("model") or get_default_model()
@@ -799,6 +899,7 @@ async def handle_api_get(path: str, writer: asyncio.StreamWriter, query: dict = 
         data = get_settings()
     elif path == "/api/gui-settings":
         data = get_gui_settings()
+        data.update(get_access_context(writer))
     elif path == "/api/env":
         data = get_env_config()
     elif path == "/api/skills":
@@ -808,6 +909,9 @@ async def handle_api_get(path: str, writer: asyncio.StreamWriter, query: dict = 
     elif path == "/api/models":
         data = get_available_models()
     elif path == "/api/slash-commands":
+        if not is_request_allowed(writer):
+            await send_response(writer, 403, "application/json", b'{"error":"LAN access disabled"}')
+            return
         query = query or {}
         model = query.get("model", [get_default_model()])[0] or get_default_model()
         cwd = query.get("cwd", [DEFAULT_CWD])[0] or DEFAULT_CWD
@@ -859,7 +963,12 @@ async def handle_api_post(path: str, body: bytes, writer: asyncio.StreamWriter):
     if path == "/api/settings":
         save_settings(data)
     elif path == "/api/gui-settings":
+        if "lan_access_enabled" in data and not is_localhost_ip(get_client_ip(writer)):
+            await send_response(writer, 403, "application/json", b'{"error":"localhost only"}')
+            return
         result = update_gui_settings(data)
+        if data.get("lan_access_enabled") is False:
+            await revoke_lan_clients()
         resp = json.dumps(result, ensure_ascii=False).encode("utf-8")
         await send_response(writer, 200, "application/json; charset=utf-8", resp)
         return

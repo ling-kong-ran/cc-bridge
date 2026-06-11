@@ -1333,6 +1333,10 @@ html.light-theme .select {
   accent-color: var(--green);
 }
 
+.settings-toggle {
+  justify-content: flex-start;
+}
+
 .font-size-value {
   font-family: var(--font-mono);
   font-size: calc(11px * var(--ui-scale));

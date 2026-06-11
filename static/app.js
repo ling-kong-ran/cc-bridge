@@ -39,6 +39,8 @@ const fontSizeRange = document.getElementById('font-size-range');
 const fontSizeValue = document.getElementById('font-size-value');
 const notificationsToggle = document.getElementById('notifications-toggle');
 const notificationsRow = document.getElementById('notifications-row');
+const lanAccessToggle = document.getElementById('lan-access-toggle');
+const lanAccessRow = document.getElementById('lan-access-row');
 let currentLanguage = 'en';
 let i18nMap = {};
 let fontSizePercent = 100;
@@ -50,6 +52,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   initTheme();
   initInterfaceSettings();
   initNotifications();
+  initLanAccessControl();
   await loadThemePreference();
   initNavigation();
   initMobileLayout();
@@ -121,6 +124,20 @@ function initNotifications() {
       addSystemMsg(t('notifyPermissionDenied'), true);
     }
   });
+}
+
+function initLanAccessControl() {
+  lanAccessToggle?.addEventListener('change', async () => {
+    await saveGuiSettings({ lan_access_enabled: lanAccessToggle.checked });
+    addSystemMsg(lanAccessToggle.checked ? t('lanAccessEnabled') : t('lanAccessDisabled'));
+  });
+}
+
+function applyLanAccessPreference(settings) {
+  if (!lanAccessRow || !lanAccessToggle) return;
+  const isLocalhost = Boolean(settings.is_localhost);
+  lanAccessRow.style.display = isLocalhost ? '' : 'none';
+  lanAccessToggle.checked = settings.lan_access_enabled !== false;
 }
 
 async function requestNotificationPermission() {
@@ -270,6 +287,7 @@ async function loadThemePreference() {
     applyFontSize(size, false);
     await applyLanguage(language, false);
     applyNotificationPreference(Boolean(data.notifications_enabled));
+    applyLanAccessPreference(data);
 
     if (data.language !== language || Number(data.font_size_percent) !== size) {
       saveGuiSettings({ language, font_size_percent: size });
@@ -278,6 +296,7 @@ async function loadThemePreference() {
     applyFontSize(100, false);
     await applyLanguage('en', false);
     applyNotificationPreference(false);
+    applyLanAccessPreference({ is_localhost: false, lan_access_enabled: false });
   }
 }
 
