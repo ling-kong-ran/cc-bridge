@@ -476,34 +476,50 @@ def remote_ls(target_id: str, path: str) -> dict:
     if not target:
         return {"ok": False, "error": "target_not_found"}
     remote_path = path or "."
-    script = (
-        "import json, os, sys\n"
-        "p = sys.argv[1]\n"
-        "try:\n"
-        "    p = os.path.abspath(os.path.expanduser(p))\n"
-        "    items = []\n"
-        "    for name in sorted(os.listdir(p)):\n"
-        "        if name.startswith('.'):\n"
-        "            continue\n"
-        "        full = os.path.join(p, name)\n"
-        "        try:\n"
-        "            st = os.stat(full)\n"
-        "        except OSError:\n"
-        "            continue\n"
-        "        typ = 'dir' if os.path.isdir(full) else 'file'\n"
-        "        items.append({'name': name, 'path': full, 'type': typ, 'size': st.st_size})\n"
-        "    print(json.dumps({'ok': True, 'current': p, 'parent': os.path.dirname(p) or '/', 'items': items}, ensure_ascii=False))\n"
-        "except Exception as exc:\n"
-        "    print(json.dumps({'ok': False, 'error': str(exc)}, ensure_ascii=False))\n"
+    # 纯 shell 实现，不依赖远程 Python
+    # 用 stat 逐个输出 type|size|name，兼容性好于 find -printf
+    qpath = shell_quote(remote_path)
+    command = (
+        f"_D=$(cd {qpath} 2>/dev/null && pwd) || exit 1; "
+        f"echo \"DIR:$_D\"; "
+        f"for f in \"$_D\"/*; do "
+        f"[ -e \"$f\" ] || continue; "
+        f"_N=$(basename \"$f\"); "
+        f"if [ -d \"$f\" ]; then _T=d; else _T=f; fi; "
+        f"_S=$(stat -c%s \"$f\" 2>/dev/null || echo 0); "
+        f"echo \"$_T|$_S|$_N\"; "
+        f"done"
     )
-    command = "python3 -c " + shell_quote(script) + " " + shell_quote(remote_path)
     res = remote_manager.run_remote_command(target, command, timeout=30)
     if not res.get("ok"):
         return {"ok": False, "error": res.get("error") or res.get("stderr") or "remote_failed"}
-    try:
-        return json.loads((res.get("stdout") or "").strip().splitlines()[-1])
-    except (json.JSONDecodeError, IndexError):
-        return {"ok": False, "error": "invalid_remote_response"}
+    stdout = (res.get("stdout") or "").strip()
+    lines = stdout.splitlines()
+    if not lines:
+        return {"ok": False, "error": "empty_response"}
+    # 解析当前目录
+    current = remote_path
+    if lines[0].startswith("DIR:"):
+        current = lines[0][4:]
+        lines = lines[1:]
+    parent = os.path.dirname(current) or "/"
+    items = []
+    for line in lines:
+        parts = line.split("|", 2)
+        if len(parts) < 3:
+            continue
+        ftype, size_str, name = parts
+        if not name or name.startswith("."):
+            continue
+        typ = "dir" if ftype == "d" else "file"
+        try:
+            size = int(size_str)
+        except ValueError:
+            size = 0
+        full = current.rstrip("/") + "/" + name
+        items.append({"name": name, "path": full, "type": typ, "size": size})
+    items.sort(key=lambda x: x["name"])
+    return {"ok": True, "current": current, "parent": parent, "items": items}
 
 
 def remote_cache_file(target_id: str, path: str, cwd: str = "") -> dict:
