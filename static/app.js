@@ -2078,7 +2078,7 @@ function renderEnvProfilesBar(profiles) {
     </select>
     <button class="profile-btn" id="profile-load-btn">${esc(t('profileLoad'))}</button>
     <button class="profile-btn" id="profile-save-btn">${esc(t('profileSaveAs'))}</button>
-    <button class="profile-btn danger" id="profile-del-btn">${esc(t('profileDelete'))}</button>
+    <button class="profile-btn" id="profile-del-btn">${esc(t('profileDelete'))}</button>
   `;
   bar.querySelector('#profile-load-btn').onclick = loadSelectedProfile;
   bar.querySelector('#profile-save-btn').onclick = saveAsEnvProfile;

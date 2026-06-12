@@ -1261,6 +1261,21 @@ async def handle_static(path: str, writer: asyncio.StreamWriter):
     ext = file_path.suffix.lower()
     content_type = MIME_TYPES.get(ext, "application/octet-stream")
     content = file_path.read_bytes()
+
+    # 给 HTML 中的 app.js / style.css 注入基于文件修改时间的版本号，
+    # 避免浏览器使用缓存的旧脚本/样式。
+    if ext in (".html", ".htm"):
+        try:
+            text = content.decode("utf-8")
+            for asset in ("app.js", "style.css"):
+                asset_path = STATIC_DIR / asset
+                if asset_path.exists():
+                    ver = int(asset_path.stat().st_mtime)
+                    text = text.replace(f"/static/{asset}", f"/static/{asset}?v={ver}")
+            content = text.encode("utf-8")
+        except Exception:
+            pass
+
     await send_response(writer, 200, content_type, content)
 
 

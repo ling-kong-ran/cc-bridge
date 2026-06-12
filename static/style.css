@@ -1601,37 +1601,32 @@ html.light-theme .select {
 .btn-save .btn-prefix { opacity: 0.5; }
 
 /* ─── Env Profiles Bar ─── */
-.env-profiles-bar {
-  display: flex; flex-direction: column; gap: 6px;
-  margin-bottom: 10px; padding-bottom: 8px;
-  border-bottom: 1px solid var(--border-dim);
+#env-profiles-bar {
+  display: flex; align-items: center; gap: 8px;
+  margin-bottom: 10px;
 }
-.env-profiles-bar > div {
-  display: flex; align-items: center; gap: 6px;
-}
-.env-profiles-bar .profile-label {
+#env-profiles-bar .profile-label {
   font-size: 10px; color: var(--text-muted); font-family: var(--font-mono);
-  letter-spacing: 0.05em; text-transform: uppercase; min-width: 60px;
+  letter-spacing: 0.05em; text-transform: uppercase;
 }
-.env-profiles-bar select {
-  flex: 1; min-width: 140px;
-  font-size: 11px; padding: 5px 8px;
-  background: var(--bg-input); color: var(--text); border: 1px solid var(--border-dim);
-  border-radius: 3px; font-family: var(--font-mono); outline: none;
+#env-profiles-bar select {
+  min-width: 100px; max-width: 160px;
+  font-size: 11px; padding: 4px 6px;
+  background: var(--bg-input); color: var(--text-base); border: 1px solid var(--border-dim);
+  border-radius: var(--radius-xs); font-family: var(--font-mono); outline: none;
   transition: border-color 0.15s;
 }
-.env-profiles-bar select:focus { border-color: var(--green-dim); }
-.env-profiles-bar .profile-btn {
-  font-size: 10px; padding: 4px 10px; cursor: pointer;
-  background: transparent; color: var(--green-dim); border: 1px solid var(--border-dim);
-  border-radius: 3px; font-family: var(--font-mono); transition: all 0.15s;
-  white-space: nowrap;
+#env-profiles-bar select:focus { border-color: var(--green-dim); }
+#env-profiles-bar .profile-btn {
+  padding: 5px 10px; cursor: pointer;
+  background: rgba(var(--accent-rgb),0.07); color: var(--text-muted);
+  border: 1px solid var(--border); border-radius: var(--radius-xs);
+  font-size: 11px; font-weight: 600;
+  font-family: var(--font-mono); letter-spacing: 0.08em;
+  transition: all var(--t-fast); white-space: nowrap;
+  display: inline-flex; align-items: center; gap: 5px;
 }
-.env-profiles-bar .profile-btn:hover {
-  border-color: var(--green-dim); color: var(--green); background: rgba(var(--accent-rgb),0.08);
-}
-.env-profiles-bar .profile-btn.danger { color: var(--text-muted); border-color: transparent; }
-.env-profiles-bar .profile-btn.danger:hover { color: #e55; border-color: #e55; }
+#env-profiles-bar .profile-btn:hover { color: #e55; border-color: #e55; background: rgba(240,80,80,0.08); }
 
 /* ─── Env Paste Section ─── */
 .env-paste-section { margin-top: 8px; border-top: 1px solid var(--border-dim); padding-top: 6px; }
