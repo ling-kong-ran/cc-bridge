@@ -144,6 +144,20 @@ html, body {
   position: relative;
   z-index: 1;
   box-shadow: 2px 0 12px rgba(0, 0, 0, 0.12);
+  transition: width var(--t-base), min-width var(--t-base), transform var(--t-base);
+}
+
+body.sidebar-collapsed .sidebar {
+  width: 0;
+  min-width: 0;
+  flex-basis: 0;
+  border-right: 0;
+  box-shadow: none;
+}
+
+body.sidebar-collapsed .main {
+  width: 100%;
+  flex-basis: 100%;
 }
 
 /* ─── Sidebar Header ────────────────────────────────────────── */
@@ -718,6 +732,7 @@ html.light-theme .select {
 /* ─── Top Bar ───────────────────────────────────────────────── */
 .chat-topbar {
   display: flex; align-items: center; justify-content: space-between;
+  gap: 8px;
   padding: 8px 20px;
   border-bottom: 1px solid var(--border-dim);
   background: rgba(4, 8, 16, 0.6);
@@ -791,6 +806,30 @@ html.light-theme .select {
 
 #topbar-cli {
   max-width: 90px;
+}
+
+.topbar-status-summary {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  color: var(--text-ghost);
+}
+
+.topbar-status-item {
+  color: var(--amber);
+  white-space: nowrap;
+}
+
+.sidebar-collapse-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  min-width: 24px;
 }
 
 .topbar-action {
@@ -1805,6 +1844,7 @@ html.light-theme .select {
 .cost-value,
 .topbar-label,
 .topbar-meta,
+.topbar-status-summary,
 .welcome-sub,
 .welcome-guide-title,
 .welcome-guide-steps,
@@ -1842,7 +1882,7 @@ html.light-theme .select {
 .runtime-summary-value, .session-group-path, .session-group-meta, .empty-state { --base-font-size: 9.5px; }
 .toggle-text, .input, .select, .session-item-title, .env-key, .env-val, .skill-name, .agent-name, .welcome-guide-title, .slash-command-name { --base-font-size: 12px; }
 .session-item-meta, .skill-desc, .agent-desc { --base-font-size: 10.5px; }
-.topbar-label, .topbar-meta, .welcome-sub, .picker-empty, .slash-command-desc, .slash-command-empty { --base-font-size: 11px; }
+.topbar-label, .topbar-meta, .topbar-status-summary, .welcome-sub, .picker-empty, .slash-command-desc, .slash-command-empty { --base-font-size: 11px; }
 #file-picker-selected-count { --base-font-size: 11px; }
 .picker-title, .picker-close { --base-font-size: 12px; }
 .welcome-guide-steps { --base-font-size: 11px; }

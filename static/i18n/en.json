@@ -126,6 +126,8 @@
   "sessionId": "Session",
   "copyResumeCommand": "Copy resume command",
   "resumeCommandCopied": "Resume command copied",
+  "collapseSidebar": "Collapse sidebar",
+  "expandSidebar": "Expand sidebar",
   "copyCommand": "Copy command",
   "cmdCopied": "Command copied",
   "cmdCopyFailed": "Copy failed; select and copy manually",

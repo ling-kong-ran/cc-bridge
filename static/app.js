@@ -22,6 +22,7 @@ let currentTurnStartedAt = 0;
 let currentTurnAttachmentCount = 0;
 let lastFocusConfigReloadAt = 0;
 let cachedSessions = [];
+let sidebarCollapsed = false;
 
 // ─── DOM ─────────────────────────────────────────────────────
 const messagesEl = document.getElementById('messages');
@@ -42,6 +43,13 @@ const btnShortcuts = document.getElementById('btn-shortcuts');
 const shortcutsOverlay = document.getElementById('shortcuts-overlay');
 const shortcutsClose = document.getElementById('shortcuts-close');
 const btnExportChat = document.getElementById('btn-export-chat');
+const btnSidebarCollapse = document.getElementById('btn-sidebar-collapse');
+const topbarStatusSummary = document.getElementById('topbar-status-summary');
+const topbarConnection = document.getElementById('topbar-connection');
+const topbarCost = document.getElementById('topbar-cost');
+const topbarCostValue = document.getElementById('topbar-cost-value');
+const topbarTokens = document.getElementById('topbar-tokens');
+const topbarTokenValue = document.getElementById('topbar-token-value');
 const topbarSessionId = document.getElementById('topbar-session-id');
 const topbarModel = document.getElementById('topbar-model');
 const topbarCli = document.getElementById('topbar-cli');
@@ -67,6 +75,7 @@ let accessContext = { isLocalhost: true, defaultCwd: '' };
 document.addEventListener('DOMContentLoaded', async () => {
   initTheme();
   initShortcutsHelp();
+  initSidebarCollapse();
   initInterfaceSettings();
   initNotifications();
   initLanAccessControl();
@@ -119,6 +128,38 @@ function openShortcutsHelp() {
 
 function closeShortcutsHelp() {
   if (shortcutsOverlay) shortcutsOverlay.style.display = 'none';
+}
+
+function setSidebarCollapsed(collapsed) {
+  sidebarCollapsed = Boolean(collapsed && sessionActive);
+  document.body.classList.toggle('sidebar-collapsed', sidebarCollapsed);
+  if (btnSidebarCollapse) {
+    btnSidebarCollapse.style.display = sessionActive ? '' : 'none';
+    btnSidebarCollapse.textContent = sidebarCollapsed ? '>' : '<';
+    btnSidebarCollapse.title = sidebarCollapsed ? t('expandSidebar') : t('collapseSidebar');
+    btnSidebarCollapse.setAttribute('aria-label', btnSidebarCollapse.title);
+  }
+  renderTopbarStatusSummary();
+}
+
+function initSidebarCollapse() {
+  btnSidebarCollapse?.addEventListener('click', () => setSidebarCollapsed(!sidebarCollapsed));
+}
+
+function renderTopbarStatusSummary() {
+  if (!topbarStatusSummary) return;
+  topbarStatusSummary.style.display = sidebarCollapsed ? '' : 'none';
+  if (!sidebarCollapsed) return;
+  if (topbarConnection) topbarConnection.textContent = connectionOnline ? t('connected') : t('connecting');
+  if (topbarCost && topbarCostValue) {
+    topbarCost.style.display = totalCost > 0 ? '' : 'none';
+    topbarCostValue.textContent = totalCost.toFixed(4);
+  }
+  if (topbarTokens && topbarTokenValue) {
+    const total = tokenUsageTotal(totalTokens);
+    topbarTokens.style.display = total > 0 ? '' : 'none';
+    topbarTokenValue.textContent = formatTokenUsage(totalTokens);
+  }
 }
 
 function initInterfaceSettings() {
@@ -590,6 +631,7 @@ async function applyLanguage(language, persist = true) {
   updateThemeToggle();
   updateConnectionText();
   updateUI();
+  setSidebarCollapsed(sidebarCollapsed);
   updateFilePickerCount();
   if (persist) saveGuiSettings({ language: currentLanguage });
 }
@@ -1087,6 +1129,7 @@ function setConnectionStatus(connected) {
   const dot = connectionStatus.querySelector('.status-dot');
   dot.className = `status-dot ${connected ? 'online' : 'offline'}`;
   updateConnectionText();
+  renderTopbarStatusSummary();
   btnNewSession.style.opacity = connected ? '1' : '0.5';
 }
 
@@ -1921,6 +1964,8 @@ function updateUI() {
   btnSend.disabled = !sessionActive || isResponding;
   btnStop.classList.toggle('visible', isResponding);
   btnNewSession.innerHTML = `<span class="btn-prefix">&gt;</span> ${sessionActive ? t('restartSession') : t('newSession')}`;
+  if (!sessionActive && sidebarCollapsed) sidebarCollapsed = false;
+  setSidebarCollapsed(sidebarCollapsed);
   // 会话活跃时禁用配置修改（CLI 和模型可随时切换，下一条消息生效）
   cwdInput.disabled = sessionActive;
   btnBrowse.disabled = sessionActive;
@@ -2584,6 +2629,7 @@ function hasModelOption(model) {
 function renderCost() {
   costDisplay.style.display = totalCost > 0 ? 'block' : 'none';
   costValue.textContent = totalCost.toFixed(4);
+  renderTopbarStatusSummary();
 }
 
 function emptyTokenUsage() {
@@ -2632,6 +2678,7 @@ function renderTokens() {
   const total = tokenUsageTotal(totalTokens);
   tokenDisplay.style.display = total > 0 ? 'block' : 'none';
   tokenValue.textContent = formatTokenUsage(totalTokens);
+  renderTopbarStatusSummary();
 }
 
 function formatTokenUsage(usage) {

@@ -156,11 +156,17 @@
           <button class="mobile-menu-toggle" type="button" aria-label="Open menu" aria-expanded="false">
             <span></span><span></span><span></span>
           </button>
+          <button id="btn-sidebar-collapse" class="topbar-action sidebar-collapse-action" type="button" title="Collapse sidebar" data-i18n-title="collapseSidebar" style="display:none">&lt;</button>
           <span class="topbar-label" data-i18n="chat">Chat</span>
           <div class="topbar-meta" aria-live="polite">
             <span class="topbar-meta-item"><span class="topbar-meta-key" data-i18n="sessionId">Session</span><button id="topbar-session-id" class="topbar-meta-value topbar-session-copy" type="button" title="Copy resume command" data-i18n-title="copyResumeCommand">-</button></span>
             <span class="topbar-meta-item"><span class="topbar-meta-key" data-i18n="model">Model</span><span id="topbar-model" class="topbar-meta-value" data-i18n="noSession">No Session</span></span>
             <span class="topbar-meta-item"><span class="topbar-meta-key" data-i18n="cliTool">CLI</span><span id="topbar-cli" class="topbar-meta-value">-</span></span>
+          </div>
+          <div id="topbar-status-summary" class="topbar-status-summary" style="display:none" aria-live="polite">
+            <span id="topbar-connection" class="topbar-status-item">-</span>
+            <span id="topbar-cost" class="topbar-status-item" style="display:none"><span data-i18n="totalCost">Total Cost</span> $<span id="topbar-cost-value">0.0000</span></span>
+            <span id="topbar-tokens" class="topbar-status-item" style="display:none"><span data-i18n="tokenUsage">Tokens</span> <span id="topbar-token-value">0</span></span>
           </div>
           <button id="btn-export-chat" class="topbar-action" type="button" title="Copy as Markdown" data-i18n-title="copyMarkdown">MD</button>
         </div>
