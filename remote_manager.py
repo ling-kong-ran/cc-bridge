@@ -262,34 +262,29 @@ def _paramiko_available() -> bool:
 
 
 def _find_ssh_client() -> Optional[str]:
-    """查找 ssh 客户端，在 Windows 上检查常见安装位置。"""
+    """查找 ssh 客户端，在 Windows 上检查系统 OpenSSH 和 Git for Windows。"""
     # 先检查环境变量 CCB_SSH_BIN（可覆盖）
     if _SSH_BIN != "ssh":
         return _SSH_BIN if shutil.which(_SSH_BIN) else None
-
-    # 项目目录及同级目录中的 ssh.exe（便于内网离线分发）
-    project_dir = Path(__file__).resolve().parent
-    for candidate in (
-        project_dir / "ssh.exe",
-        project_dir / "ssh" / "ssh.exe",
-        project_dir.parent / "ssh.exe",
-        project_dir.parent / "ssh" / "ssh.exe",
-    ):
-        if candidate.exists():
-            return str(candidate)
 
     # 标准 PATH 搜索
     found = shutil.which("ssh")
     if found:
         return found
 
-    # Windows 特殊处理：检查常见安装位置
+    # Windows 特殊处理：检查系统 OpenSSH 和 Git for Windows
     if os.name == "nt":
         sys_root = os.environ.get("SystemRoot", r"C:\Windows")
+        program_files = os.environ.get("ProgramFiles", r"C:\Program Files")
         common_paths = [
+            # Win10/11 自带 OpenSSH
             Path(sys_root) / "System32" / "OpenSSH" / "ssh.exe",
-            Path(os.environ.get("ProgramFiles", "")) / "OpenSSH" / "ssh.exe",
-            Path(os.environ.get("ProgramFiles(x86)", "")) / "OpenSSH" / "ssh.exe",
+            # 独立安装的 OpenSSH
+            Path(program_files) / "OpenSSH" / "ssh.exe",
+            # Git for Windows 内置的 ssh
+            Path(program_files) / "Git" / "usr" / "bin" / "ssh.exe",
+            Path(os.environ.get("ProgramFiles(x86)", "")) / "Git" / "usr" / "bin" / "ssh.exe",
+            Path(os.environ.get("LOCALAPPDATA", "")) / "Programs" / "Git" / "usr" / "bin" / "ssh.exe",
         ]
         for p in common_paths:
             if p.exists():
