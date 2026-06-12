@@ -218,7 +218,8 @@ def save_session(session_id: str, title: str, model: str, cwd: str,
     # 查找已有记录
     for s in sessions:
         if s["session_id"] == session_id:
-            if title:
+            # 已手动重命名的会话保留其标题，不被自动标题覆盖
+            if title and not s.get("manual_title"):
                 s["title"] = title
                 s["manual_title"] = False
             else:

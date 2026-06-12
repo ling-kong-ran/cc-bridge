@@ -910,13 +910,17 @@ async function loadModels() {
 }
 
 // ─── 导航 ────────────────────────────────────────────────────
+function showPage(page) {
+  document.querySelectorAll('.nav-btn').forEach(b => b.classList.toggle('active', b.dataset.page === page));
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  const target = document.getElementById(`page-${page}`);
+  if (target) target.classList.add('active');
+}
+
 function initNavigation() {
   document.querySelectorAll('.nav-btn').forEach(btn => {
     btn.addEventListener('click', () => {
-      document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
-      btn.classList.add('active');
-      document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
-      document.getElementById(`page-${btn.dataset.page}`).classList.add('active');
+      showPage(btn.dataset.page);
     });
   });
 }
@@ -2259,6 +2263,7 @@ function renderSessionList(sessions) {
     item.addEventListener('click', (e) => {
       if (e.target.classList.contains('session-item-delete') || e.target.classList.contains('session-item-rename')) return;
       const tokens = safeJsonParse(item.dataset.tokens, null);
+      showPage('chat');
       resumeSession(item.dataset.sid, item.dataset.cwd, item.dataset.model, Number(item.dataset.cost || 0), item.dataset.remoteTarget || '', tokens);
     });
     item.querySelector('.session-item-delete').addEventListener('click', async (e) => {
