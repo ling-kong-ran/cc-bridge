@@ -38,6 +38,9 @@ const tokenDisplay = document.getElementById('token-display');
 const tokenValue = document.getElementById('token-value');
 const sessionSearchInput = document.getElementById('session-search');
 const btnThemeToggle = document.getElementById('btn-theme-toggle');
+const btnShortcuts = document.getElementById('btn-shortcuts');
+const shortcutsOverlay = document.getElementById('shortcuts-overlay');
+const shortcutsClose = document.getElementById('shortcuts-close');
 const btnExportChat = document.getElementById('btn-export-chat');
 const themeToggleText = document.getElementById('theme-toggle-text');
 const languageSelect = document.getElementById('language-select');
@@ -60,6 +63,7 @@ let accessContext = { isLocalhost: true, defaultCwd: '' };
 // ─── 初始化 ──────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', async () => {
   initTheme();
+  initShortcutsHelp();
   initInterfaceSettings();
   initNotifications();
   initLanAccessControl();
@@ -96,6 +100,22 @@ function initTheme() {
     const nextTheme = document.documentElement.classList.contains('light-theme') ? 'dark' : 'light';
     applyTheme(nextTheme);
   });
+}
+
+function initShortcutsHelp() {
+  btnShortcuts?.addEventListener('click', openShortcutsHelp);
+  shortcutsClose?.addEventListener('click', closeShortcutsHelp);
+  shortcutsOverlay?.addEventListener('click', (e) => {
+    if (e.target === shortcutsOverlay) closeShortcutsHelp();
+  });
+}
+
+function openShortcutsHelp() {
+  if (shortcutsOverlay) shortcutsOverlay.style.display = 'flex';
+}
+
+function closeShortcutsHelp() {
+  if (shortcutsOverlay) shortcutsOverlay.style.display = 'none';
 }
 
 function initInterfaceSettings() {
@@ -1479,9 +1499,17 @@ function domText(el) {
 }
 
 function handleGlobalShortcuts(e) {
+  if (e.key === 'Escape' && shortcutsOverlay && shortcutsOverlay.style.display !== 'none') {
+    e.preventDefault();
+    closeShortcutsHelp();
+    return;
+  }
   if (!(e.ctrlKey || e.metaKey) || e.shiftKey || e.altKey) return;
   const key = e.key.toLowerCase();
-  if (key === 'k') {
+  if (key === '/') {
+    e.preventDefault();
+    openShortcutsHelp();
+  } else if (key === 'k') {
     e.preventDefault();
     sessionSearchInput?.focus();
     sessionSearchInput?.select();

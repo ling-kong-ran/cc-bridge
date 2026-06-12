@@ -160,6 +160,13 @@ html, body {
   margin-bottom: 4px;
 }
 
+.header-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
 .logo-row {
   display: flex;
   align-items: baseline;
@@ -349,7 +356,7 @@ html, body {
   letter-spacing: 0.06em;
 }
 
-.theme-toggle {
+.icon-toggle {
   width: 34px;
   height: 34px;
   display: inline-flex;
@@ -365,10 +372,21 @@ html, body {
   flex-shrink: 0;
 }
 
-.theme-toggle:hover {
+.icon-toggle:hover {
   background: var(--green-faint);
   border-color: var(--green-dim);
   color: var(--green);
+}
+
+.icon-toggle > span:not(.theme-toggle-icon) {
+  font-family: var(--font-mono);
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.theme-toggle {
+  width: 34px;
+  height: 34px;
 }
 
 .theme-toggle-icon {
@@ -1671,6 +1689,49 @@ html.light-theme .select {
   padding: 8px 12px;
   text-align: left;
   border-bottom: 1px solid var(--border-dim);
+}
+
+.shortcuts-modal {
+  width: 480px;
+}
+
+.shortcuts-body {
+  display: grid;
+  gap: 8px;
+  padding: 16px 18px 18px;
+  overflow-y: auto;
+}
+
+.shortcut-row {
+  display: grid;
+  grid-template-columns: auto auto auto minmax(0, 1fr);
+  align-items: center;
+  gap: 7px;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  font-size: 12px;
+}
+
+.shortcut-row kbd {
+  min-width: 26px;
+  padding: 3px 7px;
+  border: 1px solid var(--border-dim);
+  border-radius: var(--radius-xs);
+  background: var(--bg-raised);
+  color: var(--green-dim);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  text-align: center;
+  box-shadow: inset 0 -1px 0 rgba(255,255,255,0.05);
+}
+
+.shortcut-row span:last-child {
+  color: var(--text-base);
+}
+
+.shortcut-row:has(kbd:nth-child(1):last-child),
+.shortcut-row:has(kbd:nth-child(1) + span:last-child) {
+  grid-template-columns: auto minmax(0, 1fr);
 }
 
 /* ─── Font Scale ───────────────────────────────────────────── */

@@ -37,12 +37,17 @@
             <span class="logo-bracket">]</span>
             <span class="logo-cursor">_</span>
           </div>
-          <button id="btn-theme-toggle" class="theme-toggle" type="button" aria-label="切换为亮色主题" title="切换为亮色主题">
-            <span class="theme-toggle-icon" aria-hidden="true">
-              <svg class="theme-icon-moon" viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.8A8.5 8.5 0 1 1 11.2 3a6.7 6.7 0 0 0 9.8 9.8z"></path></svg>
-              <svg class="theme-icon-sun" viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="4"></circle><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"></path></svg>
-            </span>
-          </button>
+          <div class="header-actions">
+            <button id="btn-shortcuts" class="icon-toggle" type="button" aria-label="快捷键" title="快捷键" data-i18n-title="shortcutsTitle">
+              <span aria-hidden="true">?</span>
+            </button>
+            <button id="btn-theme-toggle" class="theme-toggle icon-toggle" type="button" aria-label="切换为亮色主题" title="切换为亮色主题">
+              <span class="theme-toggle-icon" aria-hidden="true">
+                <svg class="theme-icon-moon" viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.8A8.5 8.5 0 1 1 11.2 3a6.7 6.7 0 0 0 9.8 9.8z"></path></svg>
+                <svg class="theme-icon-sun" viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="4"></circle><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"></path></svg>
+              </span>
+            </button>
+          </div>
         </div>
         <p class="logo-sub" data-i18n="appSubtitle">Claude Code Bridge v1.0</p>
         <div class="header-line"></div>
@@ -421,6 +426,26 @@
         <button id="file-picker-confirm" class="btn btn-primary" style="width:auto; padding:8px 24px;">
           <span class="btn-prefix">&gt;</span> <span data-i18n="addAttachments">Add Attachments</span>
         </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 快捷键帮助弹窗 -->
+  <div id="shortcuts-overlay" class="picker-overlay" style="display:none">
+    <div class="picker-modal shortcuts-modal">
+      <div class="picker-header">
+        <span class="picker-title" data-i18n="shortcutsTitle">Keyboard Shortcuts</span>
+        <button id="shortcuts-close" class="picker-close" data-i18n="close">Close</button>
+      </div>
+      <div class="shortcuts-body">
+        <div class="shortcut-row"><kbd>Ctrl/Cmd</kbd><span>+</span><kbd>K</kbd><span data-i18n="shortcutSearchSessions">Focus session search</span></div>
+        <div class="shortcut-row"><kbd>Ctrl/Cmd</kbd><span>+</span><kbd>N</kbd><span data-i18n="shortcutNewSession">New session</span></div>
+        <div class="shortcut-row"><kbd>Ctrl/Cmd</kbd><span>+</span><kbd>Enter</kbd><span data-i18n="shortcutSend">Send message</span></div>
+        <div class="shortcut-row"><kbd>Ctrl/Cmd</kbd><span>+</span><kbd>.</kbd><span data-i18n="shortcutStop">Stop current response</span></div>
+        <div class="shortcut-row"><kbd>Ctrl/Cmd</kbd><span>+</span><kbd>E</kbd><span data-i18n="shortcutExport">Copy conversation Markdown</span></div>
+        <div class="shortcut-row"><kbd>Enter</kbd><span data-i18n="shortcutInputSend">Send in input box</span></div>
+        <div class="shortcut-row"><kbd>Shift</kbd><span>+</span><kbd>Enter</kbd><span data-i18n="shortcutInputNewline">New line in input box</span></div>
+        <div class="shortcut-row"><kbd>/</kbd><span data-i18n="shortcutSlash">Open slash command suggestions</span></div>
       </div>
     </div>
   </div>
