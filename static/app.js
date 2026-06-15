@@ -946,7 +946,12 @@ async function checkForUpdate(manual = false) {
       return;
     }
     const versionEl = document.getElementById('app-version');
-    if (versionEl && data.local_short) versionEl.textContent = data.local_short;
+    if (versionEl) {
+      const localVersion = data.local_short || '—';
+      versionEl.textContent = data.needs_restart && data.server_start_short
+        ? `${data.server_start_short} → ${localVersion}`
+        : localVersion;
+    }
 
     if (data.has_update && (manual || data.remote !== skipUpdateVersion)) {
       const changelog = document.getElementById('update-changelog');
@@ -955,6 +960,16 @@ async function checkForUpdate(manual = false) {
         else { changelog.style.display = 'none'; changelog.textContent = ''; }
       }
       setUpdateStatus('', '');
+      const runBtn = document.getElementById('update-run');
+      if (runBtn) runBtn.disabled = false;
+      openUpdateModal();
+    } else if (data.needs_restart) {
+      const changelog = document.getElementById('update-changelog');
+      if (changelog) {
+        changelog.style.display = '';
+        changelog.textContent = data.commits || `${data.server_start_short || ''} → ${data.local_short || ''}`;
+      }
+      setUpdateStatus(t('updateRestartNeeded'), '');
       const runBtn = document.getElementById('update-run');
       if (runBtn) runBtn.disabled = false;
       openUpdateModal();
@@ -973,20 +988,22 @@ async function runUpdate() {
   if (runBtn) runBtn.disabled = true;
   setUpdateStatus(t('updateChecking'), '');
   try {
-    const resp = await fetch('/api/update', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
-    const result = await resp.json();
-    const changelog = document.getElementById('update-changelog');
-    if (changelog && result.output) { changelog.style.display = ''; changelog.textContent = result.output; }
-    if (result.ok) {
-      setUpdateStatus(t('updateSuccess'), 'ok');
-      try {
-        await fetch('/api/restart', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
-      } catch (e) { /* 重启会断开连接，忽略 */ }
-      waitForServerAndReload();
-    } else {
-      setUpdateStatus(t('updateRestartManual'), 'err');
-      if (runBtn) runBtn.disabled = false;
+    if (!updateInfo?.needs_restart || updateInfo?.has_update) {
+      const resp = await fetch('/api/update', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
+      const result = await resp.json();
+      const changelog = document.getElementById('update-changelog');
+      if (changelog && result.output) { changelog.style.display = ''; changelog.textContent = result.output; }
+      if (!result.ok) {
+        setUpdateStatus(t('updateRestartManual'), 'err');
+        if (runBtn) runBtn.disabled = false;
+        return;
+      }
     }
+    setUpdateStatus(t('updateSuccess'), 'ok');
+    try {
+      await fetch('/api/restart', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
+    } catch (e) { /* 重启会断开连接，忽略 */ }
+    waitForServerAndReload();
   } catch (e) {
     setUpdateStatus(t('updateFailed'), 'err');
     if (runBtn) runBtn.disabled = false;

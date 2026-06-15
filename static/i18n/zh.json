@@ -233,6 +233,7 @@
   "updateSuccess": "更新成功，正在重启…",
   "updateFailed": "检查更新失败",
   "updateRestartManual": "更新完成，请手动重启服务。",
+  "updateRestartNeeded": "本地代码已更新，重启服务后即可使用新版本。",
   "updateUpToDate": "已是最新版本",
   "updateChecking": "正在更新…",
   "quoteMessage": "引用"

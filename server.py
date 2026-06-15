@@ -12,6 +12,7 @@ import uuid
 import ipaddress
 import base64
 import shlex
+import subprocess
 from pathlib import Path
 from urllib.parse import urlparse, parse_qs
 
@@ -607,6 +608,31 @@ REPO_DIR = Path(__file__).resolve().parent
 _update_lock = asyncio.Lock()
 
 
+def _get_startup_commit() -> str:
+    """记录服务进程启动时对应的 git commit，用于识别代码已更新但进程未重启的场景。"""
+    import shutil as _shutil
+
+    git = _shutil.which("git")
+    if not git:
+        return ""
+    try:
+        proc = subprocess.run(
+            [git, "rev-parse", "HEAD"],
+            cwd=str(REPO_DIR),
+            stdout=subprocess.PIPE,
+            stderr=subprocess.DEVNULL,
+            text=True,
+            timeout=5,
+            check=False,
+        )
+        return (proc.stdout or "").strip() if proc.returncode == 0 else ""
+    except Exception:
+        return ""
+
+
+SERVER_START_COMMIT = _get_startup_commit()
+
+
 async def _run_git(*args, timeout: int = 30) -> tuple[int, str]:
     """在仓库目录运行 git 子命令，返回 (returncode, 合并输出)。git 不存在时 returncode=-1。"""
     import shutil as _shutil
@@ -636,7 +662,7 @@ async def _run_git(*args, timeout: int = 30) -> tuple[int, str]:
 
 
 async def check_update() -> dict:
-    """检查远端 origin/master 是否有比本地 HEAD 更新的提交。"""
+    """检查远端 origin/master 是否有更新，并识别当前进程是否仍运行旧提交。"""
     # 必须先确认是 git 仓库
     code, _ = await _run_git("rev-parse", "--is-inside-work-tree", timeout=10)
     if code != 0:
@@ -652,17 +678,23 @@ async def check_update() -> dict:
         return {"ok": False, "error": "rev_parse_failed"}
 
     has_update = bool(local) and bool(remote) and local != remote
+    server_stale = bool(SERVER_START_COMMIT) and bool(local) and SERVER_START_COMMIT != local
     commits = ""
     if has_update:
         _, commits = await _run_git("log", "--oneline", "-20", "HEAD..origin/master", timeout=10)
+    elif server_stale:
+        commits = f"{SERVER_START_COMMIT[:7]}..{local[:7]}"
 
     return {
         "ok": True,
         "has_update": has_update,
+        "needs_restart": server_stale,
         "local": local,
         "remote": remote,
+        "server_start": SERVER_START_COMMIT,
         "local_short": local[:7],
         "remote_short": remote[:7],
+        "server_start_short": SERVER_START_COMMIT[:7],
         "commits": commits,
         "error": None,
     }
