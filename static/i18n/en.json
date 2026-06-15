@@ -238,6 +238,7 @@
   "updateRestartManual": "Update done. Please restart the server manually.",
   "updateRestartNeeded": "Code has been updated locally. Restart the server to use the new version.",
   "updateUpToDate": "Already up to date",
+  "updateCheckRunning": "Checking…",
   "updateChecking": "Updating…",
   "quoteMessage": "Quote"
 }

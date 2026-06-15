@@ -235,6 +235,7 @@
   "updateRestartManual": "更新完成，请手动重启服务。",
   "updateRestartNeeded": "本地代码已更新，重启服务后即可使用新版本。",
   "updateUpToDate": "已是最新版本",
+  "updateCheckRunning": "检查中…",
   "updateChecking": "正在更新…",
   "quoteMessage": "引用"
 }

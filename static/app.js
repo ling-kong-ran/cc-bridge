@@ -937,6 +937,12 @@ function closeUpdateModal() {
 }
 
 async function checkForUpdate(manual = false) {
+  const checkBtn = document.getElementById('btn-check-update');
+  const previousCheckText = checkBtn?.textContent || '';
+  if (manual && checkBtn) {
+    checkBtn.disabled = true;
+    checkBtn.textContent = t('updateCheckRunning');
+  }
   try {
     const resp = await fetch('/api/check-update');
     const data = await resp.json();
@@ -978,6 +984,11 @@ async function checkForUpdate(manual = false) {
     }
   } catch (e) {
     if (manual) addSystemMsg(t('updateFailed'), true);
+  } finally {
+    if (manual && checkBtn) {
+      checkBtn.disabled = false;
+      checkBtn.textContent = previousCheckText || t('checkUpdate');
+    }
   }
 }
 
