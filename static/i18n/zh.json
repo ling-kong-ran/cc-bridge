@@ -237,5 +237,7 @@
   "updateUpToDate": "已是最新版本",
   "updateCheckRunning": "检查中…",
   "updateChecking": "正在更新…",
-  "quoteMessage": "引用"
+  "quoteMessage": "引用",
+  "quotedMessage": "已引用消息",
+  "removeQuote": "移除引用"
 }

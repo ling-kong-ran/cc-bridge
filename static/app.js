@@ -36,6 +36,7 @@ let autoUpdateEnabled = true;  // 是否启动时自动检查更新
 let skipUpdateVersion = '';    // 被跳过的远端版本 SHA
 let updateInfo = null;         // 最近一次 check-update 的结果
 let quoteSourceText = '';      // 右键引用时暂存的消息文本
+let quotedMessages = [];       // 输入框上方展示的引用卡片
 const cwdInput = document.getElementById('cwd-input');
 const connectionStatus = document.getElementById('connection-status');
 const costDisplay = document.getElementById('cost-display');
@@ -1672,12 +1673,17 @@ function createAssistantBubble() {
   return el;
 }
 
-function addUserMessage(text) {
+function addUserMessage(text, quotes = []) {
   const el = document.createElement('div');
   el.className = 'message user';
+  const quoteHtml = quotes.length ? `
+    <div class="msg-quoted-list">
+      ${quotes.map(q => `<div class="msg-quoted-item">${esc(q)}</div>`).join('')}
+    </div>
+  ` : '';
   el.innerHTML = `
     <div class="avatar user-avatar">U</div>
-    <div class="msg-bubble"><div class="msg-content">${esc(text)}</div></div>
+    <div class="msg-bubble"><div class="msg-content">${quoteHtml}${esc(text)}</div></div>
   `;
   messagesEl.appendChild(el);
   scrollToBottom();
@@ -1695,6 +1701,7 @@ function addSystemMsg(text, isError) {
 const btnAttach = document.getElementById('btn-attach');
 const fileInput = document.getElementById('file-input');
 const attachmentsBar = document.getElementById('attachments-bar');
+const quotePreviewBar = document.getElementById('quote-preview-bar');
 const slashCommandPanel = document.getElementById('slash-command-panel');
 const inputWrapper = document.querySelector('.input-wrapper');
 let attachedFiles = []; // [{name, path, isImage, uploaded}]
@@ -1814,15 +1821,37 @@ function hideMsgContextMenu() {
 }
 
 function quoteIntoInput(text) {
-  if (!text) return;
-  const quoted = text.split('\n').map(line => `> ${line}`).join('\n');
-  const existing = inputEl.value;
-  inputEl.value = existing ? `${quoted}\n\n${existing}` : `${quoted}\n\n`;
+  const normalized = (text || '').trim();
+  if (!normalized) return;
+  quotedMessages.push(normalized);
+  renderQuotePreview();
   showPage('chat');
   inputEl.focus();
-  inputEl.selectionStart = inputEl.selectionEnd = inputEl.value.length;
-  // 设置 .value 不会触发 input 事件，手动触发自适应高度
-  inputEl.dispatchEvent(new Event('input'));
+}
+
+function renderQuotePreview() {
+  if (!quotePreviewBar) return;
+  if (quotedMessages.length === 0) {
+    quotePreviewBar.style.display = 'none';
+    quotePreviewBar.innerHTML = '';
+    return;
+  }
+  quotePreviewBar.style.display = 'flex';
+  quotePreviewBar.innerHTML = quotedMessages.map((text, i) => `
+    <div class="quote-preview-item">
+      <div class="quote-preview-head">
+        <span>${esc(t('quotedMessage'))}</span>
+        <button class="quote-preview-remove" data-idx="${i}" title="${esc(t('removeQuote'))}" type="button">&times;</button>
+      </div>
+      <div class="quote-preview-text">${esc(text)}</div>
+    </div>
+  `).join('');
+  quotePreviewBar.querySelectorAll('.quote-preview-remove').forEach(btn => {
+    btn.addEventListener('click', () => {
+      quotedMessages.splice(parseInt(btn.dataset.idx), 1);
+      renderQuotePreview();
+    });
+  });
 }
 
 function initMessageContextMenu() {
@@ -2124,9 +2153,19 @@ function getAttachmentTitle(file) {
 
 function sendMessage() {
   let content = inputEl.value.trim();
-  if ((!content && attachedFiles.length === 0) || !sessionActive || isResponding) return;
+  const quotesForThisTurn = quotedMessages.slice();
+  if ((!content && attachedFiles.length === 0 && quotesForThisTurn.length === 0) || !sessionActive || isResponding) return;
   const originalContent = content;
   const attachmentCount = attachedFiles.length;
+
+  if (quotesForThisTurn.length > 0) {
+    const quotedText = quotesForThisTurn
+      .map(text => text.split('\n').map(line => `> ${line}`).join('\n'))
+      .join('\n\n');
+    content = content ? `${quotedText}\n\n${content}` : quotedText;
+    quotedMessages = [];
+    renderQuotePreview();
+  }
 
   // 注入文件路径。上传缓存文件只需要保留到本轮消息发出，之后异步删除以节省磁盘。
   let sentUploadedFiles = [];
@@ -2141,8 +2180,8 @@ function sendMessage() {
     renderAttachments();
   }
 
-  addUserMessage(content);
-  currentTurnContent = originalContent || (attachmentCount ? t('notifyAttachmentPrompt', { count: attachmentCount }) : '');
+  addUserMessage(originalContent, quotesForThisTurn);
+  currentTurnContent = originalContent || (attachmentCount ? t('notifyAttachmentPrompt', { count: attachmentCount }) : (quotesForThisTurn.length ? t('quotedMessage') : ''));
   currentTurnAttachmentCount = attachmentCount;
   currentTurnStartedAt = Date.now();
   currentTurnHasAssistantOutput = false;
@@ -2183,6 +2222,8 @@ function startNewSession() {
     sessionActive = false;
     isResponding = false;
     updateUI();
+    quotedMessages = [];
+    renderQuotePreview();
     messagesEl.innerHTML = '';
     currentAssistantEl = null;
     currentContent = [];
@@ -2197,6 +2238,8 @@ function startNewSession() {
     return;
   }
 
+  quotedMessages = [];
+  renderQuotePreview();
   messagesEl.innerHTML = '';
   currentAssistantEl = null;
   currentContent = [];
@@ -2625,6 +2668,8 @@ async function resumeSession(sessionId, cwd, model, savedCost = 0, remoteTargetI
   }
 
   // 清空当前消息区
+  quotedMessages = [];
+  renderQuotePreview();
   messagesEl.innerHTML = '';
   currentAssistantEl = null;
   currentContent = [];

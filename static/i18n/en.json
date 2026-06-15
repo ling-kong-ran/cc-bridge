@@ -240,5 +240,7 @@
   "updateUpToDate": "Already up to date",
   "updateCheckRunning": "Checking…",
   "updateChecking": "Updating…",
-  "quoteMessage": "Quote"
+  "quoteMessage": "Quote",
+  "quotedMessage": "Quoted message",
+  "removeQuote": "Remove quote"
 }

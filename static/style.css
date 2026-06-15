@@ -1388,6 +1388,77 @@ html.light-theme .select {
   opacity: 1;
 }
 
+.quote-preview-bar {
+  max-width: 840px;
+  margin: 0 auto 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.quote-preview-item {
+  border: 1px solid var(--border-dim);
+  border-left: 2px solid var(--green-dim);
+  border-radius: var(--radius-xs);
+  background: rgba(var(--accent-rgb),0.035);
+  overflow: hidden;
+}
+
+.quote-preview-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 5px 8px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--green-dim);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.quote-preview-text {
+  max-height: 72px;
+  overflow: hidden;
+  padding: 0 8px 7px;
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.quote-preview-remove {
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 16px;
+  line-height: 1;
+  padding: 0 2px;
+}
+
+.quote-preview-remove:hover {
+  color: var(--red);
+}
+
+.msg-quoted-list {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  margin-bottom: 8px;
+}
+
+.msg-quoted-item {
+  border-left: 2px solid var(--green-dim);
+  background: rgba(var(--accent-rgb),0.04);
+  color: var(--text-muted);
+  padding: 5px 8px;
+  border-radius: 0 var(--radius-xs) var(--radius-xs) 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
 .input-wrapper textarea::placeholder { color: var(--text-ghost); font-size: 11px; }
 
 .input-actions { display: flex; flex-direction: column; gap: 5px; }
