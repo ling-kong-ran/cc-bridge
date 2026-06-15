@@ -938,17 +938,24 @@ function closeUpdateModal() {
 
 async function checkForUpdate(manual = false) {
   const checkBtn = document.getElementById('btn-check-update');
+  const checkHint = document.getElementById('update-check-hint');
   const previousCheckText = checkBtn?.textContent || '';
-  if (manual && checkBtn) {
-    checkBtn.disabled = true;
-    checkBtn.textContent = t('updateCheckRunning');
+  if (manual) {
+    if (checkBtn) checkBtn.disabled = true;
+    if (checkHint) {
+      checkHint.textContent = t('updateCheckRunning');
+      checkHint.className = 'update-check-hint';
+    }
   }
   try {
     const resp = await fetch('/api/check-update');
     const data = await resp.json();
     updateInfo = data;
     if (!data.ok) {
-      if (manual) addSystemMsg(t('updateFailed'), true);
+      if (manual && checkHint) {
+        checkHint.textContent = t('updateFailed');
+        checkHint.className = 'update-check-hint err';
+      }
       return;
     }
     const versionEl = document.getElementById('app-version');
@@ -965,6 +972,7 @@ async function checkForUpdate(manual = false) {
         if (data.commits) { changelog.style.display = ''; changelog.textContent = data.commits; }
         else { changelog.style.display = 'none'; changelog.textContent = ''; }
       }
+      if (manual && checkHint) checkHint.textContent = '';
       setUpdateStatus('', '');
       const runBtn = document.getElementById('update-run');
       if (runBtn) runBtn.disabled = false;
@@ -975,15 +983,20 @@ async function checkForUpdate(manual = false) {
         changelog.style.display = '';
         changelog.textContent = data.commits || `${data.server_start_short || ''} → ${data.local_short || ''}`;
       }
+      if (manual && checkHint) checkHint.textContent = '';
       setUpdateStatus(t('updateRestartNeeded'), '');
       const runBtn = document.getElementById('update-run');
       if (runBtn) runBtn.disabled = false;
       openUpdateModal();
-    } else if (manual) {
-      addSystemMsg(t('updateUpToDate'));
+    } else if (manual && checkHint) {
+      checkHint.textContent = t('updateUpToDate');
+      checkHint.className = 'update-check-hint ok';
     }
   } catch (e) {
-    if (manual) addSystemMsg(t('updateFailed'), true);
+    if (manual && checkHint) {
+      checkHint.textContent = t('updateFailed');
+      checkHint.className = 'update-check-hint err';
+    }
   } finally {
     if (manual && checkBtn) {
       checkBtn.disabled = false;

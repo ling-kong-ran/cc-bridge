@@ -1312,6 +1312,20 @@ html.light-theme .select {
   color: var(--text-muted);
 }
 
+.update-check-hint {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.update-check-hint.ok {
+  color: var(--green);
+}
+
+.update-check-hint.err {
+  color: var(--danger);
+}
+
 .btn-mini {
   padding: 5px 12px;
   background: var(--green-faint);
