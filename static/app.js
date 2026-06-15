@@ -2654,7 +2654,7 @@ async function resumeSession(sessionId, cwd, model, savedCost = 0, remoteTargetI
     cli: cli || document.getElementById('cli-select')?.value || '',
     cwd: cwd || cwdInput.value.trim() || null,
     skip_permissions: document.getElementById('skip-permissions').checked,
-    remote_target_id: remoteTargetId || remoteTargetSelect?.value || '',
+    remote_target_id: remoteTargetId || '',
     allow_remote_mutate: !!remoteAllowMutate?.checked,
   });
 

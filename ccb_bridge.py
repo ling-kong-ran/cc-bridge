@@ -293,9 +293,9 @@ class CCBSession:
             "当前为只读模式，只能查看；如需变更系统请提示用户在 GUI 开启「允许远程写入」。"
         )
         prompt = (
-            f"本会话用于排查一台远程 Linux 机器（{label}，{t.get('user','')}@{t.get('host','')}），该机器未安装 Claude。"
+            f"本会话用于ssh远程 操作目标机器（{label}，{t.get('user','')}@{t.get('host','')}"
             "请优先使用名称以 mcp__remote__ 开头的远程工具（remote_run/remote_tail/remote_read_file/"
-            "remote_grep/remote_list/remote_sysinfo）在目标机上查看日志、跑只读命令，不要用本地 Bash 操作目标机。"
+            "remote_grep/remote_list/remote_sysinfo）在目标机上查看日志、跑只读命令"
             + mutate_line
         )
         return str(self._mcp_config_path), prompt
