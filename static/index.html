@@ -308,6 +308,9 @@
       <!-- 远程诊断页 -->
       <div id="page-remote" class="page config-page">
         <div class="chat-topbar">
+          <button class="mobile-menu-toggle" type="button" aria-label="Open menu" aria-expanded="false">
+            <span></span><span></span><span></span>
+          </button>
           <span class="topbar-label" data-i18n="remoteDiag">Remote Access</span>
           <span class="topbar-model" data-i18n="remoteDiagHint">Use SSH in read-only / read-write mode</span>
         </div>
@@ -532,6 +535,10 @@
 
   <div id="msg-context-menu" class="msg-context-menu" style="display:none">
     <button type="button" class="msg-context-item" data-action="quote" data-i18n="quoteMessage">Quote</button>
+  </div>
+
+  <div id="cwd-context-menu" class="msg-context-menu" style="display:none">
+    <button type="button" class="msg-context-item" data-action="new-session-from-cwd" data-i18n="newSessionFromCwd">New session from this directory</button>
   </div>
 
   <script src="/static/app.js"></script>

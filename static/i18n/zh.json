@@ -239,5 +239,6 @@
   "updateChecking": "正在更新…",
   "quoteMessage": "引用",
   "quotedMessage": "已引用消息",
-  "removeQuote": "移除引用"
+  "removeQuote": "移除引用",
+  "newSessionFromCwd": "从此工作目录新建会话"
 }

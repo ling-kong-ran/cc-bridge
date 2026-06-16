@@ -242,5 +242,6 @@
   "updateChecking": "Updating…",
   "quoteMessage": "Quote",
   "quotedMessage": "Quoted message",
-  "removeQuote": "Remove quote"
+  "removeQuote": "Remove quote",
+  "newSessionFromCwd": "New session from this directory"
 }

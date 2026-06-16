@@ -37,6 +37,7 @@ let skipUpdateVersion = '';    // 被跳过的远端版本 SHA
 let updateInfo = null;         // 最近一次 check-update 的结果
 let quoteSourceText = '';      // 右键引用时暂存的消息文本
 let quotedMessages = [];       // 输入框上方展示的引用卡片
+let contextMenuCwd = '';       // 工作目录右键菜单暂存的 cwd
 const cwdInput = document.getElementById('cwd-input');
 const connectionStatus = document.getElementById('connection-status');
 const costDisplay = document.getElementById('cost-display');
@@ -93,6 +94,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   initCliInstallModal();
   initUpdateModal();
   initMessageContextMenu();
+  initCwdContextMenu();
   initRemote();
   loadDefaultCwd();
   loadClis();
@@ -2210,6 +2212,21 @@ function getSlashCommandName(content) {
   return match ? match[0] : '';
 }
 
+function resetSessionViewState() {
+  quotedMessages = [];
+  renderQuotePreview();
+  messagesEl.innerHTML = '';
+  currentAssistantEl = null;
+  currentContent = [];
+  streamBlocks = {};
+  totalCost = 0;
+  totalTokens = emptyTokenUsage();
+  currentSessionId = null;
+  renderTopbarMeta();
+  renderCost();
+  renderTokens();
+}
+
 function startNewSession() {
   if (!clientId) {
     addSystemMsg(t('notConnected'), true);
@@ -2222,33 +2239,18 @@ function startNewSession() {
     sessionActive = false;
     isResponding = false;
     updateUI();
-    quotedMessages = [];
-    renderQuotePreview();
-    messagesEl.innerHTML = '';
-    currentAssistantEl = null;
-    currentContent = [];
-    streamBlocks = {};
-    totalCost = 0;
-    totalTokens = emptyTokenUsage();
-    currentSessionId = null;
-    renderTopbarMeta();
-    renderCost();
-    renderTokens();
+    resetSessionViewState();
     addSystemMsg(t('stoppedEditable'));
     return;
   }
 
-  quotedMessages = [];
-  renderQuotePreview();
-  messagesEl.innerHTML = '';
-  currentAssistantEl = null;
-  currentContent = [];
-  streamBlocks = {};
-  totalCost = 0;
-  currentSessionId = null;
-  renderTopbarMeta();
-  renderCost();
+  createNewSession(cwdInput.value.trim());
+}
 
+function createNewSession(cwd) {
+  resetSessionViewState();
+
+  if (cwd) cwdInput.value = cwd;
   openCurrentCwdSessionGroup();
   sendAction('new_session', {
     model: modelSelect.value,
@@ -2259,6 +2261,24 @@ function startNewSession() {
     allow_remote_mutate: !!remoteAllowMutate?.checked,
   });
   loadSessions();
+}
+
+async function startNewSessionFromCwd(cwd) {
+  const nextCwd = (cwd || '').trim();
+  if (!nextCwd || !clientId) {
+    if (!clientId) addSystemMsg(t('notConnected'), true);
+    return;
+  }
+
+  if (sessionActive) {
+    await sendAction('stop');
+    sessionActive = false;
+    isResponding = false;
+    updateUI();
+  }
+
+  showPage('chat');
+  createNewSession(nextCwd);
 }
 
 function updateUI() {
@@ -2517,7 +2537,7 @@ function renderSessionList(sessions) {
     const groupCost = group.sessions.reduce((sum, s) => sum + Number(s.total_cost_usd || 0), 0);
     const sessionsHtml = group.sessions.map(s => renderSessionItem(s)).join('');
 
-    return `<div class="session-group${isOpen ? ' open' : ' collapsed'}" data-group-key="${esc(group.key)}">
+    return `<div class="session-group${isOpen ? ' open' : ' collapsed'}" data-group-key="${esc(group.key)}" data-cwd="${esc(group.cwd || '')}">
       <button type="button" class="session-group-header" aria-expanded="${isOpen ? 'true' : 'false'}">
         <span class="session-group-chevron">${isOpen ? '▾' : '▸'}</span>
         <span class="session-group-main">
@@ -2547,6 +2567,7 @@ function renderSessionList(sessions) {
       if (chevron) chevron.textContent = isOpen ? '▸' : '▾';
       sessionGroupOpenState.set(key, !isOpen);
     });
+    header.addEventListener('contextmenu', (e) => showCwdContextMenu(e, header.closest('.session-group')?.dataset.cwd || ''));
   });
 
   el.querySelectorAll('.session-item').forEach(item => {
@@ -2574,6 +2595,47 @@ function renderSessionList(sessions) {
       if (!nextTitle || nextTitle.trim() === currentTitle) return;
       await renameSession(item.dataset.sid, nextTitle.trim());
     });
+  });
+}
+
+function showCwdContextMenu(e, cwd) {
+  const menu = document.getElementById('cwd-context-menu');
+  const nextCwd = (cwd || '').trim();
+  if (!menu || !nextCwd) return;
+  e.preventDefault();
+  hideMsgContextMenu();
+  contextMenuCwd = nextCwd;
+  menu.style.display = 'block';
+  const rect = menu.getBoundingClientRect();
+  let x = e.clientX;
+  let y = e.clientY;
+  if (x + rect.width > window.innerWidth) x = window.innerWidth - rect.width - 4;
+  if (y + rect.height > window.innerHeight) y = window.innerHeight - rect.height - 4;
+  menu.style.left = Math.max(4, x) + 'px';
+  menu.style.top = Math.max(4, y) + 'px';
+}
+
+function hideCwdContextMenu() {
+  const menu = document.getElementById('cwd-context-menu');
+  if (menu) menu.style.display = 'none';
+}
+
+function initCwdContextMenu() {
+  const menu = document.getElementById('cwd-context-menu');
+  if (!menu) return;
+
+  menu.querySelector('[data-action="new-session-from-cwd"]')?.addEventListener('click', () => {
+    const cwd = contextMenuCwd;
+    hideCwdContextMenu();
+    startNewSessionFromCwd(cwd);
+  });
+
+  document.addEventListener('click', (e) => {
+    if (!menu.contains(e.target)) hideCwdContextMenu();
+  });
+  document.addEventListener('scroll', hideCwdContextMenu, true);
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') hideCwdContextMenu();
   });
 }
 
