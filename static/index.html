@@ -291,13 +291,75 @@
             </div>
           </section>
           <section class="config-section">
-            <h3 class="config-title"><span class="title-prefix">[03]</span> <span data-i18n="skills">Skills</span></h3>
+            <h3 class="config-title"><span class="title-prefix">[03]</span> <span data-i18n="mcpServers">MCP Servers</span></h3>
+            <div class="config-card">
+              <div id="mcp-list" class="mcp-list">
+                <p class="empty-state" data-i18n="loading">Loading...</p>
+              </div>
+              <button id="btn-mcp-add" class="btn-save" type="button">
+                <span class="btn-prefix">&gt;</span> <span data-i18n="mcpAddServer">Add MCP</span>
+              </button>
+            </div>
+          </section>
+          <section class="config-section" id="mcp-form-section" style="display:none">
+            <h3 class="config-title"><span class="title-prefix">[04]</span> <span data-i18n="mcpNewServer">New MCP Server</span></h3>
+            <div class="config-card ui-settings-card">
+              <div class="settings-row">
+                <label class="field-label" for="mcp-form-name" data-i18n="mcpName">Name</label>
+                <input id="mcp-form-name" class="input" placeholder="github">
+              </div>
+              <div class="settings-row">
+                <label class="field-label" for="mcp-form-scope" data-i18n="mcpScope">Scope</label>
+                <select id="mcp-form-scope" class="select">
+                  <option value="global" data-i18n="mcpScopeGlobal">Global settings.json</option>
+                  <option value="project" data-i18n="mcpScopeProject">Project .mcp.json</option>
+                </select>
+              </div>
+              <div class="settings-row">
+                <label class="field-label" for="mcp-form-type" data-i18n="mcpType">Type</label>
+                <select id="mcp-form-type" class="select">
+                  <option value="stdio">stdio</option>
+                  <option value="sse">SSE / URL</option>
+                  <option value="http">HTTP / URL</option>
+                </select>
+              </div>
+              <div id="mcp-stdio-fields">
+                <div class="settings-row">
+                  <label class="field-label" for="mcp-form-command" data-i18n="mcpCommand">Command</label>
+                  <input id="mcp-form-command" class="input" placeholder="npx">
+                </div>
+                <div class="settings-row">
+                  <label class="field-label" for="mcp-form-args" data-i18n="mcpArgs">Args</label>
+                  <input id="mcp-form-args" class="input" placeholder="-y @modelcontextprotocol/server-filesystem C:/project">
+                </div>
+              </div>
+              <div id="mcp-url-fields" style="display:none">
+                <div class="settings-row">
+                  <label class="field-label" for="mcp-form-url" data-i18n="mcpUrl">URL</label>
+                  <input id="mcp-form-url" class="input" placeholder="https://example.com/mcp">
+                </div>
+              </div>
+              <div class="settings-row align-top">
+                <label class="field-label" for="mcp-form-env" data-i18n="mcpEnv">Env JSON</label>
+                <textarea id="mcp-form-env" class="input mcp-env-text" rows="4" spellcheck="false" placeholder='{"TOKEN":"..."}'></textarea>
+              </div>
+              <div class="remote-form-actions">
+                <button id="btn-mcp-save" class="btn btn-primary" type="button" style="width:auto; padding:8px 20px;">
+                  <span class="btn-prefix">&gt;</span> <span data-i18n="save">Save</span>
+                </button>
+                <button id="btn-mcp-cancel" class="btn-save" type="button"><span data-i18n="cancel">Cancel</span></button>
+              </div>
+              <div id="mcp-form-status" class="remote-form-status" style="display:none"></div>
+            </div>
+          </section>
+          <section class="config-section">
+            <h3 class="config-title"><span class="title-prefix">[05]</span> <span data-i18n="skills">Skills</span></h3>
             <div id="skills-list" class="config-card">
               <p class="empty-state" data-i18n="loading">Loading...</p>
             </div>
           </section>
           <section class="config-section">
-            <h3 class="config-title"><span class="title-prefix">[04]</span> <span data-i18n="agents">Agents</span></h3>
+            <h3 class="config-title"><span class="title-prefix">[06]</span> <span data-i18n="agents">Agents</span></h3>
             <div id="agents-list" class="config-card">
               <p class="empty-state" data-i18n="loading">Loading...</p>
             </div>

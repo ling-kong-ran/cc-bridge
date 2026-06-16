@@ -32,6 +32,8 @@ from config_manager import (
     list_skills,
     list_agents,
     get_available_models,
+    list_mcp_servers,
+    save_mcp_server,
 )
 from session_store import list_sessions, save_session, add_session_usage, delete_session, load_session_history, rename_session
 import remote_manager
@@ -1191,6 +1193,10 @@ async def handle_api_get(path: str, writer: asyncio.StreamWriter, query: dict = 
         data = list_skills()
     elif path == "/api/agents":
         data = list_agents()
+    elif path == "/api/mcp-servers":
+        query = query or {}
+        cwd = query.get("cwd", [""])[0] or ""
+        data = list_mcp_servers(cwd)
     elif path == "/api/models":
         data = get_available_models()
     elif path == "/api/slash-commands":
@@ -1261,6 +1267,16 @@ async def handle_api_post(path: str, body: bytes, writer: asyncio.StreamWriter):
         return
     elif path == "/api/env":
         update_env_config(data)
+    elif path == "/api/mcp-servers":
+        try:
+            saved = save_mcp_server(data)
+        except ValueError as exc:
+            resp = json.dumps({"error": str(exc)}, ensure_ascii=False).encode("utf-8")
+            await send_response(writer, 400, "application/json; charset=utf-8", resp)
+            return
+        resp = json.dumps(saved, ensure_ascii=False).encode("utf-8")
+        await send_response(writer, 200, "application/json; charset=utf-8", resp)
+        return
     elif path == "/api/env-profiles":
         name = str(data.get("name", "")).strip()
         env = data.get("env")

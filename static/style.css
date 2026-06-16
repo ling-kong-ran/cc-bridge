@@ -1805,23 +1805,32 @@ html.light-theme .select {
 }
 .env-paste-apply:hover { background: rgba(var(--accent-rgb),0.12); border-color: var(--green-dim); }
 
-.skill-item, .agent-item {
+.skill-item, .agent-item, .mcp-item {
   display: flex; align-items: center; gap: 9px;
   padding: 9px 0; border-bottom: 1px solid var(--border-dim);
 }
 
-.skill-item:last-child, .agent-item:last-child { border-bottom: none; }
+.skill-item:last-child, .agent-item:last-child, .mcp-item:last-child { border-bottom: none; }
 
-.skill-name {
+.skill-name, .mcp-name {
   font-family: var(--font-mono); font-size: 12px;
   color: var(--green); font-weight: 500; white-space: nowrap;
 }
 
-.skill-desc, .agent-desc {
+.skill-desc, .agent-desc, .mcp-target {
   font-size: 12px; color: var(--text-muted);
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
   letter-spacing: 0.02em;
 }
+
+.mcp-item { align-items: flex-start; flex-direction: column; gap: 4px; }
+.mcp-main { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.mcp-meta {
+  font-family: var(--font-mono); font-size: 10px;
+  color: var(--text-ghost); text-transform: uppercase; letter-spacing: 0.08em;
+}
+.mcp-target { width: 100%; font-family: var(--font-mono); }
+.mcp-env-text { font-family: var(--font-mono); resize: vertical; min-height: 72px; }
 
 .agent-name {
   font-family: var(--font-mono); font-size: 12px;
