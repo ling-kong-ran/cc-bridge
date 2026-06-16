@@ -10,6 +10,7 @@ import re
 CLAUDE_DIR = Path(os.environ.get("USERPROFILE", "~")) / ".claude"
 CCB_DIR = Path.home() / ".ccb"
 SETTINGS_FILE = CLAUDE_DIR / "settings.json"
+CLAUDE_JSON_FILE = Path.home() / ".claude.json"
 GUI_SETTINGS_FILE = CCB_DIR / "gui_settings.json"
 ENV_PROFILES_FILE = CCB_DIR / "env_profiles.json"
 SKILLS_DIR = CLAUDE_DIR / "skills"
@@ -64,21 +65,62 @@ def _project_mcp_file(cwd: str = "") -> Path | None:
     return root / ".mcp.json"
 
 
+def _project_key(cwd: str = "") -> str:
+    if not cwd:
+        return ""
+    try:
+        return str(Path(cwd).expanduser().resolve()).replace("\\", "/")
+    except (OSError, RuntimeError):
+        return str(cwd).replace("\\", "/")
+
+
+def _read_legacy_claude_config() -> dict[str, Any]:
+    """读取 Claude Code 仍在使用的 ~/.claude.json（包含项目级与全局 MCP）。"""
+    return _read_json_file(CLAUDE_JSON_FILE)
+
+
+def _legacy_global_mcp() -> dict[str, Any]:
+    data = _read_legacy_claude_config().get("mcpServers", {})
+    return data if isinstance(data, dict) else {}
+
+
+def _legacy_project_mcp(cwd: str = "") -> dict[str, Any]:
+    key = _project_key(cwd)
+    if not key:
+        return {}
+    projects = _read_legacy_claude_config().get("projects", {})
+    if not isinstance(projects, dict):
+        return {}
+    project = projects.get(key) or projects.get(key.replace("/", "\\")) or {}
+    data = project.get("mcpServers", {}) if isinstance(project, dict) else {}
+    return data if isinstance(data, dict) else {}
+
+
+def _append_mcp_servers(servers: list[dict[str, Any]], configs: dict[str, Any], scope: str, seen: set[tuple[str, str]]):
+    for name, config in configs.items():
+        key = (scope, str(name))
+        if key in seen:
+            continue
+        seen.add(key)
+        servers.append(_normalize_mcp_server(str(name), config, scope))
+
+
 def list_mcp_servers(cwd: str = "") -> list[dict[str, Any]]:
-    """列出全局 settings.json 和当前项目 .mcp.json 中配置的 MCP。"""
+    """列出 Claude Code 可用 MCP：settings.json、~/.claude.json 和当前项目 .mcp.json。"""
     servers: list[dict[str, Any]] = []
+    seen: set[tuple[str, str]] = set()
 
     global_mcp = get_settings().get("mcpServers", {})
     if isinstance(global_mcp, dict):
-        for name, config in global_mcp.items():
-            servers.append(_normalize_mcp_server(str(name), config, "global"))
+        _append_mcp_servers(servers, global_mcp, "global", seen)
+    _append_mcp_servers(servers, _legacy_global_mcp(), "global", seen)
 
     project_file = _project_mcp_file(cwd)
     if project_file:
         project_mcp = _read_json_file(project_file).get("mcpServers", {})
         if isinstance(project_mcp, dict):
-            for name, config in project_mcp.items():
-                servers.append(_normalize_mcp_server(str(name), config, "project"))
+            _append_mcp_servers(servers, project_mcp, "project", seen)
+    _append_mcp_servers(servers, _legacy_project_mcp(cwd), "project", seen)
 
     return sorted(servers, key=lambda item: (item.get("scope") != "global", item.get("name", "").lower()))
 
