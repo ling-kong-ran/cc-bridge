@@ -714,6 +714,8 @@ async def apply_update() -> dict:
 def restart_server():
     """用 os.execv 原地重启服务进程（best-effort）。"""
     try:
+        # 自动更新后的前端会等待服务恢复并刷新当前页，不需要再打开新浏览器页签。
+        os.environ["CCB_GUI_NO_BROWSER"] = "1"
         os.execv(sys.executable, [sys.executable, str(REPO_DIR / "server.py")])
     except Exception:
         # 重启失败时不抛出，前端会提示手动重启
@@ -1474,9 +1476,10 @@ async def main():
         print("[CC Bridge] LAN access: no LAN IPv4 address detected")
     print(f"[CC Bridge] Press Ctrl+C to stop")
 
-    # 自动打开浏览器
-    import webbrowser
-    webbrowser.open(local_url)
+    # 自动打开浏览器。自动更新重启时由现有页面自行刷新，避免新开页签。
+    if os.environ.get("CCB_GUI_NO_BROWSER") != "1":
+        import webbrowser
+        webbrowser.open(local_url)
 
     async with server:
         await server.serve_forever()
