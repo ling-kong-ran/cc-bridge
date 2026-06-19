@@ -1958,7 +1958,10 @@ html.light-theme .select {
   font-family: var(--font-mono); font-size: 12px;
   color: var(--text-base); overflow: hidden;
   text-overflow: ellipsis; white-space: nowrap;
+  flex: 1 1 auto; min-width: 0;
 }
+
+#picker-newdir { flex: 0 0 auto; }
 
 .picker-list {
   flex: 1 1 auto;

@@ -3036,6 +3036,7 @@ const pickerCurrentPath = document.getElementById('picker-current-path');
 const pickerUp = document.getElementById('picker-up');
 const pickerClose = document.getElementById('picker-close');
 const pickerSelect = document.getElementById('picker-select');
+const pickerNewdir = document.getElementById('picker-newdir');
 const btnBrowse = document.getElementById('btn-browse');
 let pickerCurrentDir = '/';
 
@@ -3055,6 +3056,32 @@ pickerSelect.addEventListener('click', () => {
   loadSessions();
   loadSlashCommands();
   closePicker();
+});
+
+pickerNewdir.addEventListener('click', async () => {
+  const parent = pickerCurrentDir;
+  if (!parent || parent === '/') {
+    alert(t('newFolderNeedDir'));
+    return;
+  }
+  const name = prompt(t('newFolderPrompt'));
+  if (name === null) return;
+  if (!name.trim()) return;
+  try {
+    const resp = await fetch('/api/mkdir', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ parent, name: name.trim() }),
+    });
+    const data = await resp.json();
+    if (!data.ok) {
+      alert(data.error || t('requestFailed', { message: '' }));
+      return;
+    }
+    await navigatePicker(parent);
+  } catch (e) {
+    alert(t('requestFailed', { message: e.message }));
+  }
 });
 
 function openPicker() {

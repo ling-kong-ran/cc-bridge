@@ -466,6 +466,26 @@ def browse_directory(path: str) -> dict:
     }
 
 
+def create_directory(parent: str, name: str) -> dict:
+    name = (name or "").strip()
+    if not name:
+        return {"ok": False, "error": "名称不能为空"}
+    if any(c in name for c in '\\/:*?"<>|') or name in ('.', '..'):
+        return {"ok": False, "error": "名称含非法字符"}
+    if not parent or not os.path.isdir(parent):
+        return {"ok": False, "error": "父目录不存在"}
+    full = os.path.join(parent, name)
+    if os.path.exists(full):
+        return {"ok": False, "error": "同名目录已存在"}
+    try:
+        os.mkdir(full)
+    except PermissionError:
+        return {"ok": False, "error": "无权限创建"}
+    except OSError as e:
+        return {"ok": False, "error": str(e)}
+    return {"ok": True, "path": full.replace("\\", "/")}
+
+
 def remote_upload_dir(cwd: str = "") -> Path:
     base = Path(cwd) if cwd and os.path.isdir(cwd) else UPLOAD_DIR_FALLBACK.parent
     upload_dir = base / ".gui-uploads" / "remote"
@@ -1296,6 +1316,11 @@ async def handle_api_post(path: str, body: bytes, writer: asyncio.StreamWriter):
         return
     elif path == "/api/browse":
         result = browse_directory(data.get("path", ""))
+        resp = json.dumps(result, ensure_ascii=False).encode("utf-8")
+        await send_response(writer, 200, "application/json; charset=utf-8", resp)
+        return
+    elif path == "/api/mkdir":
+        result = create_directory(data.get("parent", ""), data.get("name", ""))
         resp = json.dumps(result, ensure_ascii=False).encode("utf-8")
         await send_response(writer, 200, "application/json; charset=utf-8", resp)
         return
