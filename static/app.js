@@ -1819,7 +1819,7 @@ function buildConversationMarkdown() {
 }
 
 function domText(el) {
-  return (el.querySelector('.msg-content') || el).innerText.trim();
+  return (el.querySelector('.msg-content') || el).textContent.trim();
 }
 
 // ─── 消息右键引用 ────────────────────────────────────────────
@@ -2938,17 +2938,36 @@ function renderHistory(history) {
         if (block.type === 'text') {
           html += `<div class="text-block">${renderMd(block.text)}</div>`;
         } else if (block.type === 'tool_use') {
-          const input = typeof block.input === 'string' ? block.input : JSON.stringify(block.input, null, 2);
-          html += `<div class="tool-card">
-            <div class="tool-header"><span class="tool-icon">&#9881;</span> ${esc(block.name || t('tool'))}</div>
-            <div class="tool-body">${esc(input.length > 200 ? input.substring(0, 200) + '...' : input)}</div>
-          </div>`;
+          html += renderHistoryToolCard(block);
         }
       }
       contentEl.innerHTML = html;
+      initHistoryToolCards(contentEl);
     }
   }
   scrollToBottom();
+}
+
+function renderHistoryToolCard(block) {
+  const input = typeof block.input === 'string' ? block.input : JSON.stringify(block.input, null, 2);
+  const preview = input.replace(/\s+/g, ' ').trim().substring(0, 100);
+  return `<div class="tool-card history-tool-collapsible">
+    <button type="button" class="tool-header history-tool-toggle">
+      <span class="history-arrow">&#9654;</span>
+      <span class="tool-icon">&#9881;</span>
+      <span class="history-label">${esc(block.name || t('tool'))}</span>
+      <span class="history-preview">${esc(preview || t('historyEmpty'))}</span>
+    </button>
+    <div class="tool-body">${esc(input)}</div>
+  </div>`;
+}
+
+function initHistoryToolCards(root) {
+  root.querySelectorAll('.history-tool-toggle').forEach(toggle => {
+    toggle.addEventListener('click', () => {
+      toggle.closest('.history-tool-collapsible')?.classList.toggle('history-tool-open');
+    });
+  });
 }
 
 function formatTime(isoStr) {
