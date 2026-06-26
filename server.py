@@ -34,6 +34,10 @@ from config_manager import (
     get_available_models,
     list_mcp_servers,
     save_mcp_server,
+    create_agent,
+    update_agent,
+    delete_agent,
+    get_agent,
 )
 from session_store import list_sessions, save_session, add_session_usage, delete_session, load_session_history, rename_session
 import remote_manager
@@ -1407,11 +1411,39 @@ async def handle_api_post(path: str, body: bytes, writer: asyncio.StreamWriter):
         cli_path = data.get("path", "")
         if cli_path:
             set_current_cli(cli_path)
-            # 持久化为上次选择，重启后恢复
             update_gui_settings({"cli_path": cli_path})
             await send_response(writer, 200, "application/json", b'{"ok":true}')
         else:
             await send_response(writer, 400, "application/json", b'{"error":"missing path"}')
+        return
+    elif path == "/api/agents":
+        try:
+            saved = create_agent(data)
+        except ValueError as exc:
+            resp = json.dumps({"error": str(exc)}, ensure_ascii=False).encode("utf-8")
+            await send_response(writer, 400, "application/json; charset=utf-8", resp)
+            return
+        resp = json.dumps(saved, ensure_ascii=False).encode("utf-8")
+        await send_response(writer, 200, "application/json; charset=utf-8", resp)
+        return
+    elif path == "/api/agents/update":
+        try:
+            updated = update_agent(str(data.get("name", "")), data)
+        except ValueError as exc:
+            resp = json.dumps({"error": str(exc)}, ensure_ascii=False).encode("utf-8")
+            await send_response(writer, 400, "application/json; charset=utf-8", resp)
+            return
+        resp = json.dumps(updated, ensure_ascii=False).encode("utf-8")
+        await send_response(writer, 200, "application/json; charset=utf-8", resp)
+        return
+    elif path == "/api/agents/delete":
+        try:
+            delete_agent(str(data.get("name", "")))
+        except ValueError as exc:
+            resp = json.dumps({"error": str(exc)}, ensure_ascii=False).encode("utf-8")
+            await send_response(writer, 400, "application/json; charset=utf-8", resp)
+            return
+        await send_response(writer, 200, "application/json", b'{"ok":true}')
         return
     else:
         await send_response(writer, 404, "application/json", b'{"error":"not found"}')

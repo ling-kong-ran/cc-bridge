@@ -300,34 +300,206 @@ def list_skills() -> list[dict[str, str]]:
     return skills
 
 
-def list_agents() -> list[dict[str, str]]:
-    """列出所有已配置的 agents"""
+AGENT_FRONTMATTER_FIELDS = ["name", "description", "tools", "disallowedTools", "model",
+                             "permissionMode", "maxTurns", "skills", "mcpServers", "memory",
+                             "background", "effort", "isolation", "color", "initialPrompt"]
+
+PROJECT_AGENTS_DIR_TEMPLATE = ".claude/agents"
+
+
+def _parse_agent_file(file_path: Path) -> dict:
+    """解析 agent .md 文件，返回完整 frontmatter 与 body。"""
+    content = file_path.read_text(encoding="utf-8")
+    name = file_path.stem
+    frontmatter = {}
+    body = ""
+
+    if content.startswith("---"):
+        parts = content.split("---", 2)
+        if len(parts) >= 3:
+            fm_text = parts[1].strip()
+            body = parts[2].strip()
+            for line in fm_text.split("\n"):
+                line = line.strip()
+                if not line or ":" not in line:
+                    continue
+                key, _, val = line.partition(":")
+                key = key.strip()
+                val = val.strip().strip('"\'')
+                if key == "tools" or key == "disallowedTools" or key == "skills":
+                    val_list = [v.strip() for v in val.replace(",", " ").split() if v.strip()]
+                    frontmatter[key] = val_list
+                elif key == "mcpServers":
+                    # 不解析复杂结构，标记存在即可
+                    frontmatter[key] = True
+                elif key == "maxTurns":
+                    try:
+                        frontmatter[key] = int(val)
+                    except ValueError:
+                        frontmatter[key] = val
+                elif key == "background":
+                    frontmatter[key] = val.lower() == "true"
+                elif key in AGENT_FRONTMATTER_FIELDS:
+                    frontmatter[key] = val
+            if "name" in frontmatter:
+                name = frontmatter["name"]
+    else:
+        body = content.strip()
+        # 提取首行作为 description fallback
+        first_line = next((l for l in body.split("\n") if l.strip()), "")
+        if first_line:
+            frontmatter["description"] = first_line.strip()
+
+    frontmatter.setdefault("description", "")
+    return {"name": name, "file": file_path.name, "scope": "user", **frontmatter, "body": body}
+
+
+def _scan_agents_dir(agents_dir: Path, scope: str) -> list[dict]:
+    """扫描指定目录下的 agent .md 文件。"""
     agents = []
-    if not AGENTS_DIR.exists():
+    if not agents_dir.exists():
         return agents
-
-    for agent_file in AGENTS_DIR.iterdir():
+    for agent_file in sorted(agents_dir.iterdir()):
         if agent_file.suffix == ".md":
-            content = agent_file.read_text(encoding="utf-8")
-            name = agent_file.stem
-            description = ""
-
-            # 尝试解析 frontmatter
-            if content.startswith("---"):
-                parts = content.split("---", 2)
-                if len(parts) >= 3:
-                    for line in parts[1].strip().split("\n"):
-                        if line.startswith("name:"):
-                            name = line.split(":", 1)[1].strip().strip('"\'')
-                        elif line.startswith("description:"):
-                            description = line.split(":", 1)[1].strip().strip('"\'')
-
-            agents.append({
-                "name": name,
-                "file": agent_file.name,
-                "description": description,
-            })
+            agent = _parse_agent_file(agent_file)
+            agent["scope"] = scope
+            agents.append(agent)
     return agents
+
+
+def list_agents() -> list[dict]:
+    """列出所有已配置的 agents（用户级 + 当前项目级）。"""
+    # 如果当前工作目录下有 .claude/agents/，同时扫描项目级
+    agents = _scan_agents_dir(AGENTS_DIR, "user")
+    try:
+        cwd = Path.cwd()
+        project_dir = cwd / PROJECT_AGENTS_DIR_TEMPLATE
+        if project_dir != AGENTS_DIR and project_dir.exists():
+            project_agents = _scan_agents_dir(project_dir, "project")
+            # 项目级同名 agent 覆盖用户级
+            user_names = {a["name"] for a in agents}
+            for pa in project_agents:
+                if pa["name"] in user_names:
+                    agents = [a for a in agents if a["name"] != pa["name"]]
+                agents.append(pa)
+    except (OSError, RuntimeError):
+        pass
+    return agents
+
+
+def get_agent(name: str) -> dict | None:
+    """获取单个 agent 的完整定义。"""
+    for agent in list_agents():
+        if agent["name"] == name:
+            return agent
+    return None
+
+
+def _agent_file_path(name: str, scope: str = "user") -> Path:
+    """根据名称和范围获取 agent 文件路径。"""
+    if scope == "project":
+        cwd = Path.cwd()
+        base = cwd / PROJECT_AGENTS_DIR_TEMPLATE
+    else:
+        base = AGENTS_DIR
+    safe_name = re.sub(r"[^A-Za-z0-9_.-]", "-", name).strip("-") or name
+    return base / f"{safe_name}.md"
+
+
+def _format_frontmatter(data: dict) -> str:
+    """将配置 dict 格式化为 YAML frontmatter 文本。"""
+    lines = ["---"]
+    for key in AGENT_FRONTMATTER_FIELDS:
+        val = data.get(key)
+        if val is None or val == "" or val == [] or val is False:
+            continue
+        if isinstance(val, list):
+            lines.append(f"{key}: {' '.join(val)}")
+        elif isinstance(val, bool):
+            lines.append(f"{key}: {'true' if val else 'false'}")
+        else:
+            lines.append(f"{key}: {val}")
+    lines.append("---")
+    return "\n".join(lines)
+
+
+def create_agent(data: dict) -> dict:
+    """创建新 agent：写入 .md 文件到 ~/.claude/agents/ 或 .claude/agents/。"""
+    name = str(data.get("name", "")).strip()
+    if not name or not re.match(r"^[A-Za-z0-9_.-]{1,64}$", name):
+        raise ValueError("invalid agent name")
+    scope = data.get("scope", "user")
+    if scope not in ("user", "project"):
+        scope = "user"
+
+    file_path = _agent_file_path(name, scope)
+    if file_path.exists():
+        raise ValueError(f"agent '{name}' already exists")
+
+    frontmatter_data = {k: data[k] for k in AGENT_FRONTMATTER_FIELDS if k in data}
+    if "name" not in frontmatter_data:
+        frontmatter_data["name"] = name
+    if "description" not in frontmatter_data:
+        frontmatter_data["description"] = data.get("description", "")
+
+    body = str(data.get("body", "")).strip()
+    fm_text = _format_frontmatter(frontmatter_data)
+    content = f"{fm_text}\n\n{body}\n" if body else f"{fm_text}\n"
+
+    file_path.parent.mkdir(parents=True, exist_ok=True)
+    file_path.write_text(content, encoding="utf-8")
+
+    agent = _parse_agent_file(file_path)
+    agent["scope"] = scope
+    return agent
+
+
+def update_agent(name: str, data: dict) -> dict:
+    """更新 agent 的 frontmatter 和/或 body。"""
+    agent = get_agent(name)
+    if not agent:
+        raise ValueError(f"agent '{name}' not found")
+
+    scope = agent.get("scope", "user")
+    file_path = _agent_file_path(name, scope)
+    if not file_path.exists():
+        raise ValueError(f"agent file not found: {file_path}")
+
+    # 合并 frontmatter
+    frontmatter_data = {}
+    for key in AGENT_FRONTMATTER_FIELDS:
+        if key in data:
+            frontmatter_data[key] = data[key]
+        elif key in agent:
+            frontmatter_data[key] = agent[key]
+
+    body = data.get("body", agent.get("body", ""))
+    if isinstance(body, str):
+        body = body.strip()
+    else:
+        body = ""
+
+    fm_text = _format_frontmatter(frontmatter_data)
+    content = f"{fm_text}\n\n{body}\n" if body else f"{fm_text}\n"
+    file_path.write_text(content, encoding="utf-8")
+
+    updated = _parse_agent_file(file_path)
+    updated["scope"] = scope
+    return updated
+
+
+def delete_agent(name: str) -> bool:
+    """删除 agent（重命名为 .bak）。"""
+    agent = get_agent(name)
+    if not agent:
+        raise ValueError(f"agent '{name}' not found")
+    scope = agent.get("scope", "user")
+    file_path = _agent_file_path(name, scope)
+    if not file_path.exists():
+        raise ValueError(f"agent file not found: {file_path}")
+    bak_path = file_path.with_suffix(file_path.suffix + ".bak")
+    file_path.rename(bak_path)
+    return True
 
 
 def get_available_models() -> list[str]:
