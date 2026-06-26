@@ -1250,15 +1250,15 @@ function bindSSEEvents() {
       cliSelectEl.value = data.cli;
       renderTopbarMeta(data.model || '');
     }
-    // 重连时清除欢迎消息
+    // 重连时清除欢迎消息，不重复显示系统消息
     if (!wasActive) {
       const welcome = messagesEl.querySelector('.welcome-msg');
       if (welcome) welcome.remove();
-    }
-    if (isViewer) {
-      addSystemMsg(t('viewingSession'));
-    } else {
-      addSystemMsg(modelLabel ? t('sessionStarted', { model: modelLabel }) : t('sessionStartedPlain'));
+      if (isViewer) {
+        addSystemMsg(t('viewingSession'));
+      } else {
+        addSystemMsg(modelLabel ? t('sessionStarted', { model: modelLabel }) : t('sessionStartedPlain'));
+      }
     }
   });
 
@@ -3607,9 +3607,55 @@ async function loadSessions() {
   try {
     cachedSessions = await (await fetch('/api/sessions')).json();
     renderSessionList(cachedSessions);
+    renderWelcomeSessions(cachedSessions);
   } catch (e) {
     console.error('历史会话加载失败:', e);
   }
+}
+
+function renderWelcomeSessions(sessions) {
+  const el = document.getElementById('welcome-sessions');
+  if (!el) return;
+  const active = sessions.filter(s => s.is_active);
+  const recent = sessions.filter(s => !s.is_active).slice(0, 5);
+  if (!active.length && !recent.length) { el.innerHTML = ''; return; }
+
+  let html = '';
+  if (active.length) {
+    html += `<div class="welcome-session-section">
+      <div class="welcome-session-label"><span class="welcome-session-dot-pulse"></span> ${esc(t('activeSessions') || 'Active')}</div>
+      ${active.map(s => renderWelcomeSessionItem(s, true)).join('')}
+    </div>`;
+  }
+  if (recent.length) {
+    html += `<div class="welcome-session-section">
+      <div class="welcome-session-label">${esc(t('recentSessions') || 'Recent')}</div>
+      ${recent.map(s => renderWelcomeSessionItem(s, false)).join('')}
+    </div>`;
+  }
+  el.innerHTML = html;
+
+  // bind click to resume
+  el.querySelectorAll('.welcome-session-item').forEach(item => {
+    item.addEventListener('click', () => {
+      const tokens = safeJsonParse(item.dataset.tokens, null);
+      showPage('chat');
+      resumeSession(item.dataset.sid, item.dataset.cwd, item.dataset.model, Number(item.dataset.cost || 0), item.dataset.remoteTarget || '', tokens, item.dataset.cli || '');
+    });
+  });
+}
+
+function renderWelcomeSessionItem(s, isActive) {
+  const title = s.title || t('newChat');
+  const time = formatTime(s.updated_at);
+  const savedCost = Number(s.total_cost_usd || 0);
+  const modelLabel = getDisplayModelName(s.model || '', false);
+  const costStr = savedCost > 0 ? ` · $${savedCost.toFixed(4)}` : '';
+  return `<div class="welcome-session-item${isActive ? ' active' : ''}" data-sid="${esc(s.session_id)}" data-cwd="${esc(s.cwd)}" data-model="${esc(s.model)}" data-cli="${esc(s.cli || '')}" data-cost="${esc(savedCost)}" data-tokens="${esc(JSON.stringify(s.total_tokens || {}))}" data-remote-target="${esc(s.remote_target_id || '')}">
+    <div class="welcome-session-item-title">${esc(title)}</div>
+    <div class="welcome-session-item-meta">${esc(modelLabel || '')}${modelLabel ? ' · ' : ''}${esc(time)}${esc(costStr)}</div>
+    ${isActive ? '<span class="welcome-session-dot" title="正在回复中..."></span>' : ''}
+  </div>`;
 }
 
 function renderSessionList(sessions) {

@@ -1021,9 +1021,41 @@ async def handle_sse(query: dict, writer: asyncio.StreamWriter):
 
     # 重连：如果该 client_id 已有活跃会话，同步当前状态给前端
     existing_session = session_manager.get_session(client_id)
+    viewing_owner = client_viewing.get(client_id, "")
+    if viewing_owner:
+        # viewer 重连：重新订阅到 owner 的 session
+        owner_sess = session_manager.get_session(viewing_owner)
+        if owner_sess and owner_sess.is_running:
+            meta = client_meta.setdefault(viewing_owner, {})
+            client_meta[client_id] = dict(meta)
+
+            async def on_viewer_reconnect(event: dict):
+                evt_type = event.get("type", "unknown")
+                if evt_type == "session_id_captured":
+                    client_session_ids[client_id] = event.get("session_id", client_session_ids.get(client_id, ""))
+                    await push_event(client_id, "session_id_captured", event)
+                elif evt_type in ("assistant", "stream_event", "system", "error",
+                                   "process_ended", "model_changed", "result", "tool_result", "user",
+                                   "session_stopped"):
+                    await push_event(client_id, evt_type, event)
+
+            owner_sess.add_viewer(client_id, on_viewer_reconnect)
+            state = {
+                "model": owner_sess.model,
+                "resumed": bool(owner_sess.session_id),
+                "session_id": owner_sess.session_id or client_session_ids.get(client_id, ""),
+                "remote_target_id": meta.get("remote_target_id", ""),
+                "cli": owner_sess.cli or get_current_cli(),
+                "viewing": True,
+            }
+            await _sse_write(writer, "session_started", state)
+            if owner_sess._message_owner_id:
+                await _sse_write(writer, "generation_started", {})
+            # 跳过后续 existing_session 检查，viewer 没有自己的 session
+            existing_session = None
+
     if existing_session and existing_session.is_running:
         meta = client_meta.get(client_id, {})
-        viewing = client_viewing.get(client_id, "")
         state = {
             "model": existing_session.model,
             "resumed": bool(existing_session.session_id),
@@ -1031,11 +1063,9 @@ async def handle_sse(query: dict, writer: asyncio.StreamWriter):
             "remote_target_id": meta.get("remote_target_id", ""),
             "cli": existing_session.cli or get_current_cli(),
         }
-        if viewing:
-            state["viewing"] = True
         await _sse_write(writer, "session_started", state)
         # 如果正在回复中，前端也需进入响应状态
-        if existing_session._message_owner_id and not viewing:
+        if existing_session._message_owner_id:
             await _sse_write(writer, "generation_started", {})
 
     try:
@@ -1196,6 +1226,7 @@ async def handle_action(body: bytes, writer: asyncio.StreamWriter):
                     "remote_target_id": meta.get("remote_target_id", ""), "cli": owner_session.cli or "",
                     "viewing": True,
                 })
+                await push_event(client_id, "generation_started", {})
                 await send_response(writer, 200, "application/json", b'{"ok":true}')
                 return
 
@@ -1378,7 +1409,16 @@ async def handle_api_get(path: str, writer: asyncio.StreamWriter, query: dict = 
     elif path == "/api/remote-targets":
         data = {"targets": remote_manager.list_targets(), "password_supported": remote_manager.password_supported()}
     elif path == "/api/sessions":
-        data = list_sessions()
+        sessions = list_sessions()
+        # 标记活跃中的会话（当前正在生成回复）
+        active_sids = set()
+        for sid, owner_id in session_owner.items():
+            owner_sess = session_manager.get_session(owner_id)
+            if owner_sess and owner_sess.is_running and owner_sess._message_owner_id:
+                active_sids.add(sid)
+        for s in sessions:
+            s["is_active"] = s.get("session_id") in active_sids
+        data = sessions
     elif path == "/api/file":
         # 提供上传文件（图片预览）
         file_path = (query or {}).get("path", [""])[0]

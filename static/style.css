@@ -526,6 +526,63 @@ html.light-theme .select {
   font-size: 12px;
 }
 
+/* ─── Welcome Sessions (首页快捷入口) ────────────────────────── */
+.welcome-sessions {
+  display: flex; gap: 12px; margin-bottom: 18px;
+  max-width: 580px; width: 100%; flex-wrap: wrap;
+}
+.welcome-session-section {
+  flex: 1; min-width: 240px;
+}
+.welcome-session-label {
+  font-size: 10px; font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase; letter-spacing: 0.08em;
+  margin-bottom: 8px; display: flex; align-items: center; gap: 6px;
+}
+.welcome-session-dot-pulse {
+  width: 7px; height: 7px; border-radius: 50%;
+  background: var(--green); display: inline-block;
+  animation: welcomeDotPulse 2s infinite;
+  box-shadow: 0 0 6px rgba(var(--accent-rgb), 0.5);
+}
+@keyframes welcomeDotPulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.3; }
+}
+.welcome-session-item {
+  display: flex; align-items: center; gap: 8px;
+  padding: 8px 12px; border-radius: var(--radius-sm);
+  cursor: pointer; transition: all var(--t-fast);
+  border: 1px solid var(--border-dim);
+  background: var(--bg-raised);
+  margin-bottom: 6px;
+}
+.welcome-session-item:hover {
+  background: var(--bg-hover); border-color: var(--border);
+}
+.welcome-session-item.active {
+  border-color: var(--green-dim);
+}
+.welcome-session-item.active:hover {
+  background: rgba(var(--accent-rgb), 0.05);
+}
+.welcome-session-item-title {
+  flex: 1; min-width: 0;
+  font-size: 12px; color: var(--text-base);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.welcome-session-item-meta {
+  font-size: 10px; color: var(--text-muted);
+  flex-shrink: 0;
+}
+.welcome-session-dot {
+  width: 7px; height: 7px; border-radius: 50%;
+  background: var(--green); flex-shrink: 0;
+  animation: welcomeDotPulse 2s infinite;
+  box-shadow: 0 0 6px rgba(var(--accent-rgb), 0.5);
+}
+
 .session-empty {
   font-size: 10px; color: var(--text-ghost);
   padding: 10px 6px; letter-spacing: 0.06em;

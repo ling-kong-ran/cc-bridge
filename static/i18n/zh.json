@@ -311,5 +311,7 @@
   "searchAgent": "搜索成员...",
   "collapsePanel": "收起面板",
   "viewingSession": "正在观看其他客户端的实时会话（只读）",
-  "viewingPlaceholder": "正在观看实时会话…"
+  "viewingPlaceholder": "正在观看实时会话…",
+  "activeSessions": "活跃中",
+  "recentSessions": "最近"
 }

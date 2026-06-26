@@ -311,5 +311,7 @@
   "searchAgent": "Search members...",
   "collapsePanel": "Collapse panel",
   "viewingSession": "Viewing live session from another client (read-only)",
-  "viewingPlaceholder": "Viewing live session..."
+  "viewingPlaceholder": "Viewing live session...",
+  "activeSessions": "Active",
+  "recentSessions": "Recent"
 }

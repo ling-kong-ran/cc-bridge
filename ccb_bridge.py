@@ -549,16 +549,11 @@ class CCBSession:
     def add_viewer(self, viewer_id: str, callback: Callable[[dict], Any]):
         """添加观察者——接收流式事件但不拥有会话控制权。"""
         self._viewer_callbacks[viewer_id] = callback
-        print(f"[DEBUG CCBSession.add_viewer] viewer={viewer_id[:10]} total_viewers={len(self._viewer_callbacks)}")
 
     def remove_viewer(self, viewer_id: str):
         self._viewer_callbacks.pop(viewer_id, None)
 
     async def _emit_event(self, event: dict):
-        evt_type = event.get("type", "unknown")
-        viewer_count = len(self._viewer_callbacks)
-        if viewer_count > 0 and evt_type not in ("stream_event",):
-            print(f"[DEBUG _emit_event] type={evt_type} viewers={viewer_count}")
         # 通知 owner
         if self._on_event:
             try:
