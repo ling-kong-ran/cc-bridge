@@ -1080,8 +1080,8 @@ async def handle_action(body: bytes, writer: asyncio.StreamWriter):
                         "tool_use_ids": ids,
                         "parent_tool_use_id": event.get("parent_tool_use_id"),
                     })
-            elif evt_type in ("assistant", "system", "error", "process_ended", "model_changed"):
-                # ccb 高层事件直接按类型推送，前端有对应 listener
+            elif evt_type in ("assistant", "stream_event", "system", "error", "process_ended", "model_changed"):
+                # ccb 高层事件和细粒度流式事件直接按类型推送，前端有对应 listener
                 await push_event(client_id, evt_type, event)
             # 其他事件（hook_started 等）忽略
 
@@ -1128,7 +1128,7 @@ async def handle_action(body: bytes, writer: asyncio.StreamWriter):
                         "tool_use_ids": ids,
                         "parent_tool_use_id": event.get("parent_tool_use_id"),
                     })
-            elif evt_type in ("assistant", "system", "error", "process_ended", "model_changed"):
+            elif evt_type in ("assistant", "stream_event", "system", "error", "process_ended", "model_changed"):
                 await push_event(client_id, evt_type, event)
             # 其他事件忽略
 

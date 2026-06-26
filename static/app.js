@@ -1278,6 +1278,7 @@ function initSSE() {
       currentTurnHasAssistantOutput = false;
       currentTurnStartedAt = 0;
       currentTurnAttachmentCount = 0;
+      removePendingAssistantBubble(hadAssistantOutput);
       currentAssistantEl = null;
       notifyComplete('process', {
         prompt: finishedTurn,
@@ -1297,9 +1298,11 @@ function initSSE() {
   });
 
   eventSource.addEventListener('generation_interrupted', () => {
+    const hadAssistantOutput = currentTurnHasAssistantOutput;
     isResponding = false;
     currentTurnContent = '';
     currentTurnHasAssistantOutput = false;
+    removePendingAssistantBubble(hadAssistantOutput);
     currentAssistantEl = null;
     clearRunningTasks();
     cleanupUploadedFiles(uploadedFilesPendingCleanup);
@@ -1316,6 +1319,7 @@ function initSSE() {
       isResponding = false;
       currentTurnContent = '';
       currentTurnHasAssistantOutput = false;
+      removePendingAssistantBubble(false);
       currentAssistantEl = null;
       cleanupUploadedFiles(uploadedFilesPendingCleanup);
       uploadedFilesPendingCleanup = [];
@@ -1634,6 +1638,7 @@ function handleResult(data) {
   const persistedCost = Number(data.session_total_cost_usd || 0);
   const turnTokens = normalizeTokenUsage(data.turn_tokens || data.usage || data);
   const persistedTokens = normalizeTokenUsage(data.session_total_tokens);
+  removePendingAssistantBubble(hadAssistantOutput);
   isResponding = false;
   currentAssistantEl = null;
   currentContent = [];
@@ -1686,6 +1691,12 @@ function createAssistantBubble() {
   `;
   messagesEl.appendChild(el);
   return el;
+}
+
+function removePendingAssistantBubble(keepBubble) {
+  if (!keepBubble && currentAssistantEl && !currentAssistantEl.querySelector('.msg-content')?.textContent.trim()) {
+    currentAssistantEl.remove();
+  }
 }
 
 function addUserMessage(text, quotes = []) {
@@ -2216,6 +2227,11 @@ function sendMessage() {
   currentTurnStartedAt = Date.now();
   currentTurnHasAssistantOutput = false;
   isResponding = true;
+  currentAssistantEl = createAssistantBubble();
+  currentContent = [];
+  streamBlocks = {};
+  renderCurrentState();
+  scrollToBottom();
   updateUI();
   if (isSlashCommand(originalContent)) {
     addSystemMsg(t('commandRunning', { command: getSlashCommandName(originalContent) }));
