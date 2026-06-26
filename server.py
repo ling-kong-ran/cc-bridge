@@ -713,6 +713,9 @@ async def check_update() -> dict:
     commits = ""
     if has_update:
         _, commits = await _run_git("log", "--oneline", "-20", "HEAD..origin/master", timeout=10)
+        # 只有远端有本地没有的提交才算有更新（本地领先远端不算）
+        if not commits.strip():
+            has_update = False
     elif server_stale:
         commits = f"{SERVER_START_COMMIT[:7]}..{local[:7]}"
 
