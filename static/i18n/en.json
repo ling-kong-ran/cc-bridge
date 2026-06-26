@@ -162,6 +162,8 @@
   "notifyDurationSeconds": "{seconds}s",
   "notifyDurationMinutes": "{minutes}m",
   "notifyDurationMinutesSeconds": "{minutes}m {seconds}s",
+  "responseRunning": "Generating {duration}",
+  "responseDuration": "Duration {duration}",
   "notifyCost": "${cost}",
   "notifyAttachmentPrompt": "Sent {count} attachments",
   "confirmDeleteSession": "Delete session \"{title}\"? This permanently deletes the local session record and cannot be undone.",

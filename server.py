@@ -1004,10 +1004,10 @@ async def handle_sse(query: dict, writer: asyncio.StreamWriter):
     except (ConnectionResetError, BrokenPipeError, OSError):
         pass
     finally:
-        sse_clients.pop(client_id, None)
-        client_ips.pop(client_id, None)
-        # 清理关联的 ccb session
-        await session_manager.remove_session(client_id)
+        if sse_clients.get(client_id) is queue:
+            sse_clients.pop(client_id, None)
+        # SSE 断开不代表用户主动停止会话。移动端息屏、浏览器后台挂起会断开 EventSource，
+        # 这里保留 CCB session，让同一 client_id 重连后继续接收事件和发送消息。
         try:
             writer.close()
         except Exception:

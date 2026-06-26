@@ -19,6 +19,7 @@ let connectionOnline = false;
 let currentTurnContent = '';
 let currentTurnHasAssistantOutput = false;
 let currentTurnStartedAt = 0;
+let currentTurnTimer = null;
 let currentTurnAttachmentCount = 0;
 let lastFocusConfigReloadAt = 0;
 let cachedSessions = [];
@@ -311,6 +312,35 @@ function formatDuration(ms) {
   const minutes = Math.floor(seconds / 60);
   const rest = seconds % 60;
   return rest ? t('notifyDurationMinutesSeconds', { minutes, seconds: rest }) : t('notifyDurationMinutes', { minutes });
+}
+
+function formatCompactDuration(ms) {
+  const seconds = Math.max(0, Math.round(Number(ms || 0) / 1000));
+  if (!Number.isFinite(seconds)) return '';
+  if (seconds < 60) return `${seconds}s`;
+  const minutes = Math.floor(seconds / 60);
+  const rest = seconds % 60;
+  return rest ? `${minutes}m ${rest}s` : `${minutes}m`;
+}
+
+function updateAssistantMeta(state = 'running', durationMs = Date.now() - currentTurnStartedAt) {
+  if (!currentAssistantEl) return;
+  const meta = currentAssistantEl.querySelector('.msg-meta');
+  if (!meta) return;
+  const duration = formatCompactDuration(durationMs);
+  meta.textContent = duration ? t(state === 'done' ? 'responseDuration' : 'responseRunning', { duration }) : '';
+}
+
+function startTurnTimer() {
+  stopTurnTimer();
+  updateAssistantMeta('running');
+  currentTurnTimer = setInterval(() => updateAssistantMeta('running'), 1000);
+}
+
+function stopTurnTimer() {
+  if (!currentTurnTimer) return;
+  clearInterval(currentTurnTimer);
+  currentTurnTimer = null;
 }
 
 function formatUsd(value) {
@@ -1181,8 +1211,9 @@ function initSSE() {
     eventSource = null;
   }
 
-  // 生成唯一客户端 ID
-  clientId = 'c_' + Math.random().toString(36).substring(2, 10);
+  // 复用客户端 ID，移动端息屏后重连仍能绑定到同一个后端会话。
+  clientId = localStorage.getItem('ccb_client_id') || 'c_' + Math.random().toString(36).substring(2, 10);
+  localStorage.setItem('ccb_client_id', clientId);
   eventSource = new EventSource(`/sse?id=${clientId}`);
 
   eventSource.addEventListener('connected', (e) => {
@@ -1272,6 +1303,8 @@ function initSSE() {
       const finishedTurn = currentTurnContent;
       const hadAssistantOutput = currentTurnHasAssistantOutput;
       const durationMs = Date.now() - currentTurnStartedAt;
+      stopTurnTimer();
+      updateAssistantMeta('done', durationMs);
       isResponding = false;
       currentTurnContent = '';
       currentTurnHasAssistantOutput = false;
@@ -1301,6 +1334,7 @@ function initSSE() {
     isResponding = false;
     currentTurnContent = '';
     currentTurnHasAssistantOutput = false;
+    stopTurnTimer();
     removePendingAssistantBubble(hadAssistantOutput);
     currentAssistantEl = null;
     clearRunningTasks();
@@ -1318,6 +1352,7 @@ function initSSE() {
       isResponding = false;
       currentTurnContent = '';
       currentTurnHasAssistantOutput = false;
+      stopTurnTimer();
       removePendingAssistantBubble(false);
       currentAssistantEl = null;
       cleanupUploadedFiles(uploadedFilesPendingCleanup);
@@ -1633,10 +1668,13 @@ function renderAgentStatus() {
 function handleResult(data) {
   const finishedTurn = currentTurnContent;
   const hadAssistantOutput = currentTurnHasAssistantOutput;
+  const durationMs = Date.now() - currentTurnStartedAt;
   const turnCost = Number(data.total_cost_usd || 0);
   const persistedCost = Number(data.session_total_cost_usd || 0);
   const turnTokens = normalizeTokenUsage(data.turn_tokens || data.usage || data);
   const persistedTokens = normalizeTokenUsage(data.session_total_tokens);
+  stopTurnTimer();
+  updateAssistantMeta('done', durationMs);
   removePendingAssistantBubble(hadAssistantOutput);
   isResponding = false;
   currentAssistantEl = null;
@@ -1645,7 +1683,7 @@ function handleResult(data) {
   clearRunningTasks();
   notifyComplete('turn', {
     prompt: finishedTurn,
-    durationMs: Date.now() - currentTurnStartedAt,
+    durationMs,
     costUsd: turnCost,
     model: getDisplayModelName(data.model || modelSelect.value),
   });
@@ -1686,7 +1724,10 @@ function createAssistantBubble() {
   el.className = 'message assistant';
   el.innerHTML = `
     <div class="avatar assistant-avatar">C</div>
-    <div class="msg-bubble"><div class="msg-content"></div></div>
+    <div class="msg-bubble">
+      <div class="msg-content"></div>
+      <div class="msg-meta"></div>
+    </div>
   `;
   messagesEl.appendChild(el);
   return el;
@@ -2229,6 +2270,7 @@ function sendMessage() {
   currentAssistantEl = createAssistantBubble();
   currentContent = [];
   streamBlocks = {};
+  startTurnTimer();
   renderCurrentState();
   scrollToBottom();
   updateUI();
@@ -2256,6 +2298,7 @@ function getSlashCommandName(content) {
 }
 
 function resetSessionViewState() {
+  stopTurnTimer();
   quotedMessages = [];
   renderQuotePreview();
   messagesEl.innerHTML = '';
