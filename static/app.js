@@ -1322,6 +1322,7 @@ function initSSE() {
     // ccb 进程结束 —— 确保前端退出 responding 状态
     const data = JSON.parse(e.data || '{}');
     clearRunningTasks();
+    clearSubagentBubbles();
     cleanupUploadedFiles(uploadedFilesPendingCleanup);
     uploadedFilesPendingCleanup = [];
     if (isResponding) {
@@ -1365,6 +1366,7 @@ function initSSE() {
     removePendingAssistantBubble(hadAssistantOutput);
     currentAssistantEl = null;
     clearRunningTasks();
+    clearSubagentBubbles();
     cleanupUploadedFiles(uploadedFilesPendingCleanup);
     uploadedFilesPendingCleanup = [];
     updateUI();
@@ -1564,9 +1566,10 @@ function renderBlock(block) {
 }
 
 function handleAssistantFinal(data) {
-  // subagent 的 assistant 消息带 parent_tool_use_id，只更新状态栏，不混入主消息流
+  // subagent 的 assistant 消息带 parent_tool_use_id
   if (data.parent_tool_use_id) {
     updateTaskActivity(data.parent_tool_use_id, data.message);
+    renderSubagentBubble(data.parent_tool_use_id, data.message);
     return;
   }
 
@@ -1692,6 +1695,73 @@ function renderAgentStatus() {
   bar.innerHTML = html;
 }
 
+// ─── Subagent 行内消息渲染 ────────────────────────────────────────
+// parent_tool_use_id -> DOM element
+const subagentBubbles = new Map();
+const SUBAGENT_COLORS = ['#c792ea', '#82aaff', '#c3e88d', '#ffcb6b', '#f78c6c', '#89ddff'];
+
+function getSubagentColor(id) {
+  let hash = 0;
+  for (let i = 0; i < id.length; i++) hash = ((hash << 5) - hash) + id.charCodeAt(i);
+  return SUBAGENT_COLORS[Math.abs(hash) % SUBAGENT_COLORS.length];
+}
+
+function renderSubagentBubble(parentToolUseId, message) {
+  if (!currentAssistantEl && !isResponding) return;
+  const taskInfo = runningTasks.get(parentToolUseId);
+  const agentName = taskInfo?.type || t('subagent');
+  const desc = taskInfo?.desc || '';
+  const color = getSubagentColor(parentToolUseId);
+
+  let el = subagentBubbles.get(parentToolUseId);
+  if (!el) {
+    el = document.createElement('div');
+    el.className = 'subagent-bubble';
+    el.style.borderLeftColor = color;
+    const container = currentAssistantEl || document.querySelector('#chat-messages .assistant:last-child');
+    if (container) {
+      container.after(el);
+    } else {
+      document.getElementById('chat-messages')?.appendChild(el);
+    }
+    subagentBubbles.set(parentToolUseId, el);
+  }
+
+  const content = message?.content;
+  if (!Array.isArray(content)) return;
+
+  let textParts = [];
+  let toolParts = [];
+  for (const block of content) {
+    if (block.type === 'text' && block.text) {
+      textParts.push(block.text);
+    } else if (block.type === 'tool_use') {
+      toolParts.push(block.name || 'tool');
+    }
+  }
+
+  const text = textParts.join('\n\n');
+  const toolInfo = toolParts.length ? `<span class="subagent-tools">${toolParts.map(t => esc(t)).join(', ')}</span>` : '';
+
+  el.innerHTML = `
+    <div class="subagent-head">
+      <span class="subagent-dot" style="background:${color}"></span>
+      <span class="subagent-name">${esc(agentName)}</span>
+      ${desc ? `<span class="subagent-desc">${esc(desc)}</span>` : ''}
+      ${toolInfo}
+    </div>
+    <div class="subagent-body">${text ? renderMd(text) : ''}</div>
+  `;
+
+  scrollToBottom();
+}
+
+// 清理 subagent 气泡
+function clearSubagentBubbles() {
+  subagentBubbles.forEach(el => el.remove());
+  subagentBubbles.clear();
+}
+
 function handleResult(data) {
   const finishedTurn = currentTurnContent;
   const hadAssistantOutput = currentTurnHasAssistantOutput;
@@ -1709,6 +1779,7 @@ function handleResult(data) {
   currentContent = [];
   streamBlocks = {};
   clearRunningTasks();
+  clearSubagentBubbles();
   notifyComplete('turn', {
     prompt: finishedTurn,
     durationMs,

@@ -2671,6 +2671,45 @@ html.light-theme .btn-send:hover:not(:disabled) {
   border-color: var(--border-glow);
 }
 
+/* ─── Subagent 行内消息 ─────────────────────────────────────────── */
+.subagent-bubble {
+  margin: 6px 0 6px 24px; padding: 10px 14px;
+  border-left: 3px solid var(--purple-dim, #c792ea);
+  background: var(--bg-surface); border-radius: 0 8px 8px 0;
+  font-size: 12.5px; line-height: 1.6;
+}
+.subagent-bubble .subagent-head {
+  display: flex; align-items: center; gap: 6px;
+  margin-bottom: 6px; padding-bottom: 6px;
+  border-bottom: 1px solid var(--border-dim);
+}
+.subagent-dot {
+  width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0;
+}
+.subagent-name {
+  font-weight: 600; font-size: 12px; color: var(--text-base);
+}
+.subagent-desc {
+  font-size: 11px; color: var(--text-dim);
+  max-width: 240px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.subagent-tools {
+  margin-left: auto; font-size: 10px; color: var(--text-muted);
+  padding: 1px 6px; background: var(--bg-raised); border-radius: 8px;
+}
+.subagent-body {
+  color: var(--text-base);
+}
+.subagent-body p { margin: 4px 0; }
+.subagent-body code {
+  background: var(--bg-raised); padding: 1px 4px;
+  border-radius: 3px; font-size: 11px;
+}
+.subagent-body pre {
+  background: var(--bg-deep); padding: 8px 10px;
+  border-radius: 6px; overflow-x: auto; font-size: 11px;
+}
+
 html.light-theme .agent-status-bar {
   background: var(--bg-deep);
 }
