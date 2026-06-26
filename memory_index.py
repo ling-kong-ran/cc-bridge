@@ -287,3 +287,40 @@ def delete_memory_file(filename: str, cwd: str) -> bool:
         except sqlite3.Error:
             pass
     return True
+
+
+def save_memory_file(filename: str, content: str, cwd: str) -> dict[str, Any] | None:
+    """创建或更新 memory 文件，然后重新索引该文件。"""
+    memory_dir = _get_memory_dir(cwd)
+    memory_dir.mkdir(parents=True, exist_ok=True)
+
+    # 安全校验
+    safe_name = Path(filename).name
+    if not safe_name.endswith(".md"):
+        safe_name = safe_name + ".md"
+    file_path = memory_dir / safe_name
+
+    # 写入内容
+    file_path.write_text(content, encoding="utf-8")
+
+    # 重新索引该文件
+    db_path = _get_index_db(cwd)
+    try:
+        _init_db(db_path)
+        parsed = _parse_memory_file(file_path)
+        conn = sqlite3.connect(str(db_path))
+        conn.execute("DELETE FROM memory_fts WHERE file_path = ?", (safe_name,))
+        conn.execute(
+            "INSERT INTO memory_fts (file_path, title, body) VALUES (?, ?, ?)",
+            (safe_name, parsed.get("title", safe_name), parsed.get("body", content))
+        )
+        conn.execute(
+            "INSERT OR REPLACE INTO file_mtime (file_path, mtime) VALUES (?, ?)",
+            (safe_name, file_path.stat().st_mtime)
+        )
+        conn.commit()
+        conn.close()
+    except sqlite3.Error as e:
+        print(f"Memory index update failed: {e}")
+
+    return _parse_memory_file(file_path)

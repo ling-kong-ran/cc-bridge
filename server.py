@@ -44,7 +44,7 @@ from config_manager import (
     delete_group,
 )
 from session_store import list_sessions, save_session, add_session_usage, delete_session, load_session_history, rename_session
-from memory_index import list_memory_files, search_memory, get_memory_file, delete_memory_file, index_memory
+from memory_index import list_memory_files, search_memory, get_memory_file, delete_memory_file, save_memory_file, index_memory
 import remote_manager
 
 STATIC_DIR = Path(__file__).parent / "static"
@@ -1514,6 +1514,20 @@ async def handle_api_post(path: str, body: bytes, writer: asyncio.StreamWriter):
         else:
             await send_response(writer, 404, "application/json", b'{"error":"not found"}')
         return
+    elif path == "/api/memory/update":
+        filename = data.get("filename", "")
+        content = data.get("content", "")
+        cwd = data.get("cwd", DEFAULT_CWD)
+        if not filename or not content:
+            await send_response(writer, 400, "application/json", b'{"error":"filename and content required"}')
+            return
+        result = save_memory_file(filename, content, cwd)
+        if result:
+            resp = json.dumps(result, ensure_ascii=False).encode("utf-8")
+            await send_response(writer, 200, "application/json; charset=utf-8", resp)
+        else:
+            await send_response(writer, 500, "application/json", b'{"error":"save failed"}')
+        return
     elif path == "/api/memory/index":
         cwd = data.get("cwd", DEFAULT_CWD)
         count = index_memory(cwd, force=True)
@@ -1624,8 +1638,8 @@ async def main():
         print("[CC Bridge] LAN access: no LAN IPv4 address detected")
     print(f"[CC Bridge] Press Ctrl+C to stop")
 
-    # 自动打开浏览器。自动更新重启时由现有页面自行刷新，避免新开页签。
-    if os.environ.get("CCB_GUI_NO_BROWSER") != "1":
+    # 自动打开浏览器（仅当显式设置环境变量时启用）
+    if os.environ.get("CCB_GUI_OPEN_BROWSER") == "1":
         import webbrowser
         webbrowser.open(local_url)
 
