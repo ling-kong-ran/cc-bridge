@@ -778,8 +778,6 @@ async def push_event(client_id: str, event_type: str, data: dict):
     queue = sse_clients.get(client_id)
     if queue:
         await queue.put({"event": event_type, "data": data})
-    else:
-        print(f"[DEBUG push_event] NO QUEUE for client={client_id[:10]} evt={event_type}")
 
 
 UPLOAD_DIR_FALLBACK = Path(__file__).parent / "uploads"
@@ -1019,7 +1017,6 @@ async def handle_sse(query: dict, writer: asyncio.StreamWriter):
     client_ips[client_id] = get_client_ip(writer)
 
     # 发送初始 connected 事件
-    print(f"[DEBUG SSE] connected client={client_id[:10]}")
     await _sse_write(writer, "connected", {"client_id": client_id})
 
     # 重连：如果该 client_id 已有活跃会话，同步当前状态给前端
@@ -1057,7 +1054,6 @@ async def handle_sse(query: dict, writer: asyncio.StreamWriter):
         if sse_clients.get(client_id) is queue:
             sse_clients.pop(client_id, None)
         # 清理 viewer 状态：SSE 断开时从 owner session 移除 viewer
-        print(f"[DEBUG SSE] disconnected client={client_id[:10]}")
         viewer_owner = client_viewing.pop(client_id, None)
         if viewer_owner:
             owner_sess = session_manager.get_session(viewer_owner)
@@ -1125,7 +1121,6 @@ async def handle_action(body: bytes, writer: asyncio.StreamWriter):
                 sid = event.get("session_id", "")
                 client_session_ids[client_id] = sid
                 session_owner[sid] = client_id  # 记录会话归属
-                print(f"[DEBUG new_session] session_owner[{sid[:10]}] = {client_id[:10]}")
                 title = client_last_msg.get(client_id, "新会话")
                 meta = client_meta.get(client_id, {})
                 save_session(sid, title, meta.get("model", model), meta.get("cwd", cwd or ""),
