@@ -1,8 +1,8 @@
 """
 CCB Bridge - 管理 ccb.exe 子进程的生命周期和流式通信
 
-策略：每条消息启动一个 ccb -p 子进程，通过 --resume 实现多轮对话。
-ccb 的 stream-json input 模式不可靠，改为 text stdin + stream-json output。
+策略：普通本地会话优先启动一个持久 ccb -p 子进程，通过 stream-json stdin 连续发送消息；
+远程/MCP 等动态配置会话仍使用每条消息一个子进程，通过 --resume 实现多轮对话。
 """
 import asyncio
 import json
@@ -251,6 +251,10 @@ class CCBSession:
         self._on_event: Optional[Callable[[dict], Any]] = None
         self._read_task: Optional[asyncio.Task] = None
         self._mcp_config_path: Optional[Path] = None
+        self._persistent = False
+        self._persistent_failed = False
+        self._message_lock = asyncio.Lock()
+        self._proc_key: Optional[tuple] = None
 
     async def start(
         self,
@@ -321,10 +325,82 @@ class CCBSession:
         return str(self._mcp_config_path), prompt
 
     async def send_message(self, content: str):
-        """发送一条消息：启动 ccb 子进程处理"""
+        """发送一条消息：普通本地会话复用持久 CLI，动态 MCP 会话使用一次性子进程。"""
         if not self.is_running:
             return
 
+        async with self._message_lock:
+            if not self.is_running:
+                return
+            if self._can_use_persistent_cli():
+                try:
+                    await self._send_persistent_message(content)
+                    return
+                except Exception as exc:
+                    self._persistent_failed = True
+                    await self._kill_proc()
+                    await self._emit_event({"type": "system", "subtype": "persistent_cli_fallback", "message": str(exc)})
+
+            await self._send_one_shot_message(content)
+
+    def _can_use_persistent_cli(self) -> bool:
+        """仅对本地普通会话启用持久 CLI；远程/MCP 动态配置保持一次性进程。"""
+        return not self._persistent_failed and not self.remote_target
+
+    def _persistent_proc_key(self) -> tuple:
+        return (self.cli or get_current_cli(), self.cwd, self.model, self.skip_permissions)
+
+    async def _send_persistent_message(self, content: str):
+        proc_key = self._persistent_proc_key()
+        if self._proc_key != proc_key:
+            await self._kill_proc()
+        if not self._proc or self._proc.returncode is not None or not self._proc.stdin:
+            await self._start_persistent_proc(proc_key)
+
+        payload = {
+            "type": "user",
+            "message": {
+                "role": "user",
+                "content": [{"type": "text", "text": content}],
+            },
+        }
+        self._proc.stdin.write((json.dumps(payload, ensure_ascii=False) + "\n").encode("utf-8"))
+        await self._proc.stdin.drain()
+
+    async def _start_persistent_proc(self, proc_key: tuple):
+        await self._kill_proc()
+
+        cmd = [
+            self.cli or get_current_cli(),
+            "-p",
+            "--input-format", "stream-json",
+            "--output-format", "stream-json",
+            "--verbose",
+            "--include-partial-messages",
+            "--replay-user-messages",
+            "--model", self.model,
+        ]
+
+        if self.skip_permissions:
+            cmd += ["--dangerously-skip-permissions"]
+
+        if self.session_id:
+            cmd += ["--resume", self.session_id]
+
+        self._proc = await asyncio.create_subprocess_exec(
+            *cmd,
+            stdin=asyncio.subprocess.PIPE,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+            cwd=self.cwd,
+            limit=1024 * 1024 * 20,
+        )
+        self._persistent = True
+        self._proc_key = proc_key
+        self._read_task = asyncio.create_task(self._stream_output(send_process_ended=False))
+
+    async def _send_one_shot_message(self, content: str):
+        """发送一条消息：启动 ccb 子进程处理。"""
         # 如果上一个进程还在跑，先终止
         await self._kill_proc()
 
@@ -404,8 +480,18 @@ class CCBSession:
                 except ProcessLookupError:
                     pass
             self._proc = None
+        self._persistent = False
+        self._proc_key = None
 
-    async def _stream_output(self):
+    async def _emit_event(self, event: dict):
+        if not self._on_event:
+            return
+        if asyncio.iscoroutinefunction(self._on_event):
+            await self._on_event(event)
+        else:
+            self._on_event(event)
+
+    async def _stream_output(self, send_process_ended: bool = True):
         """读取 ccb 子进程的 stdout + stderr，逐行解析并推送事件"""
         if not self._proc or not self._proc.stdout:
             return
@@ -450,19 +536,10 @@ class CCBSession:
                 if sid and sid != self.session_id:
                     self.session_id = sid
                     # 通知上层 session_id 已捕获
-                    if self._on_event:
-                        capture_evt = {"type": "session_id_captured", "session_id": sid}
-                        if asyncio.iscoroutinefunction(self._on_event):
-                            await self._on_event(capture_evt)
-                        else:
-                            self._on_event(capture_evt)
+                    await self._emit_event({"type": "session_id_captured", "session_id": sid})
 
                 # 推送事件给前端
-                if self._on_event:
-                    if asyncio.iscoroutinefunction(self._on_event):
-                        await self._on_event(event)
-                    else:
-                        self._on_event(event)
+                await self._emit_event(event)
 
             # 等待进程结束，获取退出码
             exit_code = None
@@ -480,20 +557,21 @@ class CCBSession:
                     err = {"type": "error", "message": stderr_text}
                 else:
                     err = {"type": "error", "message": "ccb 进程未返回任何输出，请检查配置和 API Key"}
-                if asyncio.iscoroutinefunction(self._on_event):
-                    await self._on_event(err)
-                else:
-                    self._on_event(err)
+                await self._emit_event(err)
             else:
                 stderr_task.cancel()
 
-            # 始终发送 process_ended 事件，确保前端退出 responding 状态
-            if self._on_event:
-                end_evt = {"type": "process_ended", "exit_code": exit_code}
-                if asyncio.iscoroutinefunction(self._on_event):
-                    await self._on_event(end_evt)
-                else:
-                    self._on_event(end_evt)
+            # 一次性进程结束时发送 process_ended；持久进程异常退出时也通知前端避免卡在 responding
+            if send_process_ended or self._persistent:
+                exit_code = None
+                if self._proc:
+                    exit_code = self._proc.returncode
+                if self._persistent:
+                    self._persistent = False
+                    self._persistent_failed = True
+                    if self.is_running:
+                        await self._emit_event({"type": "error", "message": "持久 CLI 进程已退出，下一条消息将自动回退为普通模式"})
+                await self._emit_event({"type": "process_ended", "exit_code": exit_code})
 
         except asyncio.CancelledError:
             stderr_task.cancel()
@@ -501,12 +579,7 @@ class CCBSession:
             stderr_task.cancel()
         except Exception as e:
             stderr_task.cancel()
-            if self._on_event:
-                err = {"type": "error", "message": str(e)}
-                if asyncio.iscoroutinefunction(self._on_event):
-                    await self._on_event(err)
-                else:
-                    self._on_event(err)
+            await self._emit_event({"type": "error", "message": str(e)})
 
 
 class SessionManager:
