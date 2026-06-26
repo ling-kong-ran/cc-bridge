@@ -255,6 +255,8 @@ class CCBSession:
         self._persistent_failed = False
         self._message_lock = asyncio.Lock()
         self._proc_key: Optional[tuple] = None
+        self._pending_persistent_content: Optional[str] = None
+        self._pending_persistent_started = False
 
     async def start(
         self,
@@ -344,11 +346,17 @@ class CCBSession:
             await self._send_one_shot_message(content)
 
     def _can_use_persistent_cli(self) -> bool:
-        """仅对本地普通会话启用持久 CLI；远程/MCP 动态配置保持一次性进程。"""
-        return not self._persistent_failed and not self.remote_target
+        """可复用配置固定的持久 CLI；远程目标/权限变化时通过 proc_key 触发重启。"""
+        return not self._persistent_failed
 
     def _persistent_proc_key(self) -> tuple:
-        return (self.cli or get_current_cli(), self.cwd, self.model, self.skip_permissions)
+        remote_key = ""
+        if self.remote_target:
+            try:
+                remote_key = json.dumps(self.remote_target, ensure_ascii=False, sort_keys=True)
+            except (TypeError, ValueError):
+                remote_key = str(self.remote_target)
+        return (self.cli or get_current_cli(), self.cwd, self.model, self.skip_permissions, remote_key, self.allow_mutate)
 
     async def _send_persistent_message(self, content: str):
         proc_key = self._persistent_proc_key()
@@ -357,6 +365,8 @@ class CCBSession:
         if not self._proc or self._proc.returncode is not None or not self._proc.stdin:
             await self._start_persistent_proc(proc_key)
 
+        self._pending_persistent_content = content
+        self._pending_persistent_started = False
         payload = {
             "type": "user",
             "message": {
@@ -366,6 +376,19 @@ class CCBSession:
         }
         self._proc.stdin.write((json.dumps(payload, ensure_ascii=False) + "\n").encode("utf-8"))
         await self._proc.stdin.drain()
+
+    async def _restart_as_one_shot_after_persistent_exit(self):
+        """持久 CLI 异常退出且本轮还没开始生成时，自动用一次性进程重放当前消息。"""
+        content = self._pending_persistent_content
+        should_replay = bool(content) and not self._pending_persistent_started and self.is_running
+        self._pending_persistent_content = None
+        self._pending_persistent_started = False
+        if not should_replay:
+            return False
+
+        await self._emit_event({"type": "system", "subtype": "persistent_cli_fallback", "message": "持久 CLI 不可用，已自动切换为普通模式"})
+        await self._send_one_shot_message(content)
+        return True
 
     async def _start_persistent_proc(self, proc_key: tuple):
         await self._kill_proc()
@@ -380,6 +403,12 @@ class CCBSession:
             "--replay-user-messages",
             "--model", self.model,
         ]
+
+        mcp_config, remote_prompt = self._build_remote_mcp()
+        if mcp_config:
+            cmd += ["--mcp-config", mcp_config]
+        if remote_prompt:
+            cmd += ["--append-system-prompt", remote_prompt]
 
         if self.skip_permissions:
             cmd += ["--dangerously-skip-permissions"]
@@ -482,6 +511,8 @@ class CCBSession:
             self._proc = None
         self._persistent = False
         self._proc_key = None
+        self._pending_persistent_content = None
+        self._pending_persistent_started = False
 
     async def _emit_event(self, event: dict):
         if not self._on_event:
@@ -531,6 +562,14 @@ class CCBSession:
 
                 got_any_event = True
 
+                evt_type = event.get("type")
+                subtype = event.get("subtype")
+                if self._persistent and evt_type not in ("system", "user"):
+                    self._pending_persistent_started = True
+                if evt_type == "result":
+                    self._pending_persistent_content = None
+                    self._pending_persistent_started = False
+
                 # 从 init 或 result 事件中捕获 session_id
                 sid = event.get("session_id")
                 if sid and sid != self.session_id:
@@ -569,6 +608,10 @@ class CCBSession:
                 if self._persistent:
                     self._persistent = False
                     self._persistent_failed = True
+                    self._proc_key = None
+                    replayed = await self._restart_as_one_shot_after_persistent_exit()
+                    if replayed:
+                        return
                     if self.is_running:
                         await self._emit_event({"type": "error", "message": "持久 CLI 进程已退出，下一条消息将自动回退为普通模式"})
                 await self._emit_event({"type": "process_ended", "exit_code": exit_code})
