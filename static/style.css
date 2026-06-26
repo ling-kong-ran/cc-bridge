@@ -2033,6 +2033,15 @@ html.light-theme .select {
 
 .memory-search-row .input { flex: 1; }
 
+.memory-actions {
+  display: flex; gap: 8px; margin-top: 10px; align-items: center;
+}
+.memory-actions .btn-save {
+  background: rgba(var(--accent-rgb), 0.08); border-color: var(--purple-dim, #c792ea);
+}
+.memory-edit-btn { color: var(--purple-dim, #c792ea); }
+.memory-edit-btn:hover { color: var(--accent); }
+
 .memory-file-item {
   display: flex; flex-direction: column; gap: 4px;
   padding: 9px 0; border-bottom: 1px solid var(--border-dim);

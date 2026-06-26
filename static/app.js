@@ -3273,6 +3273,7 @@ function renderMemoryFiles(files) {
         <div class="memory-file-head">
           <span class="memory-file-name">${esc(f.title || f.name)}</span>
           <div class="memory-file-actions">
+            <button class="agent-action-btn memory-edit-btn" data-file="${esc(f.name)}" title="${esc(t('editMemory'))}">&#9998;</button>
             <button class="agent-action-btn memory-view-btn" data-file="${esc(f.name)}" title="${esc(t('view'))}">&#128065;</button>
             <button class="agent-action-btn agent-del-btn memory-del-btn" data-file="${esc(f.name)}" title="${esc(t('delete'))}">&times;</button>
           </div>
@@ -3282,6 +3283,9 @@ function renderMemoryFiles(files) {
     `;
   }).join('');
 
+  el.querySelectorAll('.memory-edit-btn').forEach(btn => {
+    btn.addEventListener('click', () => openMemoryEditor(btn.dataset.file));
+  });
   el.querySelectorAll('.memory-view-btn').forEach(btn => {
     btn.addEventListener('click', () => viewMemoryFile(btn.dataset.file));
   });
@@ -3418,6 +3422,61 @@ function renderMemoryHit(el, results) {
   el.appendChild(hint);
 }
 
+// ─── Memory 编辑 ──────────────────────────────────────────────────
+function openMemoryEditor(filename) {
+  const overlay = document.getElementById('memory-edit-overlay');
+  const nameInput = document.getElementById('memory-edit-filename');
+  const contentArea = document.getElementById('memory-edit-content');
+
+  if (filename) {
+    nameInput.value = filename;
+    nameInput.dataset.original = filename;
+    // 加载现有内容
+    fetch('/api/memory/file', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ filename, cwd: cwdInput.value.trim() || '' }),
+    }).then(r => r.json()).then(data => {
+      contentArea.value = data.body || data.content || '';
+    }).catch(() => {});
+  } else {
+    nameInput.value = '';
+    delete nameInput.dataset.original;
+    contentArea.value = '';
+  }
+  overlay.style.display = 'flex';
+  (nameInput.value ? contentArea : nameInput).focus();
+}
+
+function closeMemoryEditor() {
+  document.getElementById('memory-edit-overlay').style.display = 'none';
+}
+
+async function saveMemoryEdit() {
+  const filename = document.getElementById('memory-edit-filename').value.trim();
+  const content = document.getElementById('memory-edit-content').value;
+  if (!filename || !content) return;
+  try {
+    await fetch('/api/memory/update', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ filename, content, cwd: cwdInput.value.trim() || '' }),
+    });
+    closeMemoryEditor();
+    loadMemoryFiles();
+  } catch (e) {
+    console.error('Memory save failed:', e);
+  }
+}
+
+function dreamSummary() {
+  if (!sessionActive || isResponding) return;
+  const prev = inputEl.value;
+  inputEl.value = '/dream';
+  sendMessage();
+  inputEl.value = prev;
+}
+
 function initMemoryUI() {
   const searchInput = document.getElementById('memory-search-input');
   if (searchInput) {
@@ -3428,13 +3487,24 @@ function initMemoryUI() {
     });
   }
   document.getElementById('btn-memory-index')?.addEventListener('click', indexMemoryFiles);
+  document.getElementById('btn-memory-new')?.addEventListener('click', () => openMemoryEditor());
+  document.getElementById('btn-dream')?.addEventListener('click', dreamSummary);
   document.getElementById('memory-modal-close')?.addEventListener('click', closeMemoryModal);
   document.getElementById('memory-modal-overlay')?.addEventListener('click', (e) => {
     if (e.target === e.currentTarget) closeMemoryModal();
   });
+  // 编辑模态框
+  document.getElementById('btn-memory-edit-save')?.addEventListener('click', saveMemoryEdit);
+  document.getElementById('btn-memory-edit-cancel')?.addEventListener('click', closeMemoryEditor);
+  document.getElementById('memory-edit-overlay')?.addEventListener('click', (e) => {
+    if (e.target === e.currentTarget) closeMemoryEditor();
+  });
   document.addEventListener('keydown', (e) => {
     if (e.key === 'Escape' && document.getElementById('memory-modal-overlay')?.style.display === 'flex') {
       closeMemoryModal();
+    }
+    if (e.key === 'Escape' && document.getElementById('memory-edit-overlay')?.style.display === 'flex') {
+      closeMemoryEditor();
     }
   });
 }

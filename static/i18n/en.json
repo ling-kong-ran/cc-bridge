@@ -306,6 +306,10 @@
   "groupAgents": "Agents",
   "confirmDeleteGroup": "Delete group \"{name}\"?",
   "noGroups": "No groups yet",
+  "editMemory": "Edit Memory",
+  "newMemory": "New",
+  "dream": "/dream",
+  "dreamHint": "Summarize conversation and save to memory",
   "mentionHint": "Type @ to mention agents or groups",
   "mentionAgents": "Agents",
   "mentionGroups": "Groups"
