@@ -395,6 +395,61 @@ def get_agent(name: str) -> dict | None:
     return None
 
 
+# Windows 命令行限制约 32KB，--agents 的 JSON 文本需控制在此之下。
+# prompt 来自 agent .md 的 body，可能很长；超过此值则截断。
+MAX_AGENT_PROMPT_CHARS = 20000
+
+
+def get_agents_for_cli(names: list[str], cwd: str = "") -> dict[str, dict[str, str]]:
+    """将指定 agent 转为 CLI --agents 参数所需的 JSON 对象。
+
+    扫描 ~/.claude/agents/ 和 <cwd>/.claude/agents/，找到名称匹配的 agent，
+    提取其 description 和 prompt（body），组装为 CLI 可识别的结构。
+    单 agent 的 prompt 截断至 MAX_AGENT_PROMPT_CHARS 字符。
+    """
+    all_agents = {}
+    # 先扫描用户级 agent
+    for a in _scan_agents_dir(AGENTS_DIR, "user"):
+        all_agents[a["name"]] = a
+    # 再扫描项目级 agent（覆盖同名）
+    if cwd:
+        try:
+            project_dir = Path(cwd).expanduser().resolve() / PROJECT_AGENTS_DIR_TEMPLATE
+            if project_dir.exists() and project_dir != AGENTS_DIR:
+                for a in _scan_agents_dir(project_dir, "project"):
+                    all_agents[a["name"]] = a
+        except (OSError, RuntimeError):
+            pass
+    result: dict[str, dict[str, str]] = {}
+    total_prompt_chars = 0
+    for name in names:
+        name = name.strip()
+        if not name or name in result:
+            continue
+        agent = all_agents.get(name)
+        if not agent:
+            continue
+        entry: dict[str, str] = {}
+        desc = str(agent.get("description") or "").strip()
+        if desc:
+            entry["description"] = desc
+        body = str(agent.get("body") or "").strip()
+        if body:
+            # 控制单个 agent 和累计 prompt 总量，避免超出命令行长度限制
+            remaining = MAX_AGENT_PROMPT_CHARS * 2 - total_prompt_chars
+            if remaining <= 0:
+                break
+            if len(body) > MAX_AGENT_PROMPT_CHARS:
+                body = body[:MAX_AGENT_PROMPT_CHARS] + "\n...(prompt truncated)"
+            if len(body) > remaining:
+                body = body[:remaining] + "\n...(prompt truncated)"
+            total_prompt_chars += len(body)
+            entry["prompt"] = body
+        if entry:
+            result[name] = entry
+    return result
+
+
 def _agent_file_path(name: str, scope: str = "user") -> Path:
     """根据名称和范围获取 agent 文件路径。"""
     if scope == "project":
@@ -521,66 +576,3 @@ def get_available_models() -> list[str]:
         if model and model not in unique_models:
             unique_models.append(model)
     return unique_models
-
-
-# ─── Agent 群组管理 ─────────────────────────────────────────
-def list_groups() -> list[dict]:
-    """列出所有 agent 群组（存储在 gui_settings.json）。"""
-    settings = get_gui_settings()
-    return settings.get("agent_groups", [])
-
-
-def save_groups(groups: list[dict]):
-    """保存 agent 群组列表到 gui_settings.json。"""
-    settings = get_gui_settings()
-    settings["agent_groups"] = groups
-    save_gui_settings(settings)
-
-
-def create_group(data: dict) -> dict:
-    """创建新群组。data 需包含 name 和 agents 字段。"""
-    name = str(data.get("name", "")).strip()
-    if not name:
-        raise ValueError("group name is required")
-    groups = list_groups()
-    for g in groups:
-        if g["name"] == name:
-            raise ValueError(f"group '{name}' already exists")
-    agents = data.get("agents", [])
-    if not isinstance(agents, list):
-        agents = []
-    group = {"name": name, "agents": agents}
-    groups.append(group)
-    save_groups(groups)
-    return group
-
-
-def update_group(name: str, data: dict) -> dict:
-    """更新群组。data 可包含 new_name（重命名）和 agents 字段。"""
-    groups = list_groups()
-    for g in groups:
-        if g["name"] == name:
-            new_name = str(data.get("new_name", name)).strip()
-            if new_name and new_name != name:
-                # 检查新名称是否冲突
-                for other in groups:
-                    if other["name"] == new_name:
-                        raise ValueError(f"group '{new_name}' already exists")
-                g["name"] = new_name
-            if "agents" in data:
-                agents = data["agents"]
-                g["agents"] = agents if isinstance(agents, list) else []
-            save_groups(groups)
-            return g
-    raise ValueError(f"group '{name}' not found")
-
-
-def delete_group(name: str) -> bool:
-    """删除群组。"""
-    groups = list_groups()
-    for i, g in enumerate(groups):
-        if g["name"] == name:
-            groups.pop(i)
-            save_groups(groups)
-            return True
-    raise ValueError(f"group '{name}' not found")

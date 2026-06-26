@@ -10,6 +10,7 @@ import sys
 import socket
 import uuid
 import ipaddress
+import re
 import base64
 import shlex
 import subprocess
@@ -38,10 +39,7 @@ from config_manager import (
     update_agent,
     delete_agent,
     get_agent,
-    list_groups,
-    create_group,
-    update_group,
-    delete_group,
+    get_agents_for_cli,
 )
 from session_store import list_sessions, save_session, add_session_usage, delete_session, load_session_history, rename_session
 from memory_index import list_memory_files, search_memory, get_memory_file, delete_memory_file, save_memory_file, index_memory
@@ -146,7 +144,13 @@ async def reject_client_access(client_id: str, writer: asyncio.StreamWriter):
     client_meta.pop(client_id, None)
     client_last_msg.pop(client_id, None)
     client_session_ids.pop(client_id, None)
+    client_session_agents.pop(client_id, None)
     client_ips.pop(client_id, None)
+    # 清理会话共享状态
+    owned_sid = {sid for sid, oid in session_owner.items() if oid == client_id}
+    for sid in owned_sid:
+        session_owner.pop(sid, None)
+    client_viewing.pop(client_id, None)
     await send_response(writer, 403, "application/json", b'{"ok":false,"error":"LAN access disabled"}')
 
 
@@ -162,6 +166,11 @@ async def revoke_lan_clients():
         client_meta.pop(client_id, None)
         client_last_msg.pop(client_id, None)
         client_session_ids.pop(client_id, None)
+        client_session_agents.pop(client_id, None)
+        owned_sid = {sid for sid, oid in session_owner.items() if oid == client_id}
+        for sid in owned_sid:
+            session_owner.pop(sid, None)
+        client_viewing.pop(client_id, None)
         await push_event(client_id, "error", {"message": "LAN access disabled"})
         await push_event(client_id, "session_stopped", {})
 
@@ -181,6 +190,13 @@ client_meta: dict[str, dict] = {}
 
 # 每个 client 的来源 IP，用于局域网访问开关生效后收紧已有连接
 client_ips: dict[str, str] = {}
+
+# 每个 client 的会话 agent 列表（右面板拉入的 agent）
+client_session_agents: dict[str, list] = {}
+
+# 会话共享：记录哪个 client_id 拥有哪个 session_id（owner），以及谁是 viewer
+session_owner: dict[str, str] = {}  # session_id → owner_client_id
+client_viewing: dict[str, str] = {}  # viewer_client_id → owner_client_id
 
 
 def extract_result_tokens(event: dict) -> dict:
@@ -762,6 +778,8 @@ async def push_event(client_id: str, event_type: str, data: dict):
     queue = sse_clients.get(client_id)
     if queue:
         await queue.put({"event": event_type, "data": data})
+    else:
+        print(f"[DEBUG push_event] NO QUEUE for client={client_id[:10]} evt={event_type}")
 
 
 UPLOAD_DIR_FALLBACK = Path(__file__).parent / "uploads"
@@ -1003,6 +1021,25 @@ async def handle_sse(query: dict, writer: asyncio.StreamWriter):
     # 发送初始 connected 事件
     await _sse_write(writer, "connected", {"client_id": client_id})
 
+    # 重连：如果该 client_id 已有活跃会话，同步当前状态给前端
+    existing_session = session_manager.get_session(client_id)
+    if existing_session and existing_session.is_running:
+        meta = client_meta.get(client_id, {})
+        viewing = client_viewing.get(client_id, "")
+        state = {
+            "model": existing_session.model,
+            "resumed": bool(existing_session.session_id),
+            "session_id": existing_session.session_id or client_session_ids.get(client_id, ""),
+            "remote_target_id": meta.get("remote_target_id", ""),
+            "cli": existing_session.cli or get_current_cli(),
+        }
+        if viewing:
+            state["viewing"] = True
+        await _sse_write(writer, "session_started", state)
+        # 如果正在回复中，前端也需进入响应状态
+        if existing_session._message_owner_id and not viewing:
+            await _sse_write(writer, "generation_started", {})
+
     try:
         while True:
             # 等待事件（带心跳）
@@ -1018,6 +1055,12 @@ async def handle_sse(query: dict, writer: asyncio.StreamWriter):
     finally:
         if sse_clients.get(client_id) is queue:
             sse_clients.pop(client_id, None)
+        # 清理 viewer 状态：SSE 断开时从 owner session 移除 viewer
+        viewer_owner = client_viewing.pop(client_id, None)
+        if viewer_owner:
+            owner_sess = session_manager.get_session(viewer_owner)
+            if owner_sess:
+                owner_sess.remove_viewer(client_id)
         # SSE 断开不代表用户主动停止会话。移动端息屏、浏览器后台挂起会断开 EventSource，
         # 这里保留 CCB session，让同一 client_id 重连后继续接收事件和发送消息。
         try:
@@ -1070,6 +1113,8 @@ async def handle_action(body: bytes, writer: asyncio.StreamWriter):
         client_meta[client_id] = {"model": model, "cwd": cwd, "remote_target_id": remote_target_id, "cli": cli}
         client_last_msg.pop(client_id, None)
         client_session_ids.pop(client_id, None)
+        client_session_agents.pop(client_id, None)
+        client_viewing.pop(client_id, None)
 
         async def on_event(event: dict):
             evt_type = event.get("type", "unknown")
@@ -1077,6 +1122,8 @@ async def handle_action(body: bytes, writer: asyncio.StreamWriter):
             if evt_type == "session_id_captured":
                 sid = event.get("session_id", "")
                 client_session_ids[client_id] = sid
+                session_owner[sid] = client_id  # 记录会话归属
+                print(f"[DEBUG new_session] session_owner[{sid[:10]}] = {client_id[:10]}")
                 title = client_last_msg.get(client_id, "新会话")
                 meta = client_meta.get(client_id, {})
                 save_session(sid, title, meta.get("model", model), meta.get("cwd", cwd or ""),
@@ -1112,11 +1159,60 @@ async def handle_action(body: bytes, writer: asyncio.StreamWriter):
         remote_target_id = (remote_target or {}).get("id", "")
         cli = data.get("cli") or get_current_cli()
 
-        # 清理旧 session
+        # 清理旧 session / viewer 状态
         old_session = session_manager.get_session(client_id)
         if old_session:
+            # 从原 owner 的 session 中移除 viewer
+            old_owner = client_viewing.pop(client_id, None)
+            if old_owner:
+                owner_sess = session_manager.get_session(old_owner)
+                if owner_sess:
+                    owner_sess.remove_viewer(client_id)
             await old_session.stop()
+        client_viewing.pop(client_id, None)
 
+        # 检查该 session 是否已在另一个客户端活跃（正在回复中）
+        owner_id = session_owner.get(resume_id)
+        print(f"[DEBUG resume_session] client={client_id[:10]} resume_id={resume_id[:10]} "
+              f"owner_id={owner_id[:10] if owner_id else None} "
+              f"self_vs_owner={owner_id != client_id if owner_id else 'N/A'} "
+              f"session_owner_keys={list(session_owner.keys())}")
+        if owner_id and owner_id != client_id:
+            owner_session = session_manager.get_session(owner_id)
+            print(f"[DEBUG resume_session] owner_session={owner_session is not None} "
+                  f"is_running={owner_session.is_running if owner_session else 'N/A'} "
+                  f"_message_owner_id={owner_session._message_owner_id if owner_session else 'N/A'}")
+            if owner_session and owner_session.is_running and owner_session._message_owner_id:
+                # 作为 viewer 订阅到活跃 session
+                print(f"[DEBUG resume_session] >>> Subscribing {client_id[:10]} as VIEWER to owner {owner_id[:10]}")
+                client_session_ids[client_id] = resume_id
+                client_viewing[client_id] = owner_id
+                meta = client_meta.setdefault(owner_id, {})
+                client_meta[client_id] = dict(meta)
+
+                async def on_viewer_event(event: dict):
+                    evt_type = event.get("type", "unknown")
+                    if evt_type not in ("stream_event",):
+                        print(f"[DEBUG on_viewer_event] viewer={client_id[:10]} evt_type={evt_type}")
+                    if evt_type == "session_id_captured":
+                        client_session_ids[client_id] = event.get("session_id", resume_id)
+                        await push_event(client_id, "session_id_captured", event)
+                    elif evt_type in ("assistant", "stream_event", "system", "error",
+                                       "process_ended", "model_changed", "result", "tool_result", "user",
+                                       "session_stopped"):
+                        await push_event(client_id, evt_type, event)
+
+                owner_session.add_viewer(client_id, on_viewer_event)
+                # 发送当前会话状态给 viewer
+                await push_event(client_id, "session_started", {
+                    "model": owner_session.model, "resumed": True, "session_id": resume_id,
+                    "remote_target_id": meta.get("remote_target_id", ""), "cli": owner_session.cli or "",
+                    "viewing": True,
+                })
+                await send_response(writer, 200, "application/json", b'{"ok":true}')
+                return
+
+        # 常规恢复：创建新 session
         _, session = session_manager.create_session(client_id)
 
         client_meta[client_id] = {"model": model, "cwd": cwd, "remote_target_id": remote_target_id, "cli": cli}
@@ -1127,6 +1223,7 @@ async def handle_action(body: bytes, writer: asyncio.StreamWriter):
             if evt_type == "session_id_captured":
                 sid = event.get("session_id", "")
                 client_session_ids[client_id] = sid
+                session_owner[sid] = client_id
                 meta = client_meta.get(client_id, {})
                 save_session(sid, "", meta.get("model", model), meta.get("cwd", cwd or ""),
                              remote_target_id=meta.get("remote_target_id", ""), cli=meta.get("cli", ""))
@@ -1152,6 +1249,11 @@ async def handle_action(body: bytes, writer: asyncio.StreamWriter):
     elif action == "send_message":
         content = data.get("content", "")
         requested_model = data.get("model") or ""
+        # viewer 不能发送消息（无独立 CLI 进程）
+        if client_viewing.get(client_id):
+            await push_event(client_id, "error", {"message": "Viewer cannot send message"})
+            await send_response(writer, 200, "application/json", b'{"ok":false,"error":"viewer cannot send"}')
+            return
         session = session_manager.get_session(client_id)
         if session and session.is_running and content:
             if requested_model and requested_model != session.model:
@@ -1180,7 +1282,15 @@ async def handle_action(body: bytes, writer: asyncio.StreamWriter):
                 meta = client_meta.get(client_id, {})
                 save_session(sid, title, meta.get("model", ""), meta.get("cwd", ""),
                              remote_target_id=meta.get("remote_target_id", ""), cli=meta.get("cli", ""))
-            await session.send_message(content)
+            # 提取 @agentname 提及，将对应 agent 定义传给 CLI（--agents 参数）
+            mentioned = re.findall(r"@([A-Za-z0-9_.-]+)", content)
+            if mentioned:
+                new_configs = get_agents_for_cli(mentioned, cwd=session.cwd or "")
+                if new_configs:
+                    merged = dict(session.agent_configs)
+                    merged.update(new_configs)
+                    session.agent_configs = merged
+            await session.send_message(content, owner_id=client_id)
             await send_response(writer, 200, "application/json", b'{"ok":true}')
         else:
             await push_event(client_id, "error", {"message": "Session not running"})
@@ -1189,14 +1299,25 @@ async def handle_action(body: bytes, writer: asyncio.StreamWriter):
     elif action == "stop":
         session = session_manager.get_session(client_id)
         if session:
-            await session.stop()
+            # viewer 不能 stop session，只能 stop 自己 viewing 的 session
+            viewer_owner = client_viewing.get(client_id)
+            if viewer_owner:
+                await push_event(client_id, "error", {"message": "Viewer cannot stop session"})
+                await send_response(writer, 200, "application/json", b'{"ok":false,"error":"viewer cannot stop"}')
+                return
+            await session.stop(requester_id=client_id)
         await push_event(client_id, "session_stopped", {})
         await send_response(writer, 200, "application/json", b'{"ok":true}')
 
     elif action == "interrupt":
         session = session_manager.get_session(client_id)
+        # viewer 不能 interrupt
+        if client_viewing.get(client_id):
+            await push_event(client_id, "error", {"message": "Viewer cannot interrupt"})
+            await send_response(writer, 200, "application/json", b'{"ok":false,"error":"viewer cannot interrupt"}')
+            return
         if session and session.is_running:
-            await session.interrupt()
+            await session.interrupt(requester_id=client_id)
         await push_event(client_id, "generation_interrupted", {})
         await send_response(writer, 200, "application/json", b'{"ok":true}')
 
@@ -1225,8 +1346,9 @@ async def handle_api_get(path: str, writer: asyncio.StreamWriter, query: dict = 
         data = list_skills()
     elif path == "/api/agents":
         data = list_agents()
-    elif path == "/api/groups":
-        data = list_groups()
+    elif path == "/api/session/agents":
+        cid = (query or {}).get("id", [""])[0]
+        data = {"agents": client_session_agents.get(cid, [])}
     elif path == "/api/mcp-servers":
         query = query or {}
         cwd = query.get("cwd", [""])[0] or ""
@@ -1469,34 +1591,23 @@ async def handle_api_post(path: str, body: bytes, writer: asyncio.StreamWriter):
             return
         await send_response(writer, 200, "application/json", b'{"ok":true}')
         return
-    elif path == "/api/groups":
-        try:
-            saved = create_group(data)
-        except ValueError as exc:
-            resp = json.dumps({"error": str(exc)}, ensure_ascii=False).encode("utf-8")
-            await send_response(writer, 400, "application/json; charset=utf-8", resp)
+    elif path == "/api/session/agents":
+        cid = str(data.get("id", ""))
+        action = str(data.get("action", ""))
+        agent = str(data.get("agent", "")).strip()
+        if not cid or not agent:
+            await send_response(writer, 400, "application/json; charset=utf-8",
+                                json.dumps({"error": "missing id or agent"}, ensure_ascii=False).encode())
             return
-        resp = json.dumps(saved, ensure_ascii=False).encode("utf-8")
+        agents = client_session_agents.setdefault(cid, [])
+        if action == "add":
+            if agent not in agents:
+                agents.append(agent)
+        elif action == "remove":
+            if agent in agents:
+                agents.remove(agent)
+        resp = json.dumps({"agents": agents}, ensure_ascii=False).encode("utf-8")
         await send_response(writer, 200, "application/json; charset=utf-8", resp)
-        return
-    elif path == "/api/groups/update":
-        try:
-            updated = update_group(str(data.get("name", "")), data)
-        except ValueError as exc:
-            resp = json.dumps({"error": str(exc)}, ensure_ascii=False).encode("utf-8")
-            await send_response(writer, 400, "application/json; charset=utf-8", resp)
-            return
-        resp = json.dumps(updated, ensure_ascii=False).encode("utf-8")
-        await send_response(writer, 200, "application/json; charset=utf-8", resp)
-        return
-    elif path == "/api/groups/delete":
-        try:
-            delete_group(str(data.get("name", "")))
-        except ValueError as exc:
-            resp = json.dumps({"error": str(exc)}, ensure_ascii=False).encode("utf-8")
-            await send_response(writer, 400, "application/json; charset=utf-8", resp)
-            return
-        await send_response(writer, 200, "application/json", b'{"ok":true}')
         return
     elif path == "/api/memory/file":
         filename = data.get("filename", "")

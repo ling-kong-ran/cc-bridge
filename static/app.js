@@ -8,6 +8,7 @@ let clientId = null;
 let eventSource = null;
 let sessionActive = false;
 let isResponding = false;
+let isViewer = false;  // 当前是否以观察者身份查看他人的活跃会话
 let currentAssistantEl = null;
 let currentContent = [];
 let streamBlocks = {};
@@ -103,8 +104,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   initRemote();
   initMcpManager();
   initAgentModal();
-  initGroupUI();
-  initGroupMemberPanel();
+  initSessionAgentPanel();
   initMentionAutocomplete();
   initMemoryUI();
   loadDefaultCwd();
@@ -1161,6 +1161,7 @@ function showPage(page) {
   document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
   const target = document.getElementById(`page-${page}`);
   if (target) target.classList.add('active');
+  hideMentionPopup();
 }
 
 function initNavigation() {
@@ -1237,9 +1238,9 @@ function initSSE() {
     eventSource = null;
   }
 
-  // 复用客户端 ID，移动端息屏后重连仍能绑定到同一个后端会话。
-  clientId = localStorage.getItem('ccb_client_id') || 'c_' + Math.random().toString(36).substring(2, 10);
-  localStorage.setItem('ccb_client_id', clientId);
+  // sessionStorage 确保每个标签页有独立的 clientId，避免跨标签页 SSE 队列冲突
+  clientId = sessionStorage.getItem('ccb_client_id') || 'c_' + Math.random().toString(36).substring(2, 10);
+  sessionStorage.setItem('ccb_client_id', clientId);
   eventSource = new EventSource(`/sse?id=${clientId}`);
   bindSSEEvents();
 }
@@ -1253,7 +1254,9 @@ function bindSSEEvents() {
 
   eventSource.addEventListener('session_started', (e) => {
     const data = JSON.parse(e.data);
+    const wasActive = sessionActive;
     sessionActive = true;
+    isViewer = !!data.viewing;
     updateUI();
     const modelLabel = getDisplayModelName(data.model || '');
     renderTopbarMeta(data.model || '');
@@ -1268,14 +1271,35 @@ function bindSSEEvents() {
       cliSelectEl.value = data.cli;
       renderTopbarMeta(data.model || '');
     }
-    addSystemMsg(modelLabel ? t('sessionStarted', { model: modelLabel }) : t('sessionStartedPlain'));
+    // 重连时清除欢迎消息
+    if (!wasActive) {
+      const welcome = messagesEl.querySelector('.welcome-msg');
+      if (welcome) welcome.remove();
+    }
+    if (isViewer) {
+      addSystemMsg(t('viewingSession'));
+    } else {
+      addSystemMsg(modelLabel ? t('sessionStarted', { model: modelLabel }) : t('sessionStartedPlain'));
+    }
   });
 
   eventSource.addEventListener('session_stopped', (e) => {
     sessionActive = false;
     isResponding = false;
+    isViewer = false;
     updateUI();
     addSystemMsg(t('sessionStopped'));
+  });
+
+  eventSource.addEventListener('generation_started', (e) => {
+    // 刷新后重连到正在回复的会话，恢复响应状态
+    isResponding = true;
+    currentAssistantEl = createAssistantBubble();
+    currentContent = [];
+    streamBlocks = {};
+    startTurnTimer();
+    updateUI();
+    scrollToBottom();
   });
 
   eventSource.addEventListener('system', (e) => {
@@ -1898,6 +1922,8 @@ let inputDragDepth = 0;
 function initInput() {
   inputEl.addEventListener('keydown', (e) => {
     if (handleSlashCommandKeydown(e)) return;
+    // 提及弹窗打开时不发送
+    if (mentionPopup && mentionPopup.style.display === 'block') return;
 
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
@@ -2485,12 +2511,15 @@ async function startNewSessionFromCwd(cwd) {
 }
 
 function updateUI() {
-  btnSend.disabled = !sessionActive || isResponding;
+  btnSend.disabled = !sessionActive || isResponding || isViewer;
+  // viewer 模式下 Stop 按钮可见但禁用
   btnStop.classList.toggle('visible', isResponding);
+  btnStop.disabled = isViewer;
   btnNewSession.innerHTML = `<span class="btn-prefix">&gt;</span> ${sessionActive ? t('restartSession') : t('newSession')}`;
   if (!sessionActive && sidebarCollapsed) sidebarCollapsed = false;
   setSidebarCollapsed(sidebarCollapsed);
-  // 会话活跃时禁用配置修改（CLI 和模型可随时切换，下一条消息生效）
+  // viewer 模式和会话活跃时禁用配置修改
+  const locked = sessionActive || isViewer;
   cwdInput.disabled = sessionActive;
   btnBrowse.disabled = sessionActive;
   btnBrowse.style.opacity = sessionActive ? '0.4' : '1';
@@ -2501,6 +2530,14 @@ function updateUI() {
   if (skipPermissions) skipPermissions.disabled = sessionActive;
   // 远程目标和写入开关可随时切换，下一条消息生效
   if (remoteTargetSelect) remoteTargetSelect.disabled = false;
+  // viewer 时禁用输入
+  inputEl.disabled = isViewer;
+  inputEl.style.opacity = isViewer ? '0.5' : '1';
+  if (isViewer) {
+    inputEl.placeholder = t('viewingPlaceholder') || 'Viewing live session...';
+  } else {
+    inputEl.placeholder = t('messagePlaceholder') || 'Type a message...';
+  }
 }
 
 function scrollToBottom() {
@@ -2519,9 +2556,9 @@ async function loadConfig() {
     const skills = await (await fetch('/api/skills')).json();
     renderSkills(skills);
     const agents = await (await fetch('/api/agents')).json();
+    agentsCache = agents;
     renderAgents(agents);
     loadMcpServers();
-    loadGroups();
     loadMemoryFiles();
   } catch (e) {
     console.error('配置加载失败:', e);
@@ -2987,189 +3024,198 @@ function initAgentModal() {
   });
 }
 
-// ─── Agent 群组 ────────────────────────────────────────────────────
-let groupsCache = [];
-let selectedGroupName = '';
+let agentsCache = [];
+let sessionAgents = [];
 
-async function loadGroups() {
+// ─── 会话 Agent 面板 ──────────────────────────────────────────────
+async function loadSessionAgents() {
   try {
-    groupsCache = await (await fetch('/api/groups')).json();
-    renderGroups(groupsCache);
-  } catch (e) {
-    console.error('Groups load failed:', e);
-  }
+    const resp = await fetch(`/api/session/agents?id=${clientId}`);
+    const data = await resp.json();
+    sessionAgents = data.agents || [];
+    renderSessionAgentsPanel();
+  } catch (e) { console.error('Load session agents failed:', e); }
 }
 
-function renderGroups(groups) {
-  const el = document.getElementById('groups-list');
-  if (!el) return;
-  if (!groups || !groups.length) {
-    el.innerHTML = `<p class="empty-state">${esc(t('noGroups'))}</p>`;
-    return;
-  }
-  el.innerHTML = groups.map(g => `
-    <div class="group-item" data-group="${esc(g.name)}">
-      <div class="group-item-head">
-        <span class="group-item-name">${esc(g.name)}</span>
-        <div class="group-item-actions">
-          <button class="agent-action-btn group-edit-btn" data-group="${esc(g.name)}" title="${esc(t('edit'))}">&#9998;</button>
-          <button class="agent-action-btn agent-del-btn group-del-btn" data-group="${esc(g.name)}" title="${esc(t('delete'))}">&times;</button>
-        </div>
-      </div>
-      <span class="group-item-agents">${(g.agents || []).map(a => `<span class="group-agent-tag">${esc(a)}</span>`).join(' ') || `<em>${esc(t('noAgents'))}</em>`}</span>
-    </div>
-  `).join('');
-
-  el.querySelectorAll('.group-edit-btn').forEach(btn => {
-    btn.addEventListener('click', () => openGroupModal(btn.dataset.group));
-  });
-  el.querySelectorAll('.group-del-btn').forEach(btn => {
-    btn.addEventListener('click', () => deleteGroupPrompt(btn.dataset.group));
-  });
-}
-
-function openGroupModal(name) {
-  const overlay = document.getElementById('group-modal-overlay');
-  const title = document.getElementById('group-modal-title');
-  const nameInput = document.getElementById('group-name-input');
-  const checkboxes = document.getElementById('group-agents-checkboxes');
-
-  // 加载 agent 列表作为 checkbox
-  fetch('/api/agents').then(r => r.json()).then(agents => {
-    if (name) {
-      title.textContent = t('editGroup');
-      nameInput.value = name;
-      const group = groupsCache.find(g => g.name === name);
-      const selected = group ? group.agents : [];
-      nameInput.dataset.originalName = name;
-      checkboxes.innerHTML = agents.map(a => `
-        <label class="group-agent-check"><input type="checkbox" value="${esc(a.name)}" ${selected.includes(a.name) ? 'checked' : ''}>${esc(a.name)}</label>
-      `).join('');
-    } else {
-      title.textContent = t('newGroup');
-      nameInput.value = '';
-      delete nameInput.dataset.originalName;
-      checkboxes.innerHTML = agents.map(a => `
-        <label class="group-agent-check"><input type="checkbox" value="${esc(a.name)}">${esc(a.name)}</label>
-      `).join('');
-    }
-    overlay.style.display = 'flex';
-    nameInput.focus();
-  }).catch(e => console.error('Failed to load agents for group modal:', e));
-}
-
-function closeGroupModal() {
-  document.getElementById('group-modal-overlay').style.display = 'none';
-  document.getElementById('group-form-status').style.display = 'none';
-}
-
-async function saveGroup() {
-  const nameInput = document.getElementById('group-name-input');
-  const name = nameInput.value.trim();
-  const originalName = nameInput.dataset.originalName || '';
-  if (!name) return;
-  const checks = document.querySelectorAll('#group-agents-checkboxes input[type="checkbox"]:checked');
-  const agents = Array.from(checks).map(c => c.value);
-  const status = document.getElementById('group-form-status');
-
+async function addSessionAgent(name) {
+  if (!name || sessionAgents.includes(name)) return;
   try {
-    const url = originalName ? '/api/groups/update' : '/api/groups';
-    const body = originalName ? { name: originalName, new_name: name, agents } : { name, agents };
-    const resp = await fetch(url, {
+    const resp = await fetch('/api/session/agents', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
+      body: JSON.stringify({ id: clientId, action: 'add', agent: name }),
     });
-    if (!resp.ok) {
-      const err = await resp.json();
-      status.textContent = err.error || 'Save failed';
-      status.style.display = 'block';
-      return;
-    }
-    closeGroupModal();
-    loadGroups();
-  } catch (e) {
-    status.textContent = e.message;
-    status.style.display = 'block';
-  }
+    if (!resp.ok) { console.error('Add session agent failed:', resp.status); return; }
+    const data = await resp.json();
+    sessionAgents = data.agents || [];
+    renderSessionAgentsPanel();
+    hideAgentAddPopover();
+  } catch (e) { console.error('Add session agent failed:', e); }
 }
 
-async function deleteGroupPrompt(name) {
-  if (!confirm(t('confirmDeleteGroup', { name }))) return;
+async function removeSessionAgent(name) {
   try {
-    await fetch('/api/groups/delete', {
+    const resp = await fetch('/api/session/agents', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name }),
+      body: JSON.stringify({ id: clientId, action: 'remove', agent: name }),
     });
-    loadGroups();
-  } catch (e) {
-    console.error('Group delete failed:', e);
-  }
+    const data = await resp.json();
+    sessionAgents = data.agents || [];
+    renderSessionAgentsPanel();
+  } catch (e) { console.error('Remove session agent failed:', e); }
 }
 
-function initGroupUI() {
-  document.getElementById('btn-group-add')?.addEventListener('click', () => openGroupModal());
-  document.getElementById('btn-group-save')?.addEventListener('click', saveGroup);
-  document.getElementById('btn-group-cancel')?.addEventListener('click', closeGroupModal);
-  document.getElementById('group-modal-overlay')?.addEventListener('click', (e) => {
-    if (e.target === e.currentTarget) closeGroupModal();
-  });
-  document.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape' && document.getElementById('group-modal-overlay')?.style.display === 'flex') {
-      closeGroupModal();
-    }
-  });
-}
-
-// ─── 群组成员面板 ──────────────────────────────────────────────────
-function selectGroup(name) {
-  selectedGroupName = name;
-  renderGroupMemberPanel();
-  // 选中群组后更新 @提及列表
-  if (mentionPopup && mentionPopup.style.display === 'block') {
-    updateMentionPopup();
-  }
-}
-
-function renderGroupMemberPanel() {
+function renderSessionAgentsPanel() {
   const panel = document.getElementById('group-member-panel');
   if (!panel) return;
-  const group = groupsCache.find(g => g.name === selectedGroupName);
-  if (!group) {
-    panel.innerHTML = '';
+
+  if (!sessionAgents.length) {
+    panel.innerHTML = `<div class="group-member-empty">${esc(t('noSessionAgents'))}</div>`;
     return;
   }
-  panel.innerHTML = `
-    <div class="group-member-list">
-      ${(group.agents || []).map(a => `
-        <span class="group-member-chip" title="${esc(a)}">${esc(a)}</span>
-      `).join('')}
-      ${(!group.agents || group.agents.length === 0) ? `<span class="empty-state">${esc(t('noAgents'))}</span>` : ''}
-    </div>
-  `;
+
+  panel.innerHTML = sessionAgents.map(a => `
+    <span class="group-member-chip" data-agent="${esc(a)}">
+      <span class="chip-name" title="${esc(a)}">${esc(a)}</span>
+      <span class="chip-remove" data-action="remove" data-agent="${esc(a)}">&times;</span>
+    </span>
+  `).join('');
+
+  // 点击芯片名 → 插入 @名称
+  panel.querySelectorAll('.group-member-chip .chip-name').forEach(nameEl => {
+    nameEl.addEventListener('click', () => {
+      const name = nameEl.parentElement.dataset.agent;
+      const input = document.getElementById('message-input');
+      if (!input || !name) return;
+      const cursor = input.selectionStart || input.value.length;
+      const before = input.value.substring(0, cursor);
+      const after = input.value.substring(cursor);
+      const prefix = (cursor > 0 && before[cursor - 1] !== ' ' && before[cursor - 1] !== '\n') ? ' ' : '';
+      input.value = before + prefix + '@' + name + ' ' + after;
+      const newPos = cursor + prefix.length + name.length + 2;
+      input.setSelectionRange(newPos, newPos);
+      input.focus();
+    });
+  });
+
+  // 点击 × → 移除 agent
+  panel.querySelectorAll('.chip-remove').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      removeSessionAgent(btn.dataset.agent);
+    });
+  });
 }
 
-function initGroupMemberPanel() {
-  const select = document.getElementById('group-select');
-  if (!select) return;
-  select.addEventListener('change', () => {
-    selectGroup(select.value);
+function renderAgentAddPopover() {
+  const popover = document.getElementById('agent-add-popover');
+  if (!popover) return;
+  const all = agentsCache.filter(a => {
+    const name = a.name || a;
+    return name && !sessionAgents.includes(name);
   });
-  // 加载群组后填充下拉框
-  const updateOptions = () => {
-    const current = select.value;
-    select.innerHTML = `<option value="">- ${esc(t('selectGroup'))} -</option>` +
-      groupsCache.map(g => `<option value="${esc(g.name)}" ${g.name === current ? 'selected' : ''}>${esc(g.name)}</option>`).join('');
-  };
-  // 监听 groupsCache 变化（简单轮询或直接 hook loadGroups）
-  const origLoadGroups = loadGroups;
-  loadGroups = async function() {
-    await origLoadGroups();
-    updateOptions();
-    renderGroupMemberPanel();
-  };
-  updateOptions();
+  if (!all.length) {
+    popover.innerHTML = `<div class="agent-add-popover-empty">${esc(t('noAgents'))}</div>`;
+  } else {
+    popover.innerHTML = `
+      <div class="agent-add-popover-search">
+        <input type="text" id="agent-add-search" placeholder="${esc(t('searchAgent'))}">
+      </div>
+      ${all.map(a => {
+        const name = a.name || a;
+        return `<div class="agent-add-popover-item" data-agent="${esc(name)}">${esc(name)}</div>`;
+      }).join('')}
+    `;
+    const searchInput = document.getElementById('agent-add-search');
+    if (searchInput) {
+      searchInput.addEventListener('input', () => {
+        const q = searchInput.value.toLowerCase();
+        popover.querySelectorAll('.agent-add-popover-item').forEach(item => {
+          item.style.display = item.dataset.agent.toLowerCase().includes(q) ? '' : 'none';
+        });
+      });
+      setTimeout(() => searchInput.focus(), 0);
+    }
+  }
+  popover.style.display = 'block';
+}
+
+function hideAgentAddPopover() {
+  const popover = document.getElementById('agent-add-popover');
+  if (popover) popover.style.display = 'none';
+}
+
+function initSessionAgentPanel() {
+  const addBtn = document.getElementById('btn-session-agent-add');
+  const popover = document.getElementById('agent-add-popover');
+  const sidebar = document.getElementById('chat-sidebar');
+  const toggleBtn = document.getElementById('btn-members-toggle');
+
+  if (addBtn) {
+    addBtn.addEventListener('click', () => {
+      if (popover && popover.style.display === 'block') {
+        hideAgentAddPopover();
+      } else {
+        renderAgentAddPopover();
+      }
+    });
+  }
+
+  // 统一浮动按钮：点击展开/收起面板（PC + 移动端）
+  if (toggleBtn && sidebar) {
+    const openPanel = () => {
+      sidebar.classList.add('open');
+      toggleBtn.classList.add('active');
+    };
+    const closePanel = () => {
+      sidebar.classList.remove('open');
+      toggleBtn.classList.remove('active');
+    };
+
+    toggleBtn.addEventListener('click', () => {
+      if (sidebar.classList.contains('open')) {
+        closePanel();
+      } else {
+        openPanel();
+      }
+    });
+
+    // 点击面板外部关闭
+    document.addEventListener('click', (e) => {
+      if (!sidebar.classList.contains('open')) return;
+      if (!sidebar.contains(e.target) && e.target !== toggleBtn && !toggleBtn.contains(e.target)) {
+        closePanel();
+      }
+    });
+
+    // Escape 关闭
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' && sidebar.classList.contains('open')) {
+        closePanel();
+      }
+    });
+  }
+
+  // 弹窗内事件委托：点击 agent 项 → 拉入
+  if (popover) {
+    popover.addEventListener('click', (e) => {
+      const item = e.target.closest('.agent-add-popover-item');
+      if (!item || !item.dataset.agent) return;
+      e.stopPropagation();
+      addSessionAgent(item.dataset.agent);
+    });
+  }
+
+  // 点击面板外关闭弹窗
+  document.addEventListener('click', (e) => {
+    const pv = document.getElementById('agent-add-popover');
+    if (!pv || pv.style.display !== 'block') return;
+    if (!pv.contains(e.target) && e.target.id !== 'btn-session-agent-add') {
+      hideAgentAddPopover();
+    }
+  });
+  loadSessionAgents();
 }
 
 // ─── @提及自动补全 ────────────────────────────────────────────────
@@ -3224,33 +3270,11 @@ function updateMentionPopup() {
   const query = before.substring(atIdx + 1).toLowerCase();
   mentionStartIdx = atIdx;
 
-  // 收集可提及项：如果选了群组，只显示该群组的成员；否则显示所有 agent
+  // 只可 @提及当前会话已拉入的 agent
   const items = [];
-  if (selectedGroupName && groupsCache.length) {
-    const group = groupsCache.find(g => g.name === selectedGroupName);
-    if (group && group.agents) {
-      group.agents.forEach(name => {
-        if (!query || name.toLowerCase().includes(query)) {
-          items.push({ type: 'agent', name, label: `@${name}` });
-        }
-      });
-    }
-  } else {
-    const agentItems = document.querySelectorAll('#agents-list .agent-item');
-    agentItems.forEach(item => {
-      const nameEl = item.querySelector('.agent-name');
-      if (nameEl) {
-        const name = nameEl.textContent.trim();
-        if (!query || name.toLowerCase().includes(query)) {
-          items.push({ type: 'agent', name, label: `@${name}` });
-        }
-      }
-    });
-  }
-  // 群组列表始终可选
-  groupsCache.forEach(g => {
-    if (!query || g.name.toLowerCase().includes(query)) {
-      items.push({ type: 'group', name: g.name, label: `@${g.name}`, agents: g.agents });
+  sessionAgents.forEach(name => {
+    if (!query || name.toLowerCase().includes(query)) {
+      items.push({ type: 'agent', name, label: `@${name}` });
     }
   });
 
@@ -3265,7 +3289,7 @@ function updateMentionPopup() {
     <div class="mention-popup-hint">${esc(t('mentionHint'))}</div>
     ${items.map((item, i) => `
       <div class="mention-item ${i === 0 ? 'mention-item-active' : ''}" data-idx="${i}">
-        <span class="mention-type-tag mention-type-${item.type}">${esc(t(item.type === 'agent' ? 'agents' : 'groups'))}</span>
+        <span class="mention-type-tag mention-type-agent">${esc(t('agents'))}</span>
         <span class="mention-name">${esc(item.label)}</span>
       </div>
     `).join('')}
@@ -3306,13 +3330,7 @@ function selectMention() {
   const before = value.substring(0, mentionStartIdx);
   const after = value.substring(cursor);
 
-  let insert = '';
-  if (item.type === 'group' && item.agents && item.agents.length > 0) {
-    insert = item.agents.map(a => `@${a}`).join(' ');
-  } else {
-    insert = `@${item.name}`;
-  }
-  insert += ' ';
+  const insert = `@${item.name} `;
 
   inputEl.value = before + insert + after;
   const newCursor = before.length + insert.length;

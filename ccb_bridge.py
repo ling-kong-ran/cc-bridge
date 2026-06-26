@@ -247,8 +247,11 @@ class CCBSession:
         self.remote_target: Optional[dict] = None  # 绑定的远程目标
         self.allow_mutate: bool = False  # 是否允许读写模式（变更类工具）
         self.cli: Optional[str] = None  # 本会话使用的 CLI，None 时回退到全局当前 CLI
+        self.agent_configs: dict = {}  # 通过 --agents 传入的自定义 agent 定义
         self._proc: Optional[asyncio.subprocess.Process] = None
         self._on_event: Optional[Callable[[dict], Any]] = None
+        self._viewer_callbacks: dict[str, Callable[[dict], Any]] = {}  # viewer_id → callback
+        self._message_owner_id: Optional[str] = None  # 发起当前消息的 subscriber id
         self._read_task: Optional[asyncio.Task] = None
         self._mcp_config_path: Optional[Path] = None
         self._persistent = False
@@ -326,10 +329,12 @@ class CCBSession:
         )
         return str(self._mcp_config_path), prompt
 
-    async def send_message(self, content: str):
+    async def send_message(self, content: str, owner_id: str = ""):
         """发送一条消息：普通本地会话复用持久 CLI，动态 MCP 会话使用一次性子进程。"""
         if not self.is_running:
             return
+        if owner_id:
+            self._message_owner_id = owner_id
 
         async with self._message_lock:
             if not self.is_running:
@@ -356,7 +361,8 @@ class CCBSession:
                 remote_key = json.dumps(self.remote_target, ensure_ascii=False, sort_keys=True)
             except (TypeError, ValueError):
                 remote_key = str(self.remote_target)
-        return (self.cli or get_current_cli(), self.cwd, self.model, self.skip_permissions, remote_key, self.allow_mutate)
+        agents_key = json.dumps(self.agent_configs, ensure_ascii=False, sort_keys=True) if self.agent_configs else ""
+        return (self.cli or get_current_cli(), self.cwd, self.model, self.skip_permissions, remote_key, self.allow_mutate, agents_key)
 
     async def _send_persistent_message(self, content: str):
         proc_key = self._persistent_proc_key()
@@ -416,6 +422,9 @@ class CCBSession:
         if self.session_id:
             cmd += ["--resume", self.session_id]
 
+        if self.agent_configs:
+            cmd += ["--agents", json.dumps(self.agent_configs, ensure_ascii=False)]
+
         self._proc = await asyncio.create_subprocess_exec(
             *cmd,
             stdin=asyncio.subprocess.PIPE,
@@ -454,6 +463,9 @@ class CCBSession:
         if self.session_id:
             cmd += ["--resume", self.session_id]
 
+        if self.agent_configs:
+            cmd += ["--agents", json.dumps(self.agent_configs, ensure_ascii=False)]
+
         self._proc = await asyncio.create_subprocess_exec(
             *cmd,
             stdin=asyncio.subprocess.PIPE,
@@ -471,10 +483,25 @@ class CCBSession:
         # 启动输出读取
         self._read_task = asyncio.create_task(self._stream_output())
 
-    async def stop(self):
-        """终止当前进程"""
+    async def stop(self, requester_id: str = ""):
+        """终止当前进程。
+        requester_id 非空时需与 _message_owner_id 匹配；空表示系统调用，总是允许。
+        """
+        if requester_id and self._message_owner_id and requester_id != self._message_owner_id:
+            return
         self.is_running = False
+        self._message_owner_id = None
         await self._kill_proc()
+        # 通知所有 viewer 会话已结束
+        for cb in list(self._viewer_callbacks.values()):
+            try:
+                if asyncio.iscoroutinefunction(cb):
+                    await cb({"type": "session_stopped", "message": "Session ended"})
+                else:
+                    cb({"type": "session_stopped", "message": "Session ended"})
+            except Exception:
+                pass
+        self._viewer_callbacks.clear()
         # 清理本会话的临时 MCP 配置文件
         if self._mcp_config_path:
             try:
@@ -483,10 +510,15 @@ class CCBSession:
                 pass
             self._mcp_config_path = None
 
-    async def interrupt(self):
-        """仅终止当前回复生成，保留逻辑会话以便继续补充。"""
+    async def interrupt(self, requester_id: str = ""):
+        """仅终止当前回复生成，保留逻辑会话以便继续补充。
+        requester_id 非空时需与 _message_owner_id 匹配才允许中断。
+        """
         if not self.is_running:
             return
+        if requester_id and self._message_owner_id and requester_id != self._message_owner_id:
+            return
+        self._message_owner_id = None
         await self._kill_proc()
 
     async def _kill_proc(self):
@@ -514,13 +546,37 @@ class CCBSession:
         self._pending_persistent_content = None
         self._pending_persistent_started = False
 
+    def add_viewer(self, viewer_id: str, callback: Callable[[dict], Any]):
+        """添加观察者——接收流式事件但不拥有会话控制权。"""
+        self._viewer_callbacks[viewer_id] = callback
+        print(f"[DEBUG CCBSession.add_viewer] viewer={viewer_id[:10]} total_viewers={len(self._viewer_callbacks)}")
+
+    def remove_viewer(self, viewer_id: str):
+        self._viewer_callbacks.pop(viewer_id, None)
+
     async def _emit_event(self, event: dict):
-        if not self._on_event:
-            return
-        if asyncio.iscoroutinefunction(self._on_event):
-            await self._on_event(event)
-        else:
-            self._on_event(event)
+        evt_type = event.get("type", "unknown")
+        viewer_count = len(self._viewer_callbacks)
+        if viewer_count > 0 and evt_type not in ("stream_event",):
+            print(f"[DEBUG _emit_event] type={evt_type} viewers={viewer_count}")
+        # 通知 owner
+        if self._on_event:
+            try:
+                if asyncio.iscoroutinefunction(self._on_event):
+                    await self._on_event(event)
+                else:
+                    self._on_event(event)
+            except Exception:
+                pass
+        # 通知所有 viewer
+        for cb in list(self._viewer_callbacks.values()):
+            try:
+                if asyncio.iscoroutinefunction(cb):
+                    await cb(event)
+                else:
+                    cb(event)
+            except Exception:
+                pass
 
     async def _stream_output(self, send_process_ended: bool = True):
         """读取 ccb 子进程的 stdout + stderr，逐行解析并推送事件"""
@@ -569,6 +625,7 @@ class CCBSession:
                 if evt_type == "result":
                     self._pending_persistent_content = None
                     self._pending_persistent_started = False
+                    self._message_owner_id = None  # 本轮回复结束，清除消息归属
 
                 # 从 init 或 result 事件中捕获 session_id
                 sid = event.get("session_id")
