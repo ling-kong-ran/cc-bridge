@@ -107,7 +107,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   loadConfig();
   loadSessions();
   initFocusConfigReload();
-  if (autoUpdateEnabled) checkForUpdate();
+  if (autoUpdateEnabled) setTimeout(() => checkForUpdate(), 3000);
 });
 
 async function loadDefaultCwd() {
@@ -577,7 +577,8 @@ async function reloadExternalConfig() {
     loadModels(),
     loadConfig(),
   ]);
-  loadSlashCommands();
+  slashCommands = [];
+  closeSlashCommandPanel();
 }
 
 function applyTheme(theme, persist = true) {
@@ -1084,7 +1085,6 @@ async function loadModels() {
     const availableModels = Array.isArray(models) ? models.filter(Boolean) : [];
     if (!availableModels.length) {
       modelSelect.innerHTML = '<option value="claude-sonnet-4-6">Sonnet 4.6</option>';
-      scheduleSlashCommandReload();
       return;
     }
     modelSelect.innerHTML = availableModels.map((model, idx) => (
@@ -1093,10 +1093,8 @@ async function loadModels() {
     if (previousModel && !availableModels.includes(previousModel)) {
       modelSelect.value = availableModels[0] || '';
     }
-    scheduleSlashCommandReload();
   } catch (e) {
     modelSelect.innerHTML = '<option value="claude-sonnet-4-6">Sonnet 4.6</option>';
-    scheduleSlashCommandReload();
   }
 }
 
@@ -1433,13 +1431,17 @@ function scheduleRender() {
   });
 }
 
-function renderCurrentState() {
+function renderCurrentState(final = false) {
   if (!currentAssistantEl) return;
   const el = currentAssistantEl.querySelector('.msg-content');
   let html = '';
 
   for (const block of currentContent) {
-    html += renderBlock(block);
+    if (!final && isResponding && block.type === 'text' && block.text) {
+      html += `<div class="text-block">${renderStreamingText(block.text)}</div>`;
+    } else {
+      html += renderBlock(block);
+    }
   }
 
   for (const idx of Object.keys(streamBlocks).sort((a,b) => a-b)) {
@@ -1447,7 +1449,7 @@ function renderCurrentState() {
     if (block.type === 'thinking' && block.thinking) {
       html += renderBlock({ type: 'thinking', thinking: block.thinking });
     } else if (block.type === 'text' && block.text) {
-      html += `<div class="text-block">${renderMd(block.text)}<span class="typing-cursor"></span></div>`;
+      html += `<div class="text-block">${renderStreamingText(block.text)}<span class="typing-cursor"></span></div>`;
     } else if (block.type === 'tool_use') {
       html += `<div class="tool-card">
         <div class="tool-header"><span class="tool-icon">&#9881;</span> ${esc(block.name || t('tool'))}</div>
@@ -1461,6 +1463,10 @@ function renderCurrentState() {
   }
 
   el.innerHTML = html;
+}
+
+function renderStreamingText(text) {
+  return esc(text).replace(/\n/g, '<br>');
 }
 
 function renderBlock(block) {
@@ -1523,7 +1529,7 @@ function handleAssistantFinal(data) {
   registerTaskBlocks(currentContent);
 
   streamBlocks = {};
-  renderCurrentState();
+  renderCurrentState(true);
   scrollToBottom();
 }
 
@@ -1732,6 +1738,13 @@ function initInput() {
   inputEl.addEventListener('input', () => {
     inputEl.style.height = 'auto';
     inputEl.style.height = Math.min(inputEl.scrollHeight, 200) + 'px';
+    const query = getSlashQuery();
+    if (query !== null && !slashCommands.length) {
+      slashCommandPanel.innerHTML = `<div class="slash-command-empty">${esc(t('loading'))}</div>`;
+      slashCommandPanel.style.display = 'block';
+      ensureSlashCommandsLoaded();
+      return;
+    }
     updateSlashCommandPanel();
   });
 
@@ -1759,18 +1772,19 @@ function initInput() {
   document.getElementById('welcome-new-session')?.addEventListener('click', startNewSession);
   modelSelect.addEventListener('change', () => {
     renderTopbarMeta();
-    loadSlashCommands();
+    slashCommands = [];
+    closeSlashCommandPanel();
     // 记住选择，刷新后恢复
     savedModelPref = modelSelect.value;
     saveGuiSettings({ default_model: modelSelect.value });
   });
-  cwdInput.addEventListener('change', loadSlashCommands);
   cwdInput.addEventListener('change', () => {
+    slashCommands = [];
+    closeSlashCommandPanel();
     openCurrentCwdSessionGroup();
     loadSessions();
     loadMcpServers();
   });
-  cwdInput.addEventListener('blur', loadSlashCommands);
 
   // 附件按钮 —— 打开自定义文件选择器
   btnAttach.addEventListener('click', () => openFilePicker());
@@ -1786,8 +1800,6 @@ function initInput() {
       closeSlashCommandPanel();
     }
   });
-
-  loadSlashCommands();
 }
 
 async function copyConversationMarkdown() {
@@ -1971,9 +1983,17 @@ function uploadFiles(files) {
   });
 }
 
+let slashCommandLoadPromise = null;
+
 function scheduleSlashCommandReload() {
   clearTimeout(slashCommandLoadTimer);
   slashCommandLoadTimer = setTimeout(loadSlashCommands, 150);
+}
+
+async function ensureSlashCommandsLoaded() {
+  if (slashCommands.length || slashCommandLoadPromise) return slashCommandLoadPromise;
+  slashCommandLoadPromise = loadSlashCommands().finally(() => { slashCommandLoadPromise = null; });
+  return slashCommandLoadPromise;
 }
 
 async function loadSlashCommands() {
@@ -3071,9 +3091,10 @@ pickerUp.addEventListener('click', () => {
 });
 pickerSelect.addEventListener('click', () => {
   cwdInput.value = pickerCurrentDir;
+  slashCommands = [];
+  closeSlashCommandPanel();
   openCurrentCwdSessionGroup();
   loadSessions();
-  loadSlashCommands();
   closePicker();
 });
 
