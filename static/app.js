@@ -354,27 +354,6 @@ function formatUsd(value) {
   return t('notifyCost', { cost: cost.toFixed(4) });
 }
 
-function renderMarkdown(md) {
-  if (!md) return '';
-  return (md || '')
-    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
-    .replace(/^### (.+)$/gm, '<h3>$1</h3>')
-    .replace(/^## (.+)$/gm, '<h2>$1</h2>')
-    .replace(/^# (.+)$/gm, '<h1>$1</h1>')
-    .replace(/^\- (.+)$/gm, '<li>$1</li>')
-    .replace(/(<li>.*<\/li>\n?)+/g, '<ul>$&</ul>')
-    .replace(/```([\s\S]*?)```/g, '<pre><code>$1</code></pre>')
-    .replace(/`([^`]+)`/g, '<code>$1</code>')
-    .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
-    .replace(/\*(.+?)\*/g, '<em>$1</em>')
-    .replace(/\n\n/g, '</p><p>')
-    .replace(/\n/g, '<br>')
-    .replace(/^(.+)$/gm, (match) => match.startsWith('<') ? match : match.replace(/^(.+)$/, '<p>$1</p>'))
-    .replace(/<\/p><p>/g, '</p>\n<p>')
-    .replace(/<p><\/(h[123]|ul|pre)>/g, '</$1>')
-    .replace(/<(h[123]|ul|pre)>([^<]*)<\/p>/g, '<$1>$2');
-}
-
 function getProjectName(cwd, fallback = '') {
   if (!cwd) return fallback;
   const normalized = cwd.replace(/[\\\/]+$/, '');
@@ -2033,7 +2012,7 @@ function domText(el) {
 // ─── 消息右键引用 ────────────────────────────────────────────
 function hideMsgContextMenu() {
   const menu = document.getElementById('msg-context-menu');
-  if (menu) menu.style.display = 'none';
+  if (menu) { menu.style.display = 'none'; menu.style.visibility = 'hidden'; }
 }
 
 function quoteIntoInput(text) {
@@ -2080,7 +2059,7 @@ function initMessageContextMenu() {
     e.preventDefault();
     quoteSourceText = domText(msgEl);
     if (!quoteSourceText) return;
-    // 先显示以便测量尺寸，再做视口边界收敛
+    // 先显示以便测量尺寸，再做视口边界收敛（visibility:hidden 防止闪烁）
     menu.style.display = 'block';
     const rect = menu.getBoundingClientRect();
     let x = e.clientX;
@@ -2089,6 +2068,7 @@ function initMessageContextMenu() {
     if (y + rect.height > window.innerHeight) y = window.innerHeight - rect.height - 4;
     menu.style.left = Math.max(4, x) + 'px';
     menu.style.top = Math.max(4, y) + 'px';
+    menu.style.visibility = 'visible';
   });
 
   menu.querySelector('[data-action="quote"]')?.addEventListener('click', () => {
@@ -2540,9 +2520,13 @@ function updateUI() {
   }
 }
 
+let _scrollPending = false;
 function scrollToBottom() {
+  if (_scrollPending) return;
+  _scrollPending = true;
   requestAnimationFrame(() => {
-    messagesEl.scrollTop = messagesEl.scrollHeight;
+    messagesEl.scrollTo({ top: messagesEl.scrollHeight, behavior: 'instant' });
+    _scrollPending = false;
   });
 }
 
@@ -3195,6 +3179,12 @@ function initSessionAgentPanel() {
         closePanel();
       }
     });
+
+    // 面板内 X 关闭按钮
+    const closeBtn = document.getElementById('btn-chat-sidebar-close');
+    if (closeBtn) {
+      closeBtn.addEventListener('click', closePanel);
+    }
   }
 
   // 弹窗内事件委托：点击 agent 项 → 拉入
@@ -3441,7 +3431,7 @@ async function viewMemoryFile(filename) {
     if (!resp.ok) return;
     const data = await resp.json();
     document.getElementById('memory-modal-title').textContent = data.title || data.name;
-    document.getElementById('memory-modal-body').innerHTML = renderMarkdown(data.body || data.content || '');
+    document.getElementById('memory-modal-body').innerHTML = renderMd(data.body || data.content || '');
     document.getElementById('memory-modal-overlay').style.display = 'flex';
   } catch (e) {
     console.error('Memory file load failed:', e);
@@ -3717,11 +3707,12 @@ function showCwdContextMenu(e, cwd) {
   if (y + rect.height > window.innerHeight) y = window.innerHeight - rect.height - 4;
   menu.style.left = Math.max(4, x) + 'px';
   menu.style.top = Math.max(4, y) + 'px';
+  menu.style.visibility = 'visible';
 }
 
 function hideCwdContextMenu() {
   const menu = document.getElementById('cwd-context-menu');
-  if (menu) menu.style.display = 'none';
+  if (menu) { menu.style.display = 'none'; menu.style.visibility = 'hidden'; }
 }
 
 function initCwdContextMenu() {

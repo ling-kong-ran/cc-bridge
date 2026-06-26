@@ -1019,6 +1019,7 @@ async def handle_sse(query: dict, writer: asyncio.StreamWriter):
     client_ips[client_id] = get_client_ip(writer)
 
     # 发送初始 connected 事件
+    print(f"[DEBUG SSE] connected client={client_id[:10]}")
     await _sse_write(writer, "connected", {"client_id": client_id})
 
     # 重连：如果该 client_id 已有活跃会话，同步当前状态给前端
@@ -1056,6 +1057,7 @@ async def handle_sse(query: dict, writer: asyncio.StreamWriter):
         if sse_clients.get(client_id) is queue:
             sse_clients.pop(client_id, None)
         # 清理 viewer 状态：SSE 断开时从 owner session 移除 viewer
+        print(f"[DEBUG SSE] disconnected client={client_id[:10]}")
         viewer_owner = client_viewing.pop(client_id, None)
         if viewer_owner:
             owner_sess = session_manager.get_session(viewer_owner)
@@ -1173,18 +1175,10 @@ async def handle_action(body: bytes, writer: asyncio.StreamWriter):
 
         # 检查该 session 是否已在另一个客户端活跃（正在回复中）
         owner_id = session_owner.get(resume_id)
-        print(f"[DEBUG resume_session] client={client_id[:10]} resume_id={resume_id[:10]} "
-              f"owner_id={owner_id[:10] if owner_id else None} "
-              f"self_vs_owner={owner_id != client_id if owner_id else 'N/A'} "
-              f"session_owner_keys={list(session_owner.keys())}")
         if owner_id and owner_id != client_id:
             owner_session = session_manager.get_session(owner_id)
-            print(f"[DEBUG resume_session] owner_session={owner_session is not None} "
-                  f"is_running={owner_session.is_running if owner_session else 'N/A'} "
-                  f"_message_owner_id={owner_session._message_owner_id if owner_session else 'N/A'}")
             if owner_session and owner_session.is_running and owner_session._message_owner_id:
                 # 作为 viewer 订阅到活跃 session
-                print(f"[DEBUG resume_session] >>> Subscribing {client_id[:10]} as VIEWER to owner {owner_id[:10]}")
                 client_session_ids[client_id] = resume_id
                 client_viewing[client_id] = owner_id
                 meta = client_meta.setdefault(owner_id, {})
@@ -1192,8 +1186,6 @@ async def handle_action(body: bytes, writer: asyncio.StreamWriter):
 
                 async def on_viewer_event(event: dict):
                     evt_type = event.get("type", "unknown")
-                    if evt_type not in ("stream_event",):
-                        print(f"[DEBUG on_viewer_event] viewer={client_id[:10]} evt_type={evt_type}")
                     if evt_type == "session_id_captured":
                         client_session_ids[client_id] = event.get("session_id", resume_id)
                         await push_event(client_id, "session_id_captured", event)
@@ -1217,6 +1209,7 @@ async def handle_action(body: bytes, writer: asyncio.StreamWriter):
 
         client_meta[client_id] = {"model": model, "cwd": cwd, "remote_target_id": remote_target_id, "cli": cli}
         client_session_ids[client_id] = resume_id
+        session_owner[resume_id] = client_id  # 恢复会话时直接设置归属，因为 session_id_captured 不会对已 resume 的 session 重复触发
 
         async def on_event_resume(event: dict):
             evt_type = event.get("type", "unknown")
