@@ -116,7 +116,6 @@ async function loadDefaultCwd() {
     const data = await resp.json();
     if (data.cwd && !cwdInput.value.trim()) {
       cwdInput.value = data.cwd;
-      scheduleSlashCommandReload();
       loadSessions();
     }
   } catch (e) { /* ignore */ }

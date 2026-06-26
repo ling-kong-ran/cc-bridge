@@ -61,6 +61,8 @@ _available = _detect_available_clis()
 _current_cli = _available[0]["path"] if _available else "claude"
 DEFAULT_CWD = str(Path(__file__).parent.resolve())  # 项目根目录
 _slash_command_cache: dict[str, dict] = {}
+_slash_command_cache_max = 32
+_slash_command_locks: dict[str, asyncio.Lock] = {}
 
 def get_current_cli() -> str:
     return _current_cli
@@ -96,8 +98,27 @@ async def discover_slash_commands(
     cached = _slash_command_cache.get(cache_key)
     now = time.time()
     if cached and now - cached.get("time", 0) < cache_ttl:
+        cached["time"] = now
         return dict(cached["data"])
 
+    lock = _slash_command_locks.setdefault(cache_key, asyncio.Lock())
+    async with lock:
+        cached = _slash_command_cache.get(cache_key)
+        now = time.time()
+        if cached and now - cached.get("time", 0) < cache_ttl:
+            cached["time"] = now
+            return dict(cached["data"])
+
+        data = await _discover_slash_commands_uncached(cli, model, run_cwd, skip_permissions)
+        if data.get("error") is None:
+            _slash_command_cache[cache_key] = {"time": time.time(), "data": dict(data)}
+            if len(_slash_command_cache) > _slash_command_cache_max:
+                oldest_key = min(_slash_command_cache, key=lambda key: _slash_command_cache[key].get("time", 0))
+                _slash_command_cache.pop(oldest_key, None)
+        return data
+
+
+async def _discover_slash_commands_uncached(cli: str, model: str, run_cwd: str, skip_permissions: bool) -> dict:
     cmd = [
         cli,
         "-p",
@@ -176,7 +197,6 @@ async def discover_slash_commands(
                 "model": init_event.get("model") or model,
                 "version": init_event.get("claude_code_version") or "",
             })
-            _slash_command_cache[cache_key] = {"time": now, "data": dict(data)}
             return data
 
         data["error"] = "\n".join(line for line in stderr_lines if line).strip() or "CLI 未返回初始化事件"
