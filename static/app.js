@@ -992,11 +992,13 @@ async function checkForUpdate(manual = false) {
         changelog.style.display = '';
         changelog.textContent = data.commits || `${data.server_start_short || ''} → ${data.local_short || ''}`;
       }
-      if (manual && checkHint) checkHint.textContent = '';
-      setUpdateStatus(t('updateRestartNeeded'), '');
-      const runBtn = document.getElementById('update-run');
-      if (runBtn) runBtn.disabled = false;
-      openUpdateModal();
+      if (manual) {
+        if (checkHint) checkHint.textContent = '';
+        setUpdateStatus(t('updateRestartNeeded'), '');
+        const runBtn = document.getElementById('update-run');
+        if (runBtn) runBtn.disabled = false;
+        openUpdateModal();
+      }
     } else if (manual && checkHint) {
       checkHint.textContent = t('updateUpToDate');
       checkHint.className = 'update-check-hint ok';
