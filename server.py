@@ -1046,6 +1046,7 @@ async def handle_sse(query: dict, writer: asyncio.StreamWriter):
                 "session_id": owner_sess.session_id or client_session_ids.get(client_id, ""),
                 "remote_target_id": meta.get("remote_target_id", ""),
                 "cli": owner_sess.cli or get_current_cli(),
+                "cwd": owner_sess.cwd or meta.get("cwd", ""),
                 "viewing": True,
             }
             await _sse_write(writer, "session_started", state)
@@ -1224,6 +1225,7 @@ async def handle_action(body: bytes, writer: asyncio.StreamWriter):
                 await push_event(client_id, "session_started", {
                     "model": owner_session.model, "resumed": True, "session_id": resume_id,
                     "remote_target_id": meta.get("remote_target_id", ""), "cli": owner_session.cli or "",
+                    "cwd": owner_session.cwd or meta.get("cwd", ""),
                     "viewing": True,
                 })
                 await push_event(client_id, "generation_started", {})
@@ -1237,9 +1239,48 @@ async def handle_action(body: bytes, writer: asyncio.StreamWriter):
         client_session_ids[client_id] = resume_id
         session_owner[resume_id] = client_id  # 恢复会话时直接设置归属，因为 session_id_captured 不会对已 resume 的 session 重复触发
 
-        # 如果从旧 owner 手中接管会话，通知旧 owner 前端转为 viewer
+        # 如果从旧 owner 手中接管会话，清理旧 session 并注册旧 owner 为 viewer
         if owner_id and owner_id != client_id:
+            # 停止旧 owner 的 CCB session（避免资源泄漏）
+            old_session = session_manager.get_session(owner_id)
+            if old_session:
+                await old_session.stop()
+
             old_meta = client_meta.get(owner_id, {})
+            # 直接注册旧 owner 为 viewer，后续事件自动广播，无需前端再发 resume
+            client_viewing[owner_id] = client_id
+            client_session_ids[owner_id] = resume_id
+            client_meta.setdefault(owner_id, {})
+            client_meta[owner_id].update({
+                "model": old_meta.get("model", model),
+                "cwd": old_meta.get("cwd", cwd or ""),
+                "cli": old_meta.get("cli", cli or ""),
+                "remote_target_id": old_meta.get("remote_target_id", ""),
+            })
+
+            async def on_taken_viewer_event(event: dict):
+                evt_type = event.get("type", "unknown")
+                if evt_type == "session_id_captured":
+                    client_session_ids[owner_id] = event.get("session_id", resume_id)
+                    await push_event(owner_id, "session_id_captured", event)
+                elif evt_type in ("assistant", "stream_event", "system", "error",
+                                   "process_ended", "model_changed", "result", "tool_result", "user",
+                                   "session_stopped"):
+                    await push_event(owner_id, evt_type, event)
+
+            session.add_viewer(owner_id, on_taken_viewer_event)
+
+            # 先推送 session_started(viewing=true) 让前端切换 UI 为 viewer 模式
+            await push_event(owner_id, "session_started", {
+                "model": old_meta.get("model", model),
+                "resumed": True,
+                "session_id": resume_id,
+                "remote_target_id": old_meta.get("remote_target_id", ""),
+                "cli": cli or old_meta.get("cli", ""),
+                "cwd": old_meta.get("cwd", cwd or ""),
+                "viewing": True,
+            })
+
             await push_event(owner_id, "session_taken", {
                 "session_id": resume_id,
                 "model": old_meta.get("model", model),
@@ -1315,11 +1356,23 @@ async def handle_action(body: bytes, writer: asyncio.StreamWriter):
             # 提取 @agentname 提及，将对应 agent 定义传给 CLI（--agents 参数）
             mentioned = re.findall(r"@([A-Za-z0-9_.-]+)", content)
             if mentioned:
-                new_configs = get_agents_for_cli(mentioned, cwd=session.cwd or "")
-                if new_configs:
-                    merged = dict(session.agent_configs)
-                    merged.update(new_configs)
-                    session.agent_configs = merged
+                # @all 展开为当前会话已拉入的全部 agent
+                if "all" in mentioned:
+                    mentioned = [m for m in mentioned if m != "all"]
+                    for name in client_session_agents.get(client_id, []):
+                        if name not in mentioned:
+                            mentioned.append(name)
+                if mentioned:
+                    new_configs = get_agents_for_cli(mentioned, cwd=session.cwd or "")
+                    if new_configs:
+                        merged = dict(session.agent_configs)
+                        merged.update(new_configs)
+                        session.agent_configs = merged
+            # 推送用户消息给所有 viewer（CLI 不会回显用户输入，viewer 看不到"问"）
+            viewer_ids = [vid for vid, oid in client_viewing.items() if oid == client_id]
+            for vid in viewer_ids:
+                await push_event(vid, "user_message", {"content": content})
+
             await session.send_message(content, owner_id=client_id)
             await send_response(writer, 200, "application/json", b'{"ok":true}')
         else:

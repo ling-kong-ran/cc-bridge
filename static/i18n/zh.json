@@ -314,5 +314,7 @@
   "viewingPlaceholder": "正在观看实时会话…",
   "activeSessions": "活跃中",
   "recentSessions": "最近",
-  "sessionTaken": "会话被其他客户端接管，切换为观察模式"
+  "sessionTaken": "会话被其他客户端接管，切换为观察模式",
+  "mentionAll": "@全体成员",
+  "mentionAllTag": "全部"
 }

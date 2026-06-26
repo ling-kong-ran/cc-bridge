@@ -314,5 +314,7 @@
   "viewingPlaceholder": "Viewing live session...",
   "activeSessions": "Active",
   "recentSessions": "Recent",
-  "sessionTaken": "Session taken over by another client, switching to viewer mode"
+  "sessionTaken": "Session taken over by another client, switching to viewer mode",
+  "mentionAll": "@all members",
+  "mentionAllTag": "ALL"
 }

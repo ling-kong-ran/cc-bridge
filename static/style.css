@@ -2196,6 +2196,9 @@ html.light-theme .select {
 .mention-type-agent {
   background: rgba(var(--accent-rgb),0.18); color: var(--accent);
 }
+.mention-type-all {
+  background: var(--green-faint); color: var(--green);
+}
 .mention-name {
   color: var(--text-base); white-space: nowrap; overflow: hidden;
   text-overflow: ellipsis; font-weight: 500;

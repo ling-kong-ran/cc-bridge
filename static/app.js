@@ -1250,11 +1250,18 @@ function bindSSEEvents() {
       cliSelectEl.value = data.cli;
       renderTopbarMeta(data.model || '');
     }
-    // 重连时清除欢迎消息，不重复显示系统消息
+    // 重连时清除欢迎消息，viewer 需加载历史并切换到会话页
     if (!wasActive) {
       const welcome = messagesEl.querySelector('.welcome-msg');
       if (welcome) welcome.remove();
-      if (isViewer) {
+      if (isViewer && data.session_id) {
+        // viewer 首次连接或重连：设置会话 ID、切换页面、加载历史
+        currentSessionId = data.session_id;
+        if (data.cwd) cwdInput.value = data.cwd;
+        showPage('chat');
+        addSystemMsg(t('viewingSession'));
+        loadSessionHistory(data.session_id, data.cwd || '');
+      } else if (isViewer) {
         addSystemMsg(t('viewingSession'));
       } else {
         addSystemMsg(modelLabel ? t('sessionStarted', { model: modelLabel }) : t('sessionStartedPlain'));
@@ -1271,18 +1278,30 @@ function bindSSEEvents() {
   });
 
   eventSource.addEventListener('session_taken', (e) => {
-    // 会话被其他客户端接管，自动转为 viewer
+    // 会话被其他客户端接管，服务端已自动注册本端为 viewer 并推送 session_started(viewing=true)
+    // 前端只需显示提示，无需调用 resumeSession（避免 ping-pong 循环）
     const data = JSON.parse(e.data);
     if (data.session_id && data.session_id === currentSessionId) {
       addSystemMsg(t('sessionTaken') || '会话被其他客户端接管，切换为观察模式');
-      // 重新进入会话，服务端会识别为 viewer
-      resumeSession(data.session_id, data.cwd, data.model, 0, data.remote_target_id || '', null, data.cli || '');
+      isViewer = true;
+      isResponding = false;
+      updateUI();
+    }
+  });
+
+  eventSource.addEventListener('user_message', (e) => {
+    // viewer 收到 owner 发送的用户消息（一问一答中的"问"）
+    const data = JSON.parse(e.data);
+    if (data.content) {
+      addUserMessage(data.content);
+      scrollToBottom();
     }
   });
 
   eventSource.addEventListener('generation_started', (e) => {
     // 刷新后重连到正在回复的会话，恢复响应状态
     isResponding = true;
+    currentTurnStartedAt = Date.now();  // 重置计时起点，避免 viewer 看到巨量耗时
     currentAssistantEl = createAssistantBubble();
     currentContent = [];
     streamBlocks = {};
@@ -1473,6 +1492,8 @@ function handleStreamEvent(data) {
         currentAssistantEl = createAssistantBubble();
         currentContent = [];
         streamBlocks = {};
+        currentTurnStartedAt = Date.now();
+        startTurnTimer();
       }
       break;
 
@@ -3270,8 +3291,12 @@ function updateMentionPopup() {
   const query = before.substring(atIdx + 1).toLowerCase();
   mentionStartIdx = atIdx;
 
-  // 只可 @提及当前会话已拉入的 agent
+  // 只可 @提及当前会话已拉入的 agent，外加 @all 全体
   const items = [];
+  // @all 始终出现在顶部（需要至少有一个 agent 才有意义）
+  if (sessionAgents.length >= 1 && (!query || 'all'.includes(query) || t('mentionAll').toLowerCase().includes(query))) {
+    items.push({ type: 'all', name: 'all', label: t('mentionAll') || '@全体成员' });
+  }
   sessionAgents.forEach(name => {
     if (!query || name.toLowerCase().includes(query)) {
       items.push({ type: 'agent', name, label: `@${name}` });
@@ -3289,7 +3314,7 @@ function updateMentionPopup() {
     <div class="mention-popup-hint">${esc(t('mentionHint'))}</div>
     ${items.map((item, i) => `
       <div class="mention-item ${i === 0 ? 'mention-item-active' : ''}" data-idx="${i}">
-        <span class="mention-type-tag mention-type-agent">${esc(t('agents'))}</span>
+        <span class="mention-type-tag ${item.type === 'all' ? 'mention-type-all' : 'mention-type-agent'}">${esc(item.type === 'all' ? (t('mentionAllTag') || 'ALL') : t('agents'))}</span>
         <span class="mention-name">${esc(item.label)}</span>
       </div>
     `).join('')}
@@ -3948,6 +3973,22 @@ async function resumeSession(sessionId, cwd, model, savedCost = 0, remoteTargetI
     addSystemMsg(t('restoreFailed', { message: result?.error || t('unknownError') }), true);
   }
   loadSessions();
+}
+
+async function loadSessionHistory(sessionId, cwd) {
+  try {
+    const resp = await fetch('/api/sessions/history', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ session_id: sessionId, cwd: cwd || cwdInput.value.trim() || '' }),
+    });
+    const history = await resp.json();
+    if (history && history.length > 0) {
+      renderHistory(history);
+    }
+  } catch(e) {
+    console.error('History load failed:', e);
+  }
 }
 
 function renderHistory(history) {
