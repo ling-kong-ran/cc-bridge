@@ -1962,6 +1962,89 @@ html.light-theme .select {
   padding: 8px 0; letter-spacing: 0.06em;
 }
 
+/* ─── Memory ─────────────────────────────────────────────────── */
+.memory-search-row {
+  display: flex; gap: 8px; margin-bottom: 12px; align-items: center;
+}
+
+.memory-search-row .input { flex: 1; }
+
+.memory-file-item {
+  display: flex; flex-direction: column; gap: 4px;
+  padding: 9px 0; border-bottom: 1px solid var(--border-dim);
+}
+
+.memory-file-item:last-child { border-bottom: none; }
+
+.memory-file-head {
+  display: flex; align-items: center; justify-content: space-between;
+}
+
+.memory-file-name {
+  font-family: var(--font-mono); font-size: 12px;
+  color: var(--purple-dim, #c792ea); font-weight: 500;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+
+.memory-file-meta {
+  font-family: var(--font-mono); font-size: 10px;
+  color: var(--text-ghost); letter-spacing: 0.04em;
+}
+
+.memory-file-snippet {
+  font-family: var(--font-mono); font-size: 11px;
+  color: var(--text-muted); line-height: 1.5;
+  padding: 4px 8px;
+  background: var(--bg-input);
+  border-radius: var(--radius-xs);
+  border: 1px solid var(--border-dim);
+}
+
+.memory-file-snippet .memory-hl {
+  background: rgba(var(--accent-rgb), 0.18);
+  color: var(--green);
+  padding: 1px 2px; border-radius: 2px;
+}
+
+.memory-file-actions {
+  display: flex; gap: 2px; flex-shrink: 0;
+}
+
+.memory-modal-head {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 14px 18px 10px;
+  border-bottom: 1px solid var(--border-dim);
+}
+
+.memory-modal-body {
+  font-family: var(--font-mono); font-size: 13px; line-height: 1.7;
+  color: var(--text-base); padding: 16px 18px; overflow-y: auto;
+  max-height: 60vh;
+}
+
+.memory-modal-body h1, .memory-modal-body h2, .memory-modal-body h3 {
+  font-family: var(--font-mono); font-weight: 600;
+  margin: 16px 0 7px; color: var(--text-bright);
+}
+
+.memory-modal-body pre {
+  background: var(--code-bg); border: 1px solid var(--border-dim);
+  border-left: 2px solid var(--purple-dim, #c792ea);
+  border-radius: var(--radius-xs);
+  padding: 10px 14px; overflow-x: auto; margin: 10px 0;
+  font-size: 12px; line-height: 1.5;
+}
+
+.memory-modal-body code {
+  background: rgba(var(--accent-rgb), 0.05);
+  border: 1px solid var(--border-dim);
+  padding: 1px 5px; border-radius: 3px;
+  font-size: 0.88em;
+}
+
+.memory-modal-body ul { padding-left: 20px; margin: 7px 0; }
+.memory-modal-body li { margin: 4px 0; }
+
 /* ─── Picker ────────────────────────────────────────────────── */
 .picker-overlay {
   position: fixed; inset: 0;

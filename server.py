@@ -40,6 +40,7 @@ from config_manager import (
     get_agent,
 )
 from session_store import list_sessions, save_session, add_session_usage, delete_session, load_session_history, rename_session
+from memory_index import list_memory_files, search_memory, get_memory_file, delete_memory_file, index_memory
 import remote_manager
 
 STATIC_DIR = Path(__file__).parent / "static"
@@ -1241,6 +1242,20 @@ async def handle_api_get(path: str, writer: asyncio.StreamWriter, query: dict = 
         }
     elif path == "/api/default-cwd":
         data = {"cwd": DEFAULT_CWD}
+    elif path == "/api/memory/files":
+        query = query or {}
+        cwd = query.get("cwd", [DEFAULT_CWD])[0] or DEFAULT_CWD
+        data = list_memory_files(cwd)
+    elif path == "/api/memory/search":
+        query = query or {}
+        q = query.get("q", [""])[0] or ""
+        cwd = query.get("cwd", [DEFAULT_CWD])[0] or DEFAULT_CWD
+        data = search_memory(q, cwd) if q else []
+    elif path == "/api/memory/index":
+        query = query or {}
+        cwd = query.get("cwd", [DEFAULT_CWD])[0] or DEFAULT_CWD
+        count = index_memory(cwd, force=True)
+        data = {"count": count, "ok": count >= 0}
     elif path == "/api/remote-targets":
         data = {"targets": remote_manager.list_targets(), "password_supported": remote_manager.password_supported()}
     elif path == "/api/sessions":
@@ -1444,6 +1459,31 @@ async def handle_api_post(path: str, body: bytes, writer: asyncio.StreamWriter):
             await send_response(writer, 400, "application/json; charset=utf-8", resp)
             return
         await send_response(writer, 200, "application/json", b'{"ok":true}')
+        return
+    elif path == "/api/memory/file":
+        filename = data.get("filename", "")
+        cwd = data.get("cwd", DEFAULT_CWD)
+        result = get_memory_file(filename, cwd)
+        if not result:
+            await send_response(writer, 404, "application/json", b'{"error":"not found"}')
+        else:
+            resp = json.dumps(result, ensure_ascii=False).encode("utf-8")
+            await send_response(writer, 200, "application/json; charset=utf-8", resp)
+        return
+    elif path == "/api/memory/delete":
+        filename = data.get("filename", "")
+        cwd = data.get("cwd", DEFAULT_CWD)
+        ok = delete_memory_file(filename, cwd)
+        if ok:
+            await send_response(writer, 200, "application/json", b'{"ok":true}')
+        else:
+            await send_response(writer, 404, "application/json", b'{"error":"not found"}')
+        return
+    elif path == "/api/memory/index":
+        cwd = data.get("cwd", DEFAULT_CWD)
+        count = index_memory(cwd, force=True)
+        resp = json.dumps({"count": count, "ok": count >= 0}, ensure_ascii=False).encode("utf-8")
+        await send_response(writer, 200, "application/json; charset=utf-8", resp)
         return
     else:
         await send_response(writer, 404, "application/json", b'{"error":"not found"}')

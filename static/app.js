@@ -103,6 +103,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   initRemote();
   initMcpManager();
   initAgentModal();
+  initMemoryUI();
   loadDefaultCwd();
   loadClis();
   loadModels();
@@ -348,6 +349,27 @@ function formatUsd(value) {
   const cost = Number(value || 0);
   if (!Number.isFinite(cost) || cost <= 0) return '';
   return t('notifyCost', { cost: cost.toFixed(4) });
+}
+
+function renderMarkdown(md) {
+  if (!md) return '';
+  return (md || '')
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/^### (.+)$/gm, '<h3>$1</h3>')
+    .replace(/^## (.+)$/gm, '<h2>$1</h2>')
+    .replace(/^# (.+)$/gm, '<h1>$1</h1>')
+    .replace(/^\- (.+)$/gm, '<li>$1</li>')
+    .replace(/(<li>.*<\/li>\n?)+/g, '<ul>$&</ul>')
+    .replace(/```([\s\S]*?)```/g, '<pre><code>$1</code></pre>')
+    .replace(/`([^`]+)`/g, '<code>$1</code>')
+    .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+    .replace(/\*(.+?)\*/g, '<em>$1</em>')
+    .replace(/\n\n/g, '</p><p>')
+    .replace(/\n/g, '<br>')
+    .replace(/^(.+)$/gm, (match) => match.startsWith('<') ? match : match.replace(/^(.+)$/, '<p>$1</p>'))
+    .replace(/<\/p><p>/g, '</p>\n<p>')
+    .replace(/<p><\/(h[123]|ul|pre)>/g, '</$1>')
+    .replace(/<(h[123]|ul|pre)>([^<]*)<\/p>/g, '<$1>$2');
 }
 
 function getProjectName(cwd, fallback = '') {
@@ -2405,6 +2427,7 @@ async function loadConfig() {
     const agents = await (await fetch('/api/agents')).json();
     renderAgents(agents);
     loadMcpServers();
+    loadMemoryFiles();
   } catch (e) {
     console.error('配置加载失败:', e);
   }
@@ -2865,6 +2888,162 @@ function initAgentModal() {
   document.addEventListener('keydown', (e) => {
     if (e.key === 'Escape' && document.getElementById('agent-modal-overlay')?.style.display === 'flex') {
       closeAgentModal();
+    }
+  });
+}
+
+// ─── Memory 浏览 ────────────────────────────────────────────────
+let memoryFilesCache = [];
+
+function currentCwdParam() {
+  return `cwd=${encodeURIComponent(cwdInput.value.trim() || '')}`;
+}
+
+async function loadMemoryFiles() {
+  try {
+    const resp = await fetch(`/api/memory/files?${currentCwdParam()}`);
+    memoryFilesCache = await resp.json();
+    renderMemoryFiles(memoryFilesCache);
+  } catch (e) {
+    console.error('Memory load failed:', e);
+  }
+}
+
+function renderMemoryFiles(files) {
+  const el = document.getElementById('memory-list');
+  if (!files || !files.length) {
+    el.innerHTML = `<p class="empty-state">${esc(t('noMemoryFiles'))}</p>`;
+    return;
+  }
+  el.innerHTML = files.map(f => {
+    const d = new Date(f.updated_at * 1000);
+    const timeStr = d.toLocaleString();
+    const sizeStr = f.size < 1024 ? `${f.size}B` : f.size < 1048576 ? `${(f.size / 1024).toFixed(1)}KB` : `${(f.size / 1048576).toFixed(1)}MB`;
+    return `
+      <div class="memory-file-item" data-file="${esc(f.name)}">
+        <div class="memory-file-head">
+          <span class="memory-file-name">${esc(f.title || f.name)}</span>
+          <div class="memory-file-actions">
+            <button class="agent-action-btn memory-view-btn" data-file="${esc(f.name)}" title="${esc(t('view'))}">&#128065;</button>
+            <button class="agent-action-btn agent-del-btn memory-del-btn" data-file="${esc(f.name)}" title="${esc(t('delete'))}">&times;</button>
+          </div>
+        </div>
+        <span class="memory-file-meta">${esc(sizeStr)} · ${esc(timeStr)}</span>
+      </div>
+    `;
+  }).join('');
+
+  el.querySelectorAll('.memory-view-btn').forEach(btn => {
+    btn.addEventListener('click', () => viewMemoryFile(btn.dataset.file));
+  });
+  el.querySelectorAll('.memory-del-btn').forEach(btn => {
+    btn.addEventListener('click', () => deleteMemoryFilePrompt(btn.dataset.file));
+  });
+}
+
+async function searchMemory() {
+  const q = document.getElementById('memory-search-input')?.value.trim();
+  if (!q) {
+    renderMemoryFiles(memoryFilesCache);
+    return;
+  }
+  try {
+    const resp = await fetch(`/api/memory/search?q=${encodeURIComponent(q)}&${currentCwdParam()}`);
+    const results = await resp.json();
+    const el = document.getElementById('memory-list');
+    if (!results || !results.length) {
+      el.innerHTML = `<p class="empty-state">${esc(t('noMemoryResults'))}</p>`;
+      return;
+    }
+    el.innerHTML = results.map(r => {
+      const snippet = r.snippet ? r.snippet.replace(/<mark>/g, '<mark class="memory-hl">').replace(/<\/mark>/g, '</mark>') : esc(r.title);
+      return `
+        <div class="memory-file-item" data-file="${esc(r.name)}">
+          <div class="memory-file-head">
+            <span class="memory-file-name">${esc(r.title || r.name)}</span>
+            <button class="agent-action-btn memory-view-btn" data-file="${esc(r.name)}" title="${esc(t('view'))}">&#128065;</button>
+          </div>
+          <div class="memory-file-snippet">${snippet}</div>
+        </div>
+      `;
+    }).join('');
+    el.querySelectorAll('.memory-view-btn').forEach(btn => {
+      btn.addEventListener('click', () => viewMemoryFile(btn.dataset.file));
+    });
+  } catch (e) {
+    console.error('Memory search failed:', e);
+  }
+}
+
+async function viewMemoryFile(filename) {
+  try {
+    const resp = await fetch('/api/memory/file', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ filename, cwd: cwdInput.value.trim() || '' }),
+    });
+    if (!resp.ok) return;
+    const data = await resp.json();
+    document.getElementById('memory-modal-title').textContent = data.title || data.name;
+    document.getElementById('memory-modal-body').innerHTML = renderMarkdown(data.body || data.content || '');
+    document.getElementById('memory-modal-overlay').style.display = 'flex';
+  } catch (e) {
+    console.error('Memory file load failed:', e);
+  }
+}
+
+function closeMemoryModal() {
+  document.getElementById('memory-modal-overlay').style.display = 'none';
+}
+
+async function deleteMemoryFilePrompt(filename) {
+  if (!confirm(t('confirmDeleteMemory', { name: filename }))) return;
+  try {
+    await fetch('/api/memory/delete', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ filename, cwd: cwdInput.value.trim() || '' }),
+    });
+    loadMemoryFiles();
+  } catch (e) {
+    console.error('Memory delete failed:', e);
+  }
+}
+
+async function indexMemoryFiles() {
+  const btn = document.getElementById('btn-memory-index');
+  if (btn) btn.disabled = true;
+  try {
+    await fetch('/api/memory/index', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ cwd: cwdInput.value.trim() || '' }),
+    });
+    loadMemoryFiles();
+  } catch (e) {
+    console.error('Memory index failed:', e);
+  } finally {
+    if (btn) btn.disabled = false;
+  }
+}
+
+function initMemoryUI() {
+  const searchInput = document.getElementById('memory-search-input');
+  if (searchInput) {
+    let timer = null;
+    searchInput.addEventListener('input', () => {
+      clearTimeout(timer);
+      timer = setTimeout(searchMemory, 300);
+    });
+  }
+  document.getElementById('btn-memory-index')?.addEventListener('click', indexMemoryFiles);
+  document.getElementById('memory-modal-close')?.addEventListener('click', closeMemoryModal);
+  document.getElementById('memory-modal-overlay')?.addEventListener('click', (e) => {
+    if (e.target === e.currentTarget) closeMemoryModal();
+  });
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && document.getElementById('memory-modal-overlay')?.style.display === 'flex') {
+      closeMemoryModal();
     }
   });
 }
