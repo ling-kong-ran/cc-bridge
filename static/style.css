@@ -1962,6 +1962,70 @@ html.light-theme .select {
   padding: 8px 0; letter-spacing: 0.06em;
 }
 
+/* ─── Groups ──────────────────────────────────────────────────── */
+.group-item {
+  display: flex; flex-direction: column; gap: 5px;
+  padding: 9px 0; border-bottom: 1px solid var(--border-dim);
+}
+.group-item:last-child { border-bottom: none; }
+.group-item-head {
+  display: flex; align-items: center; justify-content: space-between;
+}
+.group-item-name {
+  font-size: 13px; font-weight: 600; color: var(--text-base);
+}
+.group-item-actions {
+  display: flex; gap: 2px; flex-shrink: 0;
+}
+.group-item-agents {
+  display: flex; flex-wrap: wrap; gap: 4px; font-size: 11px;
+}
+.group-agent-tag {
+  padding: 1px 8px; border-radius: 10px;
+  background: var(--bg-surface); border: 1px solid var(--border-light);
+  color: var(--text-dim); font-size: 10px;
+}
+.group-agent-check {
+  display: flex; align-items: center; gap: 6px;
+  padding: 5px 0; font-size: 13px; cursor: pointer;
+  color: var(--text-base);
+}
+
+/* ─── @提及 ────────────────────────────────────────────────────── */
+.mention-popup {
+  position: fixed; z-index: 2000;
+  background: var(--bg-panel); border: 1px solid var(--border);
+  border-radius: 10px; padding: 6px 0; min-width: 220px;
+  box-shadow: 0 8px 28px rgba(0,0,0,0.35);
+  font-size: 12px;
+}
+.mention-popup-hint {
+  padding: 4px 12px 6px; color: var(--text-muted);
+  font-size: 10px; letter-spacing: 0.04em;
+  border-bottom: 1px solid var(--border-dim); margin-bottom: 4px;
+}
+.mention-item {
+  display: flex; align-items: center; gap: 8px;
+  padding: 6px 12px; cursor: pointer;
+}
+.mention-item:hover, .mention-item-active {
+  background: var(--bg-surface);
+}
+.mention-type-tag {
+  padding: 1px 6px; border-radius: 8px; font-size: 9px;
+  letter-spacing: 0.04em; flex-shrink: 0;
+}
+.mention-type-agent {
+  background: rgba(var(--accent-rgb),0.15); color: var(--accent);
+}
+.mention-type-group {
+  background: rgba(163,140,255,0.15); color: var(--purple-dim, #c792ea);
+}
+.mention-name {
+  color: var(--text-base); white-space: nowrap; overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 /* ─── Memory ─────────────────────────────────────────────────── */
 .memory-search-row {
   display: flex; gap: 8px; margin-bottom: 12px; align-items: center;

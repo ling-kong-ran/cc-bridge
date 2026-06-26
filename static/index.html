@@ -383,6 +383,41 @@
             </div>
           </section>
 
+          <section class="config-section">
+            <h3 class="config-title"><span class="title-prefix">[08]</span> <span data-i18n="groups">Groups</span></h3>
+            <div class="config-card">
+              <div id="groups-list">
+                <p class="empty-state" data-i18n="loading">Loading...</p>
+              </div>
+              <button id="btn-group-add" class="btn-save" type="button">
+                <span class="btn-prefix">&gt;</span> <span data-i18n="addGroup">Add Group</span>
+              </button>
+            </div>
+          </section>
+
+          <!-- Group 编辑模态框 -->
+          <div id="group-modal-overlay" class="modal-overlay" style="display:none">
+            <div class="modal agent-modal">
+              <div class="modal-head">
+                <h2 id="group-modal-title" data-i18n="newGroup">New Group</h2>
+                <button id="group-modal-close" class="close-btn" type="button">&times;</button>
+              </div>
+              <div class="modal-body">
+                <div class="agent-form">
+                  <label><span data-i18n="groupName">Name</span></label>
+                  <input id="group-name-input" type="text" class="input" placeholder="my-group" maxlength="64">
+                  <label><span data-i18n="groupAgents">Agents</span></label>
+                  <div id="group-agents-checkboxes"></div>
+                  <div class="agent-form-actions">
+                    <button id="btn-group-save" class="btn-save" type="button"><span data-i18n="save">Save</span></button>
+                    <button id="btn-group-cancel" class="btn-mini" type="button"><span data-i18n="cancel">Cancel</span></button>
+                  </div>
+                  <div id="group-form-status" class="remote-form-status" style="display:none"></div>
+                </div>
+              </div>
+            </div>
+          </div>
+
           <!-- Memory 查看模态框 -->
           <div id="memory-modal-overlay" class="modal-overlay" style="display:none">
             <div class="modal" style="width:620px; max-width:92vw; max-height:80vh; display:flex; flex-direction:column;">

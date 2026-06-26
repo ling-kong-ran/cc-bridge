@@ -297,5 +297,16 @@
   "mcpInvalidEnv": "Env must be a JSON object",
   "mcpSaved": "MCP server saved",
   "mcpSaveFailed": "MCP save failed: {message}",
-  "newSessionFromCwd": "New session from this directory"
+  "newSessionFromCwd": "New session from this directory",
+  "groups": "Groups",
+  "addGroup": "Add Group",
+  "newGroup": "New Group",
+  "editGroup": "Edit Group",
+  "groupName": "Name",
+  "groupAgents": "Agents",
+  "confirmDeleteGroup": "Delete group \"{name}\"?",
+  "noGroups": "No groups yet",
+  "mentionHint": "Type @ to mention agents or groups",
+  "mentionAgents": "Agents",
+  "mentionGroups": "Groups"
 }

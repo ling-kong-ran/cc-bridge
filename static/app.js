@@ -103,6 +103,8 @@ document.addEventListener('DOMContentLoaded', async () => {
   initRemote();
   initMcpManager();
   initAgentModal();
+  initGroupUI();
+  initMentionAutocomplete();
   initMemoryUI();
   loadDefaultCwd();
   loadClis();
@@ -2431,6 +2433,7 @@ async function loadConfig() {
     const agents = await (await fetch('/api/agents')).json();
     renderAgents(agents);
     loadMcpServers();
+    loadGroups();
     loadMemoryFiles();
   } catch (e) {
     console.error('配置加载失败:', e);
@@ -2894,6 +2897,277 @@ function initAgentModal() {
       closeAgentModal();
     }
   });
+}
+
+// ─── Agent 群组 ────────────────────────────────────────────────────
+let groupsCache = [];
+
+async function loadGroups() {
+  try {
+    groupsCache = await (await fetch('/api/groups')).json();
+    renderGroups(groupsCache);
+  } catch (e) {
+    console.error('Groups load failed:', e);
+  }
+}
+
+function renderGroups(groups) {
+  const el = document.getElementById('groups-list');
+  if (!el) return;
+  if (!groups || !groups.length) {
+    el.innerHTML = `<p class="empty-state">${esc(t('noGroups'))}</p>`;
+    return;
+  }
+  el.innerHTML = groups.map(g => `
+    <div class="group-item" data-group="${esc(g.name)}">
+      <div class="group-item-head">
+        <span class="group-item-name">${esc(g.name)}</span>
+        <div class="group-item-actions">
+          <button class="agent-action-btn group-edit-btn" data-group="${esc(g.name)}" title="${esc(t('edit'))}">&#9998;</button>
+          <button class="agent-action-btn agent-del-btn group-del-btn" data-group="${esc(g.name)}" title="${esc(t('delete'))}">&times;</button>
+        </div>
+      </div>
+      <span class="group-item-agents">${(g.agents || []).map(a => `<span class="group-agent-tag">${esc(a)}</span>`).join(' ') || `<em>${esc(t('noAgents'))}</em>`}</span>
+    </div>
+  `).join('');
+
+  el.querySelectorAll('.group-edit-btn').forEach(btn => {
+    btn.addEventListener('click', () => openGroupModal(btn.dataset.group));
+  });
+  el.querySelectorAll('.group-del-btn').forEach(btn => {
+    btn.addEventListener('click', () => deleteGroupPrompt(btn.dataset.group));
+  });
+}
+
+function openGroupModal(name) {
+  const overlay = document.getElementById('group-modal-overlay');
+  const title = document.getElementById('group-modal-title');
+  const nameInput = document.getElementById('group-name-input');
+  const checkboxes = document.getElementById('group-agents-checkboxes');
+
+  // 加载 agent 列表作为 checkbox
+  fetch('/api/agents').then(r => r.json()).then(agents => {
+    if (name) {
+      title.textContent = t('editGroup');
+      nameInput.value = name;
+      const group = groupsCache.find(g => g.name === name);
+      const selected = group ? group.agents : [];
+      nameInput.dataset.originalName = name;
+      checkboxes.innerHTML = agents.map(a => `
+        <label class="group-agent-check"><input type="checkbox" value="${esc(a.name)}" ${selected.includes(a.name) ? 'checked' : ''}>${esc(a.name)}</label>
+      `).join('');
+    } else {
+      title.textContent = t('newGroup');
+      nameInput.value = '';
+      delete nameInput.dataset.originalName;
+      checkboxes.innerHTML = agents.map(a => `
+        <label class="group-agent-check"><input type="checkbox" value="${esc(a.name)}">${esc(a.name)}</label>
+      `).join('');
+    }
+    overlay.style.display = 'flex';
+    nameInput.focus();
+  }).catch(e => console.error('Failed to load agents for group modal:', e));
+}
+
+function closeGroupModal() {
+  document.getElementById('group-modal-overlay').style.display = 'none';
+  document.getElementById('group-form-status').style.display = 'none';
+}
+
+async function saveGroup() {
+  const nameInput = document.getElementById('group-name-input');
+  const name = nameInput.value.trim();
+  const originalName = nameInput.dataset.originalName || '';
+  if (!name) return;
+  const checks = document.querySelectorAll('#group-agents-checkboxes input[type="checkbox"]:checked');
+  const agents = Array.from(checks).map(c => c.value);
+  const status = document.getElementById('group-form-status');
+
+  try {
+    const url = originalName ? '/api/groups/update' : '/api/groups';
+    const body = originalName ? { name: originalName, new_name: name, agents } : { name, agents };
+    const resp = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    if (!resp.ok) {
+      const err = await resp.json();
+      status.textContent = err.error || 'Save failed';
+      status.style.display = 'block';
+      return;
+    }
+    closeGroupModal();
+    loadGroups();
+  } catch (e) {
+    status.textContent = e.message;
+    status.style.display = 'block';
+  }
+}
+
+async function deleteGroupPrompt(name) {
+  if (!confirm(t('confirmDeleteGroup', { name }))) return;
+  try {
+    await fetch('/api/groups/delete', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name }),
+    });
+    loadGroups();
+  } catch (e) {
+    console.error('Group delete failed:', e);
+  }
+}
+
+function initGroupUI() {
+  document.getElementById('btn-group-add')?.addEventListener('click', () => openGroupModal());
+  document.getElementById('btn-group-save')?.addEventListener('click', saveGroup);
+  document.getElementById('btn-group-cancel')?.addEventListener('click', closeGroupModal);
+  document.getElementById('group-modal-overlay')?.addEventListener('click', (e) => {
+    if (e.target === e.currentTarget) closeGroupModal();
+  });
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && document.getElementById('group-modal-overlay')?.style.display === 'flex') {
+      closeGroupModal();
+    }
+  });
+}
+
+// ─── @提及自动补全 ────────────────────────────────────────────────
+let mentionPopup = null;
+let mentionStartIdx = -1;
+
+function initMentionAutocomplete() {
+  if (mentionPopup) return;
+  mentionPopup = document.createElement('div');
+  mentionPopup.className = 'mention-popup';
+  mentionPopup.style.display = 'none';
+  document.body.appendChild(mentionPopup);
+
+  inputEl.addEventListener('keydown', (e) => {
+    if (mentionPopup.style.display === 'block') {
+      if (e.key === 'ArrowDown') { e.preventDefault(); moveMentionSelection(1); }
+      else if (e.key === 'ArrowUp') { e.preventDefault(); moveMentionSelection(-1); }
+      else if (e.key === 'Enter' || e.key === 'Tab') { e.preventDefault(); selectMention(); }
+      else if (e.key === 'Escape') { hideMentionPopup(); }
+    }
+  });
+
+  inputEl.addEventListener('input', () => {
+    updateMentionPopup();
+  });
+}
+
+function updateMentionPopup() {
+  const value = inputEl.value;
+  const cursor = inputEl.selectionStart || 0;
+  const before = value.substring(0, cursor);
+  const atIdx = before.lastIndexOf('@');
+
+  if (atIdx === -1 || atIdx < cursor - 30) {
+    hideMentionPopup();
+    return;
+  }
+
+  // 确保 @ 前面是空格或行首
+  if (atIdx > 0 && before[atIdx - 1] !== ' ' && before[atIdx - 1] !== '\n') {
+    hideMentionPopup();
+    return;
+  }
+
+  const query = before.substring(atIdx + 1).toLowerCase();
+  mentionStartIdx = atIdx;
+
+  // 收集可提及项
+  const items = [];
+  // Agent 列表（从缓存取，如果没有则用已渲染的）
+  const agentItems = document.querySelectorAll('#agents-list .agent-item');
+  agentItems.forEach(item => {
+    const nameEl = item.querySelector('.agent-name');
+    if (nameEl) {
+      const name = nameEl.textContent.trim();
+      if (!query || name.toLowerCase().includes(query)) {
+        items.push({ type: 'agent', name, label: `@${name}` });
+      }
+    }
+  });
+  // 群组列表
+  groupsCache.forEach(g => {
+    if (!query || g.name.toLowerCase().includes(query)) {
+      items.push({ type: 'group', name: g.name, label: `@${g.name}`, agents: g.agents });
+    }
+  });
+
+  if (!items.length) {
+    hideMentionPopup();
+    return;
+  }
+
+  mentionPopup._items = items;
+  mentionPopup._selectedIdx = 0;
+  mentionPopup.innerHTML = `
+    <div class="mention-popup-hint">${esc(t('mentionHint'))}</div>
+    ${items.map((item, i) => `
+      <div class="mention-item ${i === 0 ? 'mention-item-active' : ''}" data-idx="${i}">
+        <span class="mention-type-tag mention-type-${item.type}">${esc(t(item.type === 'agent' ? 'agents' : 'groups'))}</span>
+        <span class="mention-name">${esc(item.label)}</span>
+      </div>
+    `).join('')}
+  `;
+
+  mentionPopup.style.display = 'block';
+  mentionPopup.style.visibility = 'hidden';
+  const rect = inputEl.getBoundingClientRect();
+  mentionPopup.style.left = Math.max(4, rect.left) + 'px';
+  const popupHeight = mentionPopup.scrollHeight;
+  mentionPopup.style.top = Math.max(4, rect.top - popupHeight - 6) + 'px';
+  mentionPopup.style.visibility = 'visible';
+
+  mentionPopup.querySelectorAll('.mention-item').forEach(el => {
+    el.addEventListener('click', () => {
+      mentionPopup._selectedIdx = parseInt(el.dataset.idx);
+      selectMention();
+    });
+  });
+}
+
+function moveMentionSelection(dir) {
+  if (!mentionPopup._items) return;
+  const items = mentionPopup.querySelectorAll('.mention-item');
+  if (!items.length) return;
+  mentionPopup._selectedIdx = (mentionPopup._selectedIdx + dir + mentionPopup._items.length) % mentionPopup._items.length;
+  items.forEach(el => {
+    el.classList.toggle('mention-item-active', parseInt(el.dataset.idx) === mentionPopup._selectedIdx);
+  });
+}
+
+function selectMention() {
+  if (!mentionPopup._items || mentionPopup._selectedIdx < 0) return;
+  const item = mentionPopup._items[mentionPopup._selectedIdx];
+  if (!item) return;
+  const value = inputEl.value;
+  const cursor = inputEl.selectionStart || 0;
+  const before = value.substring(0, mentionStartIdx);
+  const after = value.substring(cursor);
+
+  let insert = '';
+  if (item.type === 'group' && item.agents && item.agents.length > 0) {
+    insert = item.agents.map(a => `@${a}`).join(' ');
+  } else {
+    insert = `@${item.name}`;
+  }
+  insert += ' ';
+
+  inputEl.value = before + insert + after;
+  const newCursor = before.length + insert.length;
+  inputEl.selectionStart = inputEl.selectionEnd = newCursor;
+  inputEl.focus();
+  hideMentionPopup();
+}
+
+function hideMentionPopup() {
+  if (mentionPopup) { mentionPopup.style.display = 'none'; mentionPopup.style.visibility = ''; }
+  mentionStartIdx = -1;
 }
 
 // ─── Memory 浏览 ────────────────────────────────────────────────

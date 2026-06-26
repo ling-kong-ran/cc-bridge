@@ -521,3 +521,66 @@ def get_available_models() -> list[str]:
         if model and model not in unique_models:
             unique_models.append(model)
     return unique_models
+
+
+# ─── Agent 群组管理 ─────────────────────────────────────────
+def list_groups() -> list[dict]:
+    """列出所有 agent 群组（存储在 gui_settings.json）。"""
+    settings = get_gui_settings()
+    return settings.get("agent_groups", [])
+
+
+def save_groups(groups: list[dict]):
+    """保存 agent 群组列表到 gui_settings.json。"""
+    settings = get_gui_settings()
+    settings["agent_groups"] = groups
+    save_gui_settings(settings)
+
+
+def create_group(data: dict) -> dict:
+    """创建新群组。data 需包含 name 和 agents 字段。"""
+    name = str(data.get("name", "")).strip()
+    if not name:
+        raise ValueError("group name is required")
+    groups = list_groups()
+    for g in groups:
+        if g["name"] == name:
+            raise ValueError(f"group '{name}' already exists")
+    agents = data.get("agents", [])
+    if not isinstance(agents, list):
+        agents = []
+    group = {"name": name, "agents": agents}
+    groups.append(group)
+    save_groups(groups)
+    return group
+
+
+def update_group(name: str, data: dict) -> dict:
+    """更新群组。data 可包含 new_name（重命名）和 agents 字段。"""
+    groups = list_groups()
+    for g in groups:
+        if g["name"] == name:
+            new_name = str(data.get("new_name", name)).strip()
+            if new_name and new_name != name:
+                # 检查新名称是否冲突
+                for other in groups:
+                    if other["name"] == new_name:
+                        raise ValueError(f"group '{new_name}' already exists")
+                g["name"] = new_name
+            if "agents" in data:
+                agents = data["agents"]
+                g["agents"] = agents if isinstance(agents, list) else []
+            save_groups(groups)
+            return g
+    raise ValueError(f"group '{name}' not found")
+
+
+def delete_group(name: str) -> bool:
+    """删除群组。"""
+    groups = list_groups()
+    for i, g in enumerate(groups):
+        if g["name"] == name:
+            groups.pop(i)
+            save_groups(groups)
+            return True
+    raise ValueError(f"group '{name}' not found")

@@ -38,6 +38,10 @@ from config_manager import (
     update_agent,
     delete_agent,
     get_agent,
+    list_groups,
+    create_group,
+    update_group,
+    delete_group,
 )
 from session_store import list_sessions, save_session, add_session_usage, delete_session, load_session_history, rename_session
 from memory_index import list_memory_files, search_memory, get_memory_file, delete_memory_file, index_memory
@@ -1218,6 +1222,8 @@ async def handle_api_get(path: str, writer: asyncio.StreamWriter, query: dict = 
         data = list_skills()
     elif path == "/api/agents":
         data = list_agents()
+    elif path == "/api/groups":
+        data = list_groups()
     elif path == "/api/mcp-servers":
         query = query or {}
         cwd = query.get("cwd", [""])[0] or ""
@@ -1454,6 +1460,35 @@ async def handle_api_post(path: str, body: bytes, writer: asyncio.StreamWriter):
     elif path == "/api/agents/delete":
         try:
             delete_agent(str(data.get("name", "")))
+        except ValueError as exc:
+            resp = json.dumps({"error": str(exc)}, ensure_ascii=False).encode("utf-8")
+            await send_response(writer, 400, "application/json; charset=utf-8", resp)
+            return
+        await send_response(writer, 200, "application/json", b'{"ok":true}')
+        return
+    elif path == "/api/groups":
+        try:
+            saved = create_group(data)
+        except ValueError as exc:
+            resp = json.dumps({"error": str(exc)}, ensure_ascii=False).encode("utf-8")
+            await send_response(writer, 400, "application/json; charset=utf-8", resp)
+            return
+        resp = json.dumps(saved, ensure_ascii=False).encode("utf-8")
+        await send_response(writer, 200, "application/json; charset=utf-8", resp)
+        return
+    elif path == "/api/groups/update":
+        try:
+            updated = update_group(str(data.get("name", "")), data)
+        except ValueError as exc:
+            resp = json.dumps({"error": str(exc)}, ensure_ascii=False).encode("utf-8")
+            await send_response(writer, 400, "application/json; charset=utf-8", resp)
+            return
+        resp = json.dumps(updated, ensure_ascii=False).encode("utf-8")
+        await send_response(writer, 200, "application/json; charset=utf-8", resp)
+        return
+    elif path == "/api/groups/delete":
+        try:
+            delete_group(str(data.get("name", "")))
         except ValueError as exc:
             resp = json.dumps({"error": str(exc)}, ensure_ascii=False).encode("utf-8")
             await send_response(writer, 400, "application/json; charset=utf-8", resp)
