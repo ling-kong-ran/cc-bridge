@@ -104,6 +104,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   initMcpManager();
   initAgentModal();
   initGroupUI();
+  initGroupMemberPanel();
   initMentionAutocomplete();
   initMemoryUI();
   loadDefaultCwd();
@@ -2988,6 +2989,7 @@ function initAgentModal() {
 
 // ─── Agent 群组 ────────────────────────────────────────────────────
 let groupsCache = [];
+let selectedGroupName = '';
 
 async function loadGroups() {
   try {
@@ -3120,6 +3122,56 @@ function initGroupUI() {
   });
 }
 
+// ─── 群组成员面板 ──────────────────────────────────────────────────
+function selectGroup(name) {
+  selectedGroupName = name;
+  renderGroupMemberPanel();
+  // 选中群组后更新 @提及列表
+  if (mentionPopup && mentionPopup.style.display === 'block') {
+    updateMentionPopup();
+  }
+}
+
+function renderGroupMemberPanel() {
+  const panel = document.getElementById('group-member-panel');
+  if (!panel) return;
+  const group = groupsCache.find(g => g.name === selectedGroupName);
+  if (!group) {
+    panel.innerHTML = '';
+    return;
+  }
+  panel.innerHTML = `
+    <div class="group-member-list">
+      ${(group.agents || []).map(a => `
+        <span class="group-member-chip" title="${esc(a)}">${esc(a)}</span>
+      `).join('')}
+      ${(!group.agents || group.agents.length === 0) ? `<span class="empty-state">${esc(t('noAgents'))}</span>` : ''}
+    </div>
+  `;
+}
+
+function initGroupMemberPanel() {
+  const select = document.getElementById('group-select');
+  if (!select) return;
+  select.addEventListener('change', () => {
+    selectGroup(select.value);
+  });
+  // 加载群组后填充下拉框
+  const updateOptions = () => {
+    const current = select.value;
+    select.innerHTML = `<option value="">- ${esc(t('selectGroup'))} -</option>` +
+      groupsCache.map(g => `<option value="${esc(g.name)}" ${g.name === current ? 'selected' : ''}>${esc(g.name)}</option>`).join('');
+  };
+  // 监听 groupsCache 变化（简单轮询或直接 hook loadGroups）
+  const origLoadGroups = loadGroups;
+  loadGroups = async function() {
+    await origLoadGroups();
+    updateOptions();
+    renderGroupMemberPanel();
+  };
+  updateOptions();
+}
+
 // ─── @提及自动补全 ────────────────────────────────────────────────
 let mentionPopup = null;
 let mentionStartIdx = -1;
@@ -3146,6 +3198,13 @@ function initMentionAutocomplete() {
 }
 
 function updateMentionPopup() {
+  // 只在聊天页面显示 @提及补全
+  const chatPage = document.getElementById('page-chat');
+  if (!chatPage || !chatPage.classList.contains('active')) {
+    hideMentionPopup();
+    return;
+  }
+
   const value = inputEl.value;
   const cursor = inputEl.selectionStart || 0;
   const before = value.substring(0, cursor);
@@ -3165,20 +3224,30 @@ function updateMentionPopup() {
   const query = before.substring(atIdx + 1).toLowerCase();
   mentionStartIdx = atIdx;
 
-  // 收集可提及项
+  // 收集可提及项：如果选了群组，只显示该群组的成员；否则显示所有 agent
   const items = [];
-  // Agent 列表（从缓存取，如果没有则用已渲染的）
-  const agentItems = document.querySelectorAll('#agents-list .agent-item');
-  agentItems.forEach(item => {
-    const nameEl = item.querySelector('.agent-name');
-    if (nameEl) {
-      const name = nameEl.textContent.trim();
-      if (!query || name.toLowerCase().includes(query)) {
-        items.push({ type: 'agent', name, label: `@${name}` });
-      }
+  if (selectedGroupName && groupsCache.length) {
+    const group = groupsCache.find(g => g.name === selectedGroupName);
+    if (group && group.agents) {
+      group.agents.forEach(name => {
+        if (!query || name.toLowerCase().includes(query)) {
+          items.push({ type: 'agent', name, label: `@${name}` });
+        }
+      });
     }
-  });
-  // 群组列表
+  } else {
+    const agentItems = document.querySelectorAll('#agents-list .agent-item');
+    agentItems.forEach(item => {
+      const nameEl = item.querySelector('.agent-name');
+      if (nameEl) {
+        const name = nameEl.textContent.trim();
+        if (!query || name.toLowerCase().includes(query)) {
+          items.push({ type: 'agent', name, label: `@${name}` });
+        }
+      }
+    });
+  }
+  // 群组列表始终可选
   groupsCache.forEach(g => {
     if (!query || g.name.toLowerCase().includes(query)) {
       items.push({ type: 'group', name: g.name, label: `@${g.name}`, agents: g.agents });

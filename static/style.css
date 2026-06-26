@@ -1993,10 +1993,10 @@ html.light-theme .select {
 
 /* ─── @提及 ────────────────────────────────────────────────────── */
 .mention-popup {
-  position: fixed; z-index: 2000;
+  position: fixed; z-index: 9999;
   background: var(--bg-panel); border: 1px solid var(--border);
-  border-radius: 10px; padding: 6px 0; min-width: 220px;
-  box-shadow: 0 8px 28px rgba(0,0,0,0.35);
+  border-radius: 10px; padding: 6px 0; min-width: 220px; max-width: 340px;
+  box-shadow: 0 8px 28px rgba(0,0,0,0.45);
   font-size: 12px;
 }
 .mention-popup-hint {
@@ -2007,6 +2007,7 @@ html.light-theme .select {
 .mention-item {
   display: flex; align-items: center; gap: 8px;
   padding: 6px 12px; cursor: pointer;
+  color: var(--text-base);
 }
 .mention-item:hover, .mention-item-active {
   background: var(--bg-surface);
@@ -2016,14 +2017,37 @@ html.light-theme .select {
   letter-spacing: 0.04em; flex-shrink: 0;
 }
 .mention-type-agent {
-  background: rgba(var(--accent-rgb),0.15); color: var(--accent);
+  background: rgba(var(--accent-rgb),0.18); color: var(--accent);
 }
 .mention-type-group {
-  background: rgba(163,140,255,0.15); color: var(--purple-dim, #c792ea);
+  background: rgba(163,140,255,0.18); color: var(--purple-dim, #c792ea);
 }
 .mention-name {
   color: var(--text-base); white-space: nowrap; overflow: hidden;
-  text-overflow: ellipsis;
+  text-overflow: ellipsis; font-weight: 500;
+}
+
+/* ─── 群组成员面板 ──────────────────────────────────────────────── */
+.group-member-panel {
+  display: flex; align-items: center; gap: 8px;
+  padding: 6px 10px; border-top: 1px solid var(--border-dim);
+  flex-wrap: wrap; min-height: 32px;
+}
+.group-select {
+  background: var(--bg-surface); color: var(--text-base);
+  border: 1px solid var(--border); border-radius: 6px;
+  padding: 3px 8px; font-size: 11px; cursor: pointer;
+  outline: none; flex-shrink: 0;
+}
+.group-select:focus { border-color: var(--accent); }
+.group-member-list {
+  display: flex; flex-wrap: wrap; gap: 4px; align-items: center;
+}
+.group-member-chip {
+  display: inline-block; padding: 2px 10px;
+  background: rgba(var(--accent-rgb),0.08); border: 1px solid rgba(var(--accent-rgb),0.2);
+  border-radius: 12px; font-size: 11px; color: var(--text-base);
+  white-space: nowrap;
 }
 
 /* ─── Memory ─────────────────────────────────────────────────── */

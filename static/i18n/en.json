@@ -313,5 +313,6 @@
   "dreamHint": "Summarize conversation and save to memory",
   "mentionHint": "Type @ to mention agents or groups",
   "mentionAgents": "Agents",
-  "mentionGroups": "Groups"
+  "mentionGroups": "Groups",
+  "selectGroup": "Select Group"
 }

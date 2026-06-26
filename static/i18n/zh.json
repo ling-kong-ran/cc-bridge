@@ -313,5 +313,6 @@
   "dreamHint": "总结对话并保存到记忆",
   "mentionHint": "输入 @ 提及代理或群组",
   "mentionAgents": "代理",
-  "mentionGroups": "群组"
+  "mentionGroups": "群组",
+  "selectGroup": "选择群组"
 }
