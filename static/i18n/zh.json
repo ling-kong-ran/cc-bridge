@@ -190,6 +190,7 @@
   "memory": "记忆",
   "searchMemory": "搜索记忆...",
   "indexMemory": "索引",
+  "memoryHint": "记忆命中",
   "noMemoryFiles": "暂无记忆文件，执行一次对话后 Claude 会自动生成。",
   "noMemoryResults": "未找到匹配的记忆。",
   "confirmDeleteMemory": "确定删除记忆「{name}」吗？",

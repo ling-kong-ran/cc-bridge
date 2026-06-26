@@ -190,6 +190,7 @@
   "memory": "Memory",
   "searchMemory": "Search memory...",
   "indexMemory": "Index",
+  "memoryHint": "Memory matched",
   "noMemoryFiles": "No memory files yet. They are created automatically after conversations.",
   "noMemoryResults": "No matching memory found.",
   "confirmDeleteMemory": "Delete memory \"{name}\"?",

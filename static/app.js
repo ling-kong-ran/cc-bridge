@@ -1329,6 +1329,7 @@ function initSSE() {
       stopTurnTimer();
       updateAssistantMeta('done', durationMs);
       isResponding = false;
+      const assistantEl = currentAssistantEl;
       currentTurnContent = '';
       currentTurnHasAssistantOutput = false;
       currentTurnStartedAt = 0;
@@ -1340,6 +1341,7 @@ function initSSE() {
         durationMs,
         model: getDisplayModelName(modelSelect.value),
       });
+      if (assistantEl && hadAssistantOutput) checkMemoryHits(assistantEl, finishedTurn);
       updateUI();
       if (isSlashCommand(finishedTurn) && !hadAssistantOutput) {
         const command = getSlashCommandName(finishedTurn);
@@ -1699,6 +1701,7 @@ function handleResult(data) {
   stopTurnTimer();
   updateAssistantMeta('done', durationMs);
   removePendingAssistantBubble(hadAssistantOutput);
+  const assistantEl = currentAssistantEl;
   isResponding = false;
   currentAssistantEl = null;
   currentContent = [];
@@ -1710,6 +1713,7 @@ function handleResult(data) {
     costUsd: turnCost,
     model: getDisplayModelName(data.model || modelSelect.value),
   });
+  if (assistantEl && hadAssistantOutput) checkMemoryHits(assistantEl, finishedTurn);
   currentTurnContent = '';
   currentTurnHasAssistantOutput = false;
   currentTurnStartedAt = 0;
@@ -3025,6 +3029,48 @@ async function indexMemoryFiles() {
   } finally {
     if (btn) btn.disabled = false;
   }
+}
+
+async function checkMemoryHits(assistantEl, userPrompt) {
+  if (!cwdInput.value.trim()) return;
+  const contentEl = assistantEl.querySelector('.msg-content');
+  if (!contentEl) return;
+  let text = (contentEl.textContent || '').replace(/\s+/g, ' ').trim();
+  if (text.length < 40) return;
+  text = text.substring(0, 600);
+  try {
+    const resp = await fetch(`/api/memory/search?q=${encodeURIComponent(text)}&${currentCwdParam()}`);
+    const results = await resp.json();
+    if (results && results.length > 0) {
+      renderMemoryHit(assistantEl, results);
+    }
+  } catch (e) {
+    console.error('Memory hit check failed:', e);
+  }
+}
+
+function renderMemoryHit(el, results) {
+  const existing = el.querySelector('.memory-hint');
+  if (existing) existing.remove();
+  const hint = document.createElement('div');
+  hint.className = 'memory-hint';
+  const count = results.length;
+  hint.innerHTML = `
+    <div class="memory-hint-head">
+      <span class="memory-hint-icon">&#128451;</span>
+      <span class="memory-hint-title">${esc(t('memoryHint'))} (${count})</span>
+    </div>
+    <div class="memory-hint-list">
+      ${results.slice(0, 5).map(r => `
+        <span class="memory-hint-tag" title="${esc(t('view'))}: ${esc(r.title || r.name)}" data-file="${esc(r.name)}">${esc(r.title || r.name)}</span>
+      `).join('')}
+      ${count > 5 ? `<span class="memory-hint-more">+${count - 5} ${esc(t('itemCount', { count: count - 5 }))}</span>` : ''}
+    </div>
+  `;
+  hint.querySelectorAll('.memory-hint-tag').forEach(tag => {
+    tag.addEventListener('click', () => viewMemoryFile(tag.dataset.file));
+  });
+  el.appendChild(hint);
 }
 
 function initMemoryUI() {

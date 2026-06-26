@@ -2010,6 +2010,35 @@ html.light-theme .select {
   display: flex; gap: 2px; flex-shrink: 0;
 }
 
+.memory-hint {
+  margin-top: 10px; padding: 10px 14px;
+  background: var(--bg-surface); border: 1px solid var(--border-dim);
+  border-radius: 8px; font-size: 12px;
+}
+.memory-hint-head {
+  display: flex; align-items: center; gap: 6px;
+  margin-bottom: 6px; color: var(--text-dim);
+}
+.memory-hint-icon { font-size: 14px; }
+.memory-hint-title { font-weight: 500; }
+.memory-hint-list {
+  display: flex; flex-wrap: wrap; gap: 6px;
+}
+.memory-hint-tag {
+  display: inline-block; padding: 3px 10px;
+  background: var(--bg-raised); border: 1px solid var(--border-light);
+  border-radius: 14px; cursor: pointer; font-size: 11px;
+  color: var(--purple-dim, #c792ea); transition: background 0.15s, border-color 0.15s;
+}
+.memory-hint-tag:hover {
+  background: rgba(var(--accent-rgb), 0.12);
+  border-color: var(--accent);
+}
+.memory-hint-more {
+  display: inline-block; padding: 3px 8px;
+  color: var(--text-dim); font-size: 11px;
+}
+
 .memory-modal-head {
   display: flex; align-items: center; justify-content: space-between;
   padding: 14px 18px 10px;
