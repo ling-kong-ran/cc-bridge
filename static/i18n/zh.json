@@ -313,5 +313,6 @@
   "viewingSession": "正在观看其他客户端的实时会话（只读）",
   "viewingPlaceholder": "正在观看实时会话…",
   "activeSessions": "活跃中",
-  "recentSessions": "最近"
+  "recentSessions": "最近",
+  "sessionTaken": "会话被其他客户端接管，切换为观察模式"
 }

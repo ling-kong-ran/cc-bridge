@@ -1083,14 +1083,14 @@ async def handle_sse(query: dict, writer: asyncio.StreamWriter):
     finally:
         if sse_clients.get(client_id) is queue:
             sse_clients.pop(client_id, None)
-        # 清理 viewer 状态：SSE 断开时从 owner session 移除 viewer
-        viewer_owner = client_viewing.pop(client_id, None)
+        # 清理 viewer 回调（旧闭包已失效），但保留 client_viewing 映射以支持重连
+        viewer_owner = client_viewing.get(client_id, "")
         if viewer_owner:
             owner_sess = session_manager.get_session(viewer_owner)
             if owner_sess:
                 owner_sess.remove_viewer(client_id)
         # SSE 断开不代表用户主动停止会话。移动端息屏、浏览器后台挂起会断开 EventSource，
-        # 这里保留 CCB session，让同一 client_id 重连后继续接收事件和发送消息。
+        # 这里保留 client_viewing 映射，让同一 client_id 重连后自动恢复 viewer 订阅。
         try:
             writer.close()
         except Exception:
@@ -1236,6 +1236,17 @@ async def handle_action(body: bytes, writer: asyncio.StreamWriter):
         client_meta[client_id] = {"model": model, "cwd": cwd, "remote_target_id": remote_target_id, "cli": cli}
         client_session_ids[client_id] = resume_id
         session_owner[resume_id] = client_id  # 恢复会话时直接设置归属，因为 session_id_captured 不会对已 resume 的 session 重复触发
+
+        # 如果从旧 owner 手中接管会话，通知旧 owner 前端转为 viewer
+        if owner_id and owner_id != client_id:
+            old_meta = client_meta.get(owner_id, {})
+            await push_event(owner_id, "session_taken", {
+                "session_id": resume_id,
+                "model": old_meta.get("model", model),
+                "cwd": old_meta.get("cwd", ""),
+                "cli": old_meta.get("cli", ""),
+                "remote_target_id": old_meta.get("remote_target_id", ""),
+            })
 
         async def on_event_resume(event: dict):
             evt_type = event.get("type", "unknown")

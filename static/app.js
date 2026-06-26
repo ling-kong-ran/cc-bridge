@@ -1270,6 +1270,16 @@ function bindSSEEvents() {
     addSystemMsg(t('sessionStopped'));
   });
 
+  eventSource.addEventListener('session_taken', (e) => {
+    // 会话被其他客户端接管，自动转为 viewer
+    const data = JSON.parse(e.data);
+    if (data.session_id && data.session_id === currentSessionId) {
+      addSystemMsg(t('sessionTaken') || '会话被其他客户端接管，切换为观察模式');
+      // 重新进入会话，服务端会识别为 viewer
+      resumeSession(data.session_id, data.cwd, data.model, 0, data.remote_target_id || '', null, data.cli || '');
+    }
+  });
+
   eventSource.addEventListener('generation_started', (e) => {
     // 刷新后重连到正在回复的会话，恢复响应状态
     isResponding = true;
