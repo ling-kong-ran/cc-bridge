@@ -1240,7 +1240,10 @@ function initSSE() {
   clientId = localStorage.getItem('ccb_client_id') || 'c_' + Math.random().toString(36).substring(2, 10);
   localStorage.setItem('ccb_client_id', clientId);
   eventSource = new EventSource(`/sse?id=${clientId}`);
+  bindSSEEvents();
+}
 
+function bindSSEEvents() {
   eventSource.addEventListener('connected', (e) => {
     const data = JSON.parse(e.data);
     clientId = data.client_id;
@@ -1396,6 +1399,19 @@ function initSSE() {
 
   eventSource.onerror = () => {
     setConnectionStatus(false);
+    // SSE 断开时清除 responding 状态，避免 UI 卡在"运行中"
+    if (isResponding) {
+      isResponding = false;
+      currentTurnContent = '';
+      currentTurnHasAssistantOutput = false;
+      stopTurnTimer();
+      removePendingAssistantBubble(false);
+      currentAssistantEl = null;
+      clearRunningTasks();
+      clearSubagentBubbles();
+      updateUI();
+      addSystemMsg(t('connectionLost'), true);
+    }
   };
 }
 

@@ -18,6 +18,7 @@
   "settings": "配置",
   "connecting": "连接中...",
   "connected": "已连接",
+  "connectionLost": "连接已断开，正在重连...",
   "totalCost": "累计费用",
   "tokenUsage": "Token 用量",
   "cachedTokens": "缓存 {count}",

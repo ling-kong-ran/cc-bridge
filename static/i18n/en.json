@@ -18,6 +18,7 @@
   "settings": "Settings",
   "connecting": "Connecting...",
   "connected": "Connected",
+  "connectionLost": "Connection lost, reconnecting...",
   "totalCost": "Total Cost",
   "tokenUsage": "Tokens",
   "cachedTokens": "{count} cached",
