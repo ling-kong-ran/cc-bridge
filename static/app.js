@@ -1154,7 +1154,7 @@ function showPage(page) {
   if (target) target.classList.add('active');
   // 更新全局 titlebar
   const pageLabel = document.getElementById('titlebar-page-label');
-  if (pageLabel) pageLabel.textContent = t(page === 'config' ? 'settings' : page === 'remote' ? 'remoteDiag' : 'chat');
+  if (pageLabel) pageLabel.textContent = t(page === 'config' ? 'settings' : 'chat');
   const backBtn = document.getElementById('btn-titlebar-back');
   if (backBtn) backBtn.style.display = page === 'chat' ? 'none' : '';
   const titlebarMeta = document.getElementById('titlebar-meta');

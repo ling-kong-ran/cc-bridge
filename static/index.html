@@ -117,14 +117,6 @@
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>
           <span data-i18n="chat">Chat</span>
         </button>
-        <button class="nav-btn" data-page="remote">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="8" rx="1"></rect><rect x="2" y="13" width="20" height="8" rx="1"></rect><line x1="6" y1="7" x2="6.01" y2="7"></line><line x1="6" y1="17" x2="6.01" y2="17"></line></svg>
-          <span data-i18n="remote">Remote</span>
-        </button>
-        <button class="nav-btn" data-page="config">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
-          <span data-i18n="settings">Settings</span>
-        </button>
       </nav>
 
       <!-- 状态栏 -->
@@ -419,6 +411,92 @@
             </div>
           </section>
 
+          <!-- Remote 远程目标 -->
+          <section class="config-section">
+            <h3 class="config-title"><span class="title-prefix">[09]</span> <span data-i18n="remoteTargets">Targets</span></h3>
+            <div class="config-card">
+              <div id="remote-target-list" class="remote-target-list">
+                <p class="empty-state" data-i18n="loading">Loading...</p>
+              </div>
+              <button id="btn-remote-add" class="btn-save">
+                <span class="btn-prefix">&gt;</span> <span data-i18n="remoteAddTarget">Add Target</span>
+              </button>
+            </div>
+          </section>
+
+          <section class="config-section" id="remote-form-section" style="display:none">
+            <h3 class="config-title"><span class="title-prefix">[10]</span> <span id="remote-form-title" data-i18n="remoteNewTarget">New Target</span></h3>
+            <div class="config-card ui-settings-card">
+              <input type="hidden" id="remote-form-id">
+              <div class="settings-row">
+                <label class="field-label" for="remote-form-name" data-i18n="remoteName">Name</label>
+                <input id="remote-form-name" class="input" placeholder="prod-db">
+              </div>
+              <div class="settings-row">
+                <label class="field-label" for="remote-form-host" data-i18n="remoteHost">Host / IP</label>
+                <input id="remote-form-host" class="input" placeholder="10.0.0.5">
+              </div>
+              <div class="settings-row">
+                <label class="field-label" for="remote-form-user" data-i18n="remoteUser">SSH User</label>
+                <input id="remote-form-user" class="input" placeholder="ubuntu">
+              </div>
+              <div class="settings-row">
+                <label class="field-label" for="remote-form-port" data-i18n="remotePort">Port</label>
+                <input id="remote-form-port" class="input" type="number" value="22" min="1" max="65535">
+              </div>
+              <div class="settings-row">
+                <label class="field-label" for="remote-form-auth" data-i18n="remoteAuth">Auth Method</label>
+                <select id="remote-form-auth" class="select">
+                  <option value="key" data-i18n="remoteAuthKey">SSH Key</option>
+                  <option value="password" data-i18n="remoteAuthPassword">Password</option>
+                </select>
+              </div>
+              <div id="remote-auth-key">
+                <div class="settings-row">
+                  <label class="field-label" for="remote-form-key" data-i18n="remoteKeyPath">Key Path</label>
+                  <input id="remote-form-key" class="input" placeholder="~/.ssh/id_ed25519">
+                </div>
+                <div class="settings-row align-top">
+                  <label class="field-label" for="remote-form-key-text" data-i18n="remoteKeyText">Paste Key</label>
+                  <div class="remote-key-field">
+                    <textarea id="remote-form-key-text" class="input remote-key-text" rows="5" spellcheck="false" placeholder="-----BEGIN OPENSSH PRIVATE KEY-----"></textarea>
+                    <span class="remote-key-hint" id="remote-key-hint" data-i18n="remoteKeyHint">Fill the key path above, or paste the private key here.</span>
+                  </div>
+                </div>
+              </div>
+              <div id="remote-auth-password" style="display:none">
+                <div class="settings-row align-top">
+                  <label class="field-label" for="remote-form-password" data-i18n="remotePassword">Password</label>
+                  <div class="remote-key-field">
+                    <input id="remote-form-password" class="input" type="password" autocomplete="off" autocapitalize="off">
+                    <span class="remote-key-hint" id="remote-pass-hint" data-i18n="remotePasswordHint">The SSH user's login password. Uses the system ssh client — no extra dependency.</span>
+                  </div>
+                </div>
+              </div>
+              <div class="settings-row">
+                <label class="field-label" for="remote-form-desc" data-i18n="remoteDesc">Notes</label>
+                <input id="remote-form-desc" class="input">
+              </div>
+              <div class="remote-form-actions">
+                <button id="btn-remote-test" class="btn-save" type="button"><span data-i18n="remoteTest">Test Connection</span></button>
+                <button id="btn-remote-save" class="btn btn-primary" type="button" style="width:auto; padding:8px 20px;">
+                  <span class="btn-prefix">&gt;</span> <span data-i18n="save">Save</span>
+                </button>
+                <button id="btn-remote-cancel" class="btn-save" type="button"><span data-i18n="cancel">Cancel</span></button>
+              </div>
+              <div id="remote-form-status" class="remote-form-status" style="display:none"></div>
+            </div>
+          </section>
+
+          <section class="config-section">
+            <h3 class="config-title"><span class="title-prefix">[11]</span> <span data-i18n="remoteSecurity">Security &amp; Usage</span></h3>
+            <div class="config-card remote-notes">
+              <p data-i18n="remoteNoteUsage">Pick a target under runtime settings before starting a session. The agent will inspect that host through SSH tools instead of the local machine.</p>
+              <p data-i18n="remoteNoteReadonly">Default is read-only mode (logs, status, sysinfo). Enable "Read-write mode" to let the agent run changing commands; every remote command is written to ~/.ccb/remote_audit.log.</p>
+              <p data-i18n="remoteNotePrereq">The target only needs an SSH server. Use key-based auth and a least-privilege account; restrict its sshd to this machine.</p>
+            </div>
+          </section>
+
 
           <!-- Memory 查看模态框 -->
           <div id="memory-modal-overlay" class="modal-overlay" style="display:none">
@@ -523,95 +601,6 @@
         </div>
       </div>
 
-      <!-- 远程诊断页 -->
-      <div id="page-remote" class="page config-page">
-        <div class="config-inner">
-          <section class="config-section">
-            <h3 class="config-title"><span class="title-prefix">[01]</span> <span data-i18n="remoteTargets">Targets</span></h3>
-            <div class="config-card">
-              <div id="remote-target-list" class="remote-target-list">
-                <p class="empty-state" data-i18n="loading">Loading...</p>
-              </div>
-              <button id="btn-remote-add" class="btn-save">
-                <span class="btn-prefix">&gt;</span> <span data-i18n="remoteAddTarget">Add Target</span>
-              </button>
-            </div>
-          </section>
-
-          <section class="config-section" id="remote-form-section" style="display:none">
-            <h3 class="config-title"><span class="title-prefix">[02]</span> <span id="remote-form-title" data-i18n="remoteNewTarget">New Target</span></h3>
-            <div class="config-card ui-settings-card">
-              <input type="hidden" id="remote-form-id">
-              <div class="settings-row">
-                <label class="field-label" for="remote-form-name" data-i18n="remoteName">Name</label>
-                <input id="remote-form-name" class="input" placeholder="prod-db">
-              </div>
-              <div class="settings-row">
-                <label class="field-label" for="remote-form-host" data-i18n="remoteHost">Host / IP</label>
-                <input id="remote-form-host" class="input" placeholder="10.0.0.5">
-              </div>
-              <div class="settings-row">
-                <label class="field-label" for="remote-form-user" data-i18n="remoteUser">SSH User</label>
-                <input id="remote-form-user" class="input" placeholder="ubuntu">
-              </div>
-              <div class="settings-row">
-                <label class="field-label" for="remote-form-port" data-i18n="remotePort">Port</label>
-                <input id="remote-form-port" class="input" type="number" value="22" min="1" max="65535">
-              </div>
-              <div class="settings-row">
-                <label class="field-label" for="remote-form-auth" data-i18n="remoteAuth">Auth Method</label>
-                <select id="remote-form-auth" class="select">
-                  <option value="key" data-i18n="remoteAuthKey">SSH Key</option>
-                  <option value="password" data-i18n="remoteAuthPassword">Password</option>
-                </select>
-              </div>
-              <div id="remote-auth-key">
-                <div class="settings-row">
-                  <label class="field-label" for="remote-form-key" data-i18n="remoteKeyPath">Key Path</label>
-                  <input id="remote-form-key" class="input" placeholder="~/.ssh/id_ed25519">
-                </div>
-                <div class="settings-row align-top">
-                  <label class="field-label" for="remote-form-key-text" data-i18n="remoteKeyText">Paste Key</label>
-                  <div class="remote-key-field">
-                    <textarea id="remote-form-key-text" class="input remote-key-text" rows="5" spellcheck="false" placeholder="-----BEGIN OPENSSH PRIVATE KEY-----"></textarea>
-                    <span class="remote-key-hint" id="remote-key-hint" data-i18n="remoteKeyHint">Fill the key path above, or paste the private key here.</span>
-                  </div>
-                </div>
-              </div>
-              <div id="remote-auth-password" style="display:none">
-                <div class="settings-row align-top">
-                  <label class="field-label" for="remote-form-password" data-i18n="remotePassword">Password</label>
-                  <div class="remote-key-field">
-                    <input id="remote-form-password" class="input" type="password" autocomplete="off" autocapitalize="off">
-                    <span class="remote-key-hint" id="remote-pass-hint" data-i18n="remotePasswordHint">The SSH user's login password. Uses the system ssh client — no extra dependency.</span>
-                  </div>
-                </div>
-              </div>
-              <div class="settings-row">
-                <label class="field-label" for="remote-form-desc" data-i18n="remoteDesc">Notes</label>
-                <input id="remote-form-desc" class="input">
-              </div>
-              <div class="remote-form-actions">
-                <button id="btn-remote-test" class="btn-save" type="button"><span data-i18n="remoteTest">Test Connection</span></button>
-                <button id="btn-remote-save" class="btn btn-primary" type="button" style="width:auto; padding:8px 20px;">
-                  <span class="btn-prefix">&gt;</span> <span data-i18n="save">Save</span>
-                </button>
-                <button id="btn-remote-cancel" class="btn-save" type="button"><span data-i18n="cancel">Cancel</span></button>
-              </div>
-              <div id="remote-form-status" class="remote-form-status" style="display:none"></div>
-            </div>
-          </section>
-
-          <section class="config-section">
-            <h3 class="config-title"><span class="title-prefix">[03]</span> <span data-i18n="remoteSecurity">Security &amp; Usage</span></h3>
-            <div class="config-card remote-notes">
-              <p data-i18n="remoteNoteUsage">Pick a target under runtime settings before starting a session. The agent will inspect that host through SSH tools instead of the local machine.</p>
-              <p data-i18n="remoteNoteReadonly">Default is read-only mode (logs, status, sysinfo). Enable "Read-write mode" to let the agent run changing commands; every remote command is written to ~/.ccb/remote_audit.log.</p>
-              <p data-i18n="remoteNotePrereq">The target only needs an SSH server. Use key-based auth and a least-privilege account; restrict its sshd to this machine.</p>
-            </div>
-          </section>
-        </div>
-      </div>
     </main>
   </div>
 
