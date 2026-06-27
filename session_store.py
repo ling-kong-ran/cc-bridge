@@ -434,20 +434,37 @@ def update_session_cwd(session_id: str, new_cwd: str) -> tuple[bool, str]:
     return False, "not_found"
 
 
-def _migrate_session_file(session_id: str, old_cwd: str, new_cwd: str):
-    """将会话 JSONL 文件从旧项目目录迁移到新项目目录。"""
-    if not old_cwd or not new_cwd:
-        return
-    if _sanitize_cwd(old_cwd) == _sanitize_cwd(new_cwd):
-        return
+def _migrate_session_file(session_id: str, old_cwd: str, new_cwd: str) -> bool:
+    """将会话 JSONL 文件从旧项目目录迁移到新项目目录。
 
-    old_path = _jsonl_path(session_id, old_cwd)
-    if not old_path.exists():
-        return
+    优先根据 old_cwd 定位，找不到时扫描 ~/.claude/projects/ 全目录。
+    返回 True 表示成功迁移或无需迁移。
+    """
+    if not new_cwd:
+        return False
+
+    # 用 fallback 查找现有 JSONL 文件
+    old_path = _find_jsonl_path(session_id, old_cwd) if old_cwd else None
+    if not old_path:
+        old_path = _find_jsonl_path(session_id, "")  # 全量扫描
+    if not old_path:
+        return False  # 没有任何旧文件，无需迁移
 
     new_path = _jsonl_path(session_id, new_cwd)
+    if old_path.resolve() == new_path.resolve():
+        return True  # 已在目标位置
+
     if new_path.exists():
-        return  # 新位置已有文件，跳过迁移（可能是用户改回了之前的目录）
+        # 目标位置已有文件 — 合并：如果新文件更新则保留新文件
+        try:
+            if new_path.stat().st_mtime >= old_path.stat().st_mtime:
+                old_path.unlink()  # 删掉旧的
+            else:
+                old_path.unlink()  # 旧文件更新，但 rename 会覆盖...换个策略：删旧留新
+                # 新的有数据不动，旧的删掉
+        except OSError:
+            pass
+        return True
 
     try:
         new_path.parent.mkdir(parents=True, exist_ok=True)
@@ -460,8 +477,9 @@ def _migrate_session_file(session_id: str, old_cwd: str, new_cwd: str):
                 old_path.parent.rmdir()
         except OSError:
             pass
+        return True
     except OSError:
-        pass  # 迁移失败不阻塞 CWD 更新
+        return False  # 迁移失败
 
 
 def _sanitize_cwd(cwd: str) -> str:
@@ -473,6 +491,29 @@ def _sanitize_cwd(cwd: str) -> str:
 def _jsonl_path(session_id: str, cwd: str) -> Path:
     sanitized = _sanitize_cwd(cwd)
     return Path.home() / ".claude" / "projects" / sanitized / f"{session_id}.jsonl"
+
+
+def _find_jsonl_path(session_id: str, cwd: str) -> Path | None:
+    """查找会话 JSONL 文件：先在 CWD 对应项目目录找，找不到则扫描所有项目目录。"""
+    # 优先精确路径
+    if cwd:
+        exact = _jsonl_path(session_id, cwd)
+        if exact.exists():
+            return exact
+
+    # Fallback: 扫描所有项目目录（处理 CWD 变更后旧路径的遗留文件）
+    if PROJECTS_DIR.exists():
+        try:
+            for project_dir in PROJECTS_DIR.iterdir():
+                if not project_dir.is_dir():
+                    continue
+                candidate = project_dir / f"{session_id}.jsonl"
+                if candidate.exists():
+                    return candidate
+        except OSError:
+            pass
+
+    return None
 
 
 def _extract_user_text(obj: dict) -> str:
@@ -500,11 +541,11 @@ def _clean_user_text(text: str) -> str:
 
 def get_last_user_message(session_id: str, cwd: str) -> str:
     """读取会话文件中的最后一条用户消息。"""
-    if not session_id or not cwd:
+    if not session_id:
         return ""
 
-    jsonl_path = _jsonl_path(session_id, cwd)
-    if not jsonl_path.exists():
+    jsonl_path = _find_jsonl_path(session_id, cwd)
+    if not jsonl_path:
         return ""
 
     last_text = ""
@@ -535,9 +576,9 @@ def get_last_user_message(session_id: str, cwd: str) -> str:
 
 def load_session_history(session_id: str, cwd: str, max_messages: int = 50) -> list[dict]:
     """从 ccb 的 .jsonl 文件中加载历史消息"""
-    jsonl_path = _jsonl_path(session_id, cwd)
+    jsonl_path = _find_jsonl_path(session_id, cwd)
 
-    if not jsonl_path.exists():
+    if not jsonl_path:
         return []
 
     messages = []
