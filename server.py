@@ -1615,7 +1615,19 @@ async def handle_api_post(path: str, body: bytes, writer: asyncio.StreamWriter):
         await send_response(writer, status, "application/json; charset=utf-8", resp)
         return
     elif path == "/api/sessions/update-cwd":
-        ok, error = update_session_cwd(data.get("session_id", ""), data.get("cwd", ""))
+        session_id = data.get("session_id", "")
+        new_cwd = data.get("cwd", "")
+        ok, error = update_session_cwd(session_id, new_cwd)
+        if ok:
+            owner_id = session_owner.get(session_id)
+            if owner_id:
+                client_meta.setdefault(owner_id, {})["cwd"] = new_cwd
+                cwd_event = {"session_id": session_id, "cwd": new_cwd}
+                await push_event(owner_id, "cwd_changed", cwd_event)
+                for viewer_id, view_owner in list(client_viewing.items()):
+                    if view_owner == owner_id:
+                        client_meta.setdefault(viewer_id, {})["cwd"] = new_cwd
+                        await push_event(viewer_id, "cwd_changed", cwd_event)
         status = 200 if ok else 400
         resp = json.dumps({"ok": ok, "error": error}, ensure_ascii=False).encode("utf-8")
         await send_response(writer, status, "application/json; charset=utf-8", resp)

@@ -1338,6 +1338,20 @@ function bindSSEEvents() {
     loadSessions();
   });
 
+  eventSource.addEventListener('cwd_changed', (e) => {
+    const data = JSON.parse(e.data);
+    if (data.cwd) {
+      cwdInput.value = data.cwd;
+      slashCommands = [];
+      closeSlashCommandPanel();
+      openCurrentCwdSessionGroup();
+      loadSessions();
+      if (!isViewer) {
+        addSystemMsg(t('cwdChanged', { path: data.cwd }));
+      }
+    }
+  });
+
   eventSource.addEventListener('model_changed', (e) => {
     const data = JSON.parse(e.data);
     const modelLabel = getDisplayModelName(data.model || '');
@@ -1991,6 +2005,15 @@ function initInput() {
     loadSessions();
     loadMcpServers();
   });
+  cwdInput.addEventListener('click', async () => {
+    if (sessionActive && currentSessionId) {
+      const newCwd = await promptCwdForSession(cwdInput.value.trim());
+      if (newCwd) {
+        await updateSessionCwd(currentSessionId, newCwd);
+        // SSE cwd_changed 事件会更新 UI（cwdInput.value、loadSessions、addSystemMsg）
+      }
+    }
+  });
 
   // 附件按钮 —— 打开自定义文件选择器
   btnAttach.addEventListener('click', () => openFilePicker());
@@ -2554,11 +2577,7 @@ function updateUI() {
   btnNewSession.innerHTML = `<span class="btn-prefix">&gt;</span> ${sessionActive ? t('restartSession') : t('newSession')}`;
   if (!sessionActive && sidebarCollapsed) sidebarCollapsed = false;
   setSidebarCollapsed(sidebarCollapsed);
-  // viewer 模式和会话活跃时禁用配置修改
-  const locked = sessionActive || isViewer;
-  cwdInput.disabled = sessionActive;
-  btnBrowse.disabled = sessionActive;
-  btnBrowse.style.opacity = sessionActive ? '0.4' : '1';
+  // viewer 模式时禁用部分配置修改（CWD 可随时更换）
   const cliSelect = document.getElementById('cli-select');
   if (cliSelect) cliSelect.disabled = false;
   if (modelSelect) modelSelect.disabled = false;
@@ -4222,8 +4241,16 @@ const btnBrowse = document.getElementById('btn-browse');
 let pickerCurrentDir = '/';
 let pickerCallback = null;  // 选择后回调，用于 CWD 更新等场景
 
-btnBrowse.addEventListener('click', () => {
-  if (!sessionActive) openPicker();
+btnBrowse.addEventListener('click', async () => {
+  if (sessionActive && currentSessionId) {
+    const newCwd = await promptCwdForSession(cwdInput.value.trim());
+    if (newCwd) {
+      await updateSessionCwd(currentSessionId, newCwd);
+      // SSE cwd_changed 事件会更新 UI（cwdInput.value、loadSessions、addSystemMsg）
+    }
+    return;
+  }
+  openPicker();
 });
 pickerClose.addEventListener('click', closePicker);
 pickerOverlay.addEventListener('click', (e) => {
