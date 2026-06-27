@@ -33,7 +33,7 @@
     "updater": {
       "pubkey": "PLACEHOLDER",
       "endpoints": [
-        "https://github.com/ling-kong-ran/cc-gui/releases/latest/download/latest.json"
+        "https://github.com/ling-kong-ran/cc-bridge/releases/latest/download/latest.json"
       ]
     }
   }
