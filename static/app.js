@@ -1220,8 +1220,9 @@ function initSSE() {
     eventSource = null;
   }
 
-  // 每次页面加载生成新的 clientId，避免服务端自动恢复旧会话
-  clientId = 'c_' + Math.random().toString(36).substring(2, 10);
+  // sessionStorage 确保每个标签页有独立的 clientId，避免跨标签页 SSE 队列冲突
+  clientId = sessionStorage.getItem('ccb_client_id') || 'c_' + Math.random().toString(36).substring(2, 10);
+  sessionStorage.setItem('ccb_client_id', clientId);
   eventSource = new EventSource(`/sse?id=${clientId}`);
   bindSSEEvents();
 }
@@ -1252,17 +1253,20 @@ function bindSSEEvents() {
       cliSelectEl.value = data.cli;
       renderTopbarMeta(data.model || '');
     }
-    // 重连时清除欢迎消息，viewer 需加载历史并切换到会话页
+    // 重连时清除欢迎消息，恢复会话状态
     if (!wasActive) {
       const welcome = messagesEl.querySelector('.welcome-msg');
       if (welcome) welcome.remove();
-      if (isViewer && data.session_id) {
-        // viewer 首次连接或重连：设置会话 ID、切换页面、加载历史
+      if (data.session_id) {
         currentSessionId = data.session_id;
         if (data.cwd) cwdInput.value = data.cwd;
         showPage('chat');
-        addSystemMsg(t('viewingSession'));
         loadSessionHistory(data.session_id, data.cwd || '');
+        if (isViewer) {
+          addSystemMsg(t('viewingSession'));
+        } else {
+          addSystemMsg(modelLabel ? t('sessionStarted', { model: modelLabel }) : t('sessionStartedPlain'));
+        }
       } else if (isViewer) {
         addSystemMsg(t('viewingSession'));
       } else {
