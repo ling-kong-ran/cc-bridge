@@ -1220,9 +1220,8 @@ function initSSE() {
     eventSource = null;
   }
 
-  // sessionStorage 确保每个标签页有独立的 clientId，避免跨标签页 SSE 队列冲突
-  clientId = sessionStorage.getItem('ccb_client_id') || 'c_' + Math.random().toString(36).substring(2, 10);
-  sessionStorage.setItem('ccb_client_id', clientId);
+  // 每次页面加载生成新的 clientId，避免服务端自动恢复旧会话
+  clientId = 'c_' + Math.random().toString(36).substring(2, 10);
   eventSource = new EventSource(`/sse?id=${clientId}`);
   bindSSEEvents();
 }
