@@ -23,30 +23,45 @@
 <body>
   <div id="mobile-sidebar-backdrop" class="mobile-sidebar-backdrop" aria-hidden="true"></div>
 
+  <div class="titlebar">
+    <div class="titlebar-left">
+      <button class="mobile-menu-toggle" type="button" aria-label="Open menu" aria-expanded="false">
+        <span></span><span></span><span></span>
+      </button>
+      <button id="btn-sidebar-collapse" class="titlebar-btn" type="button" title="Collapse sidebar" data-i18n-title="collapseSidebar" style="display:none">&lt;</button>
+      <span class="titlebar-brand">
+        <span class="titlebar-bracket">[</span><span class="titlebar-logo">CCB</span><span class="titlebar-bracket">]</span>
+      </span>
+      <span id="titlebar-page-label" class="titlebar-page-label" data-i18n="chat">Chat</span>
+    </div>
+    <div id="titlebar-meta" class="titlebar-meta" aria-live="polite" style="display:none">
+      <span class="titlebar-meta-item"><span class="titlebar-meta-key" data-i18n="sessionId">Session</span><button id="topbar-session-id" class="titlebar-meta-value" type="button" title="Copy resume command" data-i18n-title="copyResumeCommand">-</button></span>
+      <span class="titlebar-meta-item"><span class="titlebar-meta-key" data-i18n="model">Model</span><span id="topbar-model" class="titlebar-meta-value" data-i18n="noSession">No Session</span></span>
+      <span class="titlebar-meta-item"><span class="titlebar-meta-key" data-i18n="cliTool">CLI</span><span id="topbar-cli" class="titlebar-meta-value">-</span></span>
+      <span id="topbar-status-summary" class="topbar-status-summary" style="display:none" aria-live="polite">
+        <span id="topbar-connection" class="topbar-status-item">-</span>
+        <span id="topbar-cost" class="topbar-status-item" style="display:none"><span data-i18n="totalCost">Total Cost</span> $<span id="topbar-cost-value">0.0000</span></span>
+        <span id="topbar-tokens" class="topbar-status-item" style="display:none"><span data-i18n="tokenUsage">Tokens</span> <span id="topbar-token-value">0</span></span>
+      </span>
+    </div>
+    <div class="titlebar-right">
+      <button id="btn-export-chat" class="titlebar-btn" type="button" title="Copy as Markdown" data-i18n-title="copyMarkdown">MD</button>
+      <button id="btn-shortcuts" class="titlebar-btn" type="button" title="Keyboard Shortcuts" data-i18n-title="shortcutsTitle">?</button>
+      <button id="btn-theme-toggle" class="titlebar-btn" type="button" title="Switch Theme" aria-label="Switch theme">
+        <svg class="theme-icon-moon" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.8A8.5 8.5 0 1 1 11.2 3a6.7 6.7 0 0 0 9.8 9.8z"></path></svg>
+        <svg class="theme-icon-sun" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="4"></circle><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"></path></svg>
+      </button>
+      <button id="btn-nav-settings" class="titlebar-btn" type="button" title="Settings" data-i18n-title="settings">⚙</button>
+    </div>
+  </div>
+
   <div class="app">
     <!-- 侧边栏 -->
     <aside class="sidebar">
       <div class="sidebar-header">
         <div class="sidebar-title-row">
-          <div class="logo-row">
-            <span class="logo-bracket">[</span>
-            <span class="logo-text">CCB</span>
-            <span class="logo-bracket">]</span>
-            <span class="logo-cursor">_</span>
-          </div>
-          <div class="header-actions">
-            <button id="btn-shortcuts" class="icon-toggle" type="button" aria-label="快捷键" title="快捷键" data-i18n-title="shortcutsTitle">
-              <span aria-hidden="true">?</span>
-            </button>
-            <button id="btn-theme-toggle" class="theme-toggle icon-toggle" type="button" aria-label="切换为亮色主题" title="切换为亮色主题">
-              <span class="theme-toggle-icon" aria-hidden="true">
-                <svg class="theme-icon-moon" viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.8A8.5 8.5 0 1 1 11.2 3a6.7 6.7 0 0 0 9.8 9.8z"></path></svg>
-                <svg class="theme-icon-sun" viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="4"></circle><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"></path></svg>
-              </span>
-            </button>
-          </div>
+          <span class="sidebar-title-label" data-i18n="history">History</span>
         </div>
-        <p class="logo-sub" data-i18n="appSubtitle">Claude Code Bridge v1.0</p>
         <div class="header-line"></div>
       </div>
 
@@ -136,24 +151,6 @@
       <!-- 对话页 -->
       <div id="page-chat" class="page active">
         <div class="chat-main">
-          <div class="chat-topbar">
-            <button class="mobile-menu-toggle" type="button" aria-label="Open menu" aria-expanded="false">
-              <span></span><span></span><span></span>
-            </button>
-            <button id="btn-sidebar-collapse" class="topbar-action sidebar-collapse-action" type="button" title="Collapse sidebar" data-i18n-title="collapseSidebar" style="display:none">&lt;</button>
-            <span class="topbar-label" data-i18n="chat">Chat</span>
-            <div class="topbar-meta" aria-live="polite">
-              <span class="topbar-meta-item"><span class="topbar-meta-key" data-i18n="sessionId">Session</span><button id="topbar-session-id" class="topbar-meta-value topbar-session-copy" type="button" title="Copy resume command" data-i18n-title="copyResumeCommand">-</button></span>
-              <span class="topbar-meta-item"><span class="topbar-meta-key" data-i18n="model">Model</span><span id="topbar-model" class="topbar-meta-value" data-i18n="noSession">No Session</span></span>
-              <span class="topbar-meta-item"><span class="topbar-meta-key" data-i18n="cliTool">CLI</span><span id="topbar-cli" class="topbar-meta-value">-</span></span>
-            </div>
-            <div id="topbar-status-summary" class="topbar-status-summary" style="display:none" aria-live="polite">
-              <span id="topbar-connection" class="topbar-status-item">-</span>
-              <span id="topbar-cost" class="topbar-status-item" style="display:none"><span data-i18n="totalCost">Total Cost</span> $<span id="topbar-cost-value">0.0000</span></span>
-              <span id="topbar-tokens" class="topbar-status-item" style="display:none"><span data-i18n="tokenUsage">Tokens</span> <span id="topbar-token-value">0</span></span>
-            </div>
-            <button id="btn-export-chat" class="topbar-action" type="button" title="Copy as Markdown" data-i18n-title="copyMarkdown">MD</button>
-          </div>
           <div id="messages" class="messages">
             <div class="welcome-msg">
               <pre class="welcome-art">
@@ -235,12 +232,6 @@
 
       <!-- 配置页 -->
       <div id="page-config" class="page config-page">
-        <div class="chat-topbar">
-          <button class="mobile-menu-toggle" type="button" aria-label="Open menu" aria-expanded="false">
-            <span></span><span></span><span></span>
-          </button>
-          <span class="topbar-label" data-i18n="settings">Settings</span>
-        </div>
         <div class="config-inner">
           <section class="config-section">
             <h3 class="config-title"><span class="title-prefix">[01]</span> <span data-i18n="uiSettings">Interface Settings</span></h3>
@@ -533,13 +524,6 @@
 
       <!-- 远程诊断页 -->
       <div id="page-remote" class="page config-page">
-        <div class="chat-topbar">
-          <button class="mobile-menu-toggle" type="button" aria-label="Open menu" aria-expanded="false">
-            <span></span><span></span><span></span>
-          </button>
-          <span class="topbar-label" data-i18n="remoteDiag">Remote Access</span>
-          <span class="topbar-model" data-i18n="remoteDiagHint">Use SSH in read-only / read-write mode</span>
-        </div>
         <div class="config-inner">
           <section class="config-section">
             <h3 class="config-title"><span class="title-prefix">[01]</span> <span data-i18n="remoteTargets">Targets</span></h3>

@@ -119,6 +119,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   loadConfig();
   loadSessions();
   initFocusConfigReload();
+  showPage('chat');
   if (autoUpdateEnabled) setTimeout(() => checkForUpdate(), 3000);
 });
 
@@ -1151,6 +1152,17 @@ function showPage(page) {
   document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
   const target = document.getElementById(`page-${page}`);
   if (target) target.classList.add('active');
+  // 更新全局 titlebar
+  const pageLabel = document.getElementById('titlebar-page-label');
+  if (pageLabel) pageLabel.textContent = t(page === 'config' ? 'settings' : page === 'remote' ? 'remoteDiag' : 'chat');
+  const titlebarMeta = document.getElementById('titlebar-meta');
+  if (titlebarMeta) titlebarMeta.style.display = page === 'chat' ? '' : 'none';
+  const btnExport = document.getElementById('btn-export-chat');
+  if (btnExport) btnExport.style.display = page === 'chat' ? '' : 'none';
+  if (page === 'chat') {
+    renderTopbarMeta();
+    renderTopbarStatusSummary();
+  }
   hideMentionPopup();
 }
 
@@ -1160,6 +1172,11 @@ function initNavigation() {
       showPage(btn.dataset.page);
     });
   });
+  // 全局 titlebar 设置按钮
+  const btnNavSettings = document.getElementById('btn-nav-settings');
+  if (btnNavSettings) {
+    btnNavSettings.addEventListener('click', () => showPage('config'));
+  }
 }
 
 function initMobileLayout() {
@@ -1174,9 +1191,12 @@ function initMobileLayout() {
     toggles.forEach(toggle => toggle.setAttribute('aria-expanded', String(expanded)));
   };
 
+  const chatSidebar = document.getElementById('chat-sidebar');
   const closeMenu = () => {
     sidebar.classList.remove('mobile-open');
+    if (chatSidebar) chatSidebar.classList.remove('open');
     backdrop.classList.remove('visible');
+    document.body.classList.remove('mobile-overlay');
     setExpanded(false);
   };
 
@@ -1212,6 +1232,10 @@ function initMobileLayout() {
 
   const handleQueryChange = (e) => {
     if (!e.matches) closeMenu();
+    // 从 PC 切到移动端时关闭面板
+    if (e.matches) {
+      document.body.classList.remove('pane-right-open');
+    }
   };
 
   if (mobileQuery.addEventListener) {
@@ -3334,28 +3358,41 @@ function initSessionAgentPanel() {
 
   // 统一浮动按钮：点击展开/收起面板（PC + 移动端）
   if (toggleBtn && sidebar) {
-    const openPanel = () => {
-      sidebar.classList.add('open');
-      toggleBtn.classList.add('active');
+    const isMobile = () => window.matchMedia('(max-width: 760px)').matches;
+    const openPanel = (tab) => {
+      if (isMobile()) {
+        sidebar.classList.add('open');
+        document.body.classList.add('mobile-overlay');
+        document.getElementById('mobile-sidebar-backdrop')?.classList.add('visible');
+      } else {
+        document.body.classList.add('pane-right-open');
+      }
+      if (tab === 'members') toggleBtn.classList.add('active');
+      document.getElementById('btn-files-toggle')?.classList.remove('active');
     };
     const closePanel = () => {
       sidebar.classList.remove('open');
+      document.body.classList.remove('pane-right-open');
+      document.body.classList.remove('mobile-overlay');
+      document.getElementById('mobile-sidebar-backdrop')?.classList.remove('visible');
       toggleBtn.classList.remove('active');
       document.getElementById('btn-files-toggle')?.classList.remove('active');
     };
 
     toggleBtn.addEventListener('click', () => {
-      if (sidebar.classList.contains('open')) {
+      if (sidebar.classList.contains('open') || document.body.classList.contains('pane-right-open')) {
         closePanel();
       } else {
-        openPanel();
+        openPanel('members');
+        switchToSidebarTab('members');
       }
     });
 
     // 点击面板外部关闭
     const filesToggleBtn = document.getElementById('btn-files-toggle');
     document.addEventListener('click', (e) => {
-      if (!sidebar.classList.contains('open')) return;
+      const panelOpen = sidebar.classList.contains('open') || document.body.classList.contains('pane-right-open');
+      if (!panelOpen) return;
       if (!sidebar.contains(e.target) && e.target !== toggleBtn && !toggleBtn.contains(e.target) && e.target !== filesToggleBtn && !filesToggleBtn?.contains(e.target)) {
         closePanel();
       }
@@ -3363,7 +3400,7 @@ function initSessionAgentPanel() {
 
     // Escape 关闭
     document.addEventListener('keydown', (e) => {
-      if (e.key === 'Escape' && sidebar.classList.contains('open')) {
+      if (e.key === 'Escape' && (sidebar.classList.contains('open') || document.body.classList.contains('pane-right-open'))) {
         closePanel();
       }
     });
@@ -3403,13 +3440,9 @@ function initFileTreePanel() {
   const tabs = document.querySelectorAll('.chat-sidebar-tab');
   tabs.forEach(tab => {
     tab.addEventListener('click', () => {
-      tabs.forEach(t => t.classList.remove('active'));
-      tab.classList.add('active');
-      const isMembers = tab.dataset.tab === 'members';
-      document.getElementById('group-member-panel').style.display = isMembers ? '' : 'none';
-      document.getElementById('file-tree-panel').style.display = isMembers ? 'none' : '';
-      document.getElementById('btn-session-agent-add').style.display = isMembers ? '' : 'none';
-      if (!isMembers) {
+      const tabName = tab.dataset.tab;
+      switchToSidebarTab(tabName);
+      if (tabName === 'files') {
         const cwd = (cwdInput?.value || '').trim();
         if (cwd) loadFileTree(cwd);
       }
@@ -3424,27 +3457,42 @@ function initFileTreePanel() {
   const filesToggle = document.getElementById('btn-files-toggle');
   const sidebar = document.getElementById('chat-sidebar');
   if (filesToggle && sidebar) {
+    const isMobile = () => window.matchMedia('(max-width: 760px)').matches;
     filesToggle.addEventListener('click', () => {
-      const isOpen = sidebar.classList.contains('open') && document.getElementById('file-tree-panel').style.display !== 'none';
-      if (isOpen) {
+      const alreadyFiles = (sidebar.classList.contains('open') || document.body.classList.contains('pane-right-open'))
+        && document.getElementById('file-tree-panel').style.display !== 'none';
+      if (alreadyFiles) {
         sidebar.classList.remove('open');
-        document.getElementById('btn-members-toggle')?.classList.remove('active');
+        document.body.classList.remove('pane-right-open');
+        document.body.classList.remove('mobile-overlay');
         filesToggle.classList.remove('active');
+        document.getElementById('btn-members-toggle')?.classList.remove('active');
         return;
       }
-      sidebar.classList.add('open');
+      if (isMobile()) {
+        sidebar.classList.add('open');
+        document.body.classList.add('mobile-overlay');
+        document.getElementById('mobile-sidebar-backdrop')?.classList.add('visible');
+      } else {
+        document.body.classList.add('pane-right-open');
+      }
       filesToggle.classList.add('active');
-      // 切换到 Files tab
-      document.querySelectorAll('.chat-sidebar-tab').forEach(t => t.classList.remove('active'));
-      const filesTab = document.querySelector('.chat-sidebar-tab[data-tab="files"]');
-      if (filesTab) filesTab.classList.add('active');
-      document.getElementById('group-member-panel').style.display = 'none';
-      document.getElementById('file-tree-panel').style.display = '';
-      document.getElementById('btn-session-agent-add').style.display = 'none';
+      document.getElementById('btn-members-toggle')?.classList.remove('active');
+      switchToSidebarTab('files');
       const cwd = (cwdInput?.value || '').trim();
       if (cwd) loadFileTree(cwd);
     });
   }
+}
+
+function switchToSidebarTab(tab) {
+  document.querySelectorAll('.chat-sidebar-tab').forEach(t => t.classList.remove('active'));
+  const tabEl = document.querySelector(`.chat-sidebar-tab[data-tab="${tab}"]`);
+  if (tabEl) tabEl.classList.add('active');
+  const isMembers = tab === 'members';
+  document.getElementById('group-member-panel').style.display = isMembers ? '' : 'none';
+  document.getElementById('file-tree-panel').style.display = isMembers ? 'none' : '';
+  document.getElementById('btn-session-agent-add').style.display = isMembers ? '' : 'none';
 }
 
 async function loadFileTree(path) {
