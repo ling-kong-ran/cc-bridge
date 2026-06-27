@@ -45,11 +45,7 @@ from session_store import list_sessions, save_session, add_session_usage, delete
 from memory_index import list_memory_files, search_memory, get_memory_file, delete_memory_file, save_memory_file, index_memory
 import remote_manager
 
-# PyInstaller one-file 模式下，数据文件解压到 sys._MEIPASS
-if hasattr(sys, "_MEIPASS"):
-    STATIC_DIR = Path(sys._MEIPASS) / "static"  # type: ignore[attr-defined]
-else:
-    STATIC_DIR = Path(__file__).parent / "static"
+STATIC_DIR = Path(__file__).parent / "static"
 DEFAULT_CWD = str(Path(__file__).parent.resolve())  # 项目根目录作为默认 CWD
 HOST = "0.0.0.0"  # 监听所有网卡，允许局域网设备访问
 BROWSER_HOST = "127.0.0.1"
@@ -1842,8 +1838,6 @@ async def send_response(writer: asyncio.StreamWriter, status: int, content_type:
 
 
 async def main():
-    sidecar_mode = "--sidecar" in sys.argv
-
     # 恢复上次选中的 CLI（启动时 _current_cli 默认是第一个检测到的，这里覆盖为用户上次的选择）
     saved_cli = get_gui_settings().get("cli_path", "")
     if saved_cli and saved_cli in [c["path"] for c in get_available_clis()]:
@@ -1864,35 +1858,19 @@ async def main():
     local_url = f"http://{BROWSER_HOST}:{port}"
     lan_urls = [f"http://{ip}:{port}" for ip in get_lan_ips()]
 
-    if sidecar_mode:
-        # Tauri sidecar mode: report port to parent process via stdout
-        print(f"SIDECAR_PORT:{port}", flush=True)
-        # Monitor stdin: when Tauri closes it, shut down gracefully
-        import threading
-        _loop = asyncio.get_running_loop()
-        def _watch_stdin():
-            try:
-                sys.stdin.read(1)
-            except Exception:
-                pass
-            _loop.call_soon_threadsafe(
-                lambda: server.close() if server else None
-            )
-        threading.Thread(target=_watch_stdin, daemon=True).start()
-    else:
-        if port != DEFAULT_PORT:
-            print(f"[CC Bridge] Port {DEFAULT_PORT} is unavailable, using {port}")
-        print(f"[CC Bridge] Server running at {local_url}")
-        for lan_url in lan_urls:
-            print(f"[CC Bridge] LAN access: {lan_url}")
-        if not lan_urls:
-            print("[CC Bridge] LAN access: no LAN IPv4 address detected")
-        print(f"[CC Bridge] Press Ctrl+C to stop")
+    if port != DEFAULT_PORT:
+        print(f"[CC Bridge] Port {DEFAULT_PORT} is unavailable, using {port}")
+    print(f"[CC Bridge] Server running at {local_url}")
+    for lan_url in lan_urls:
+        print(f"[CC Bridge] LAN access: {lan_url}")
+    if not lan_urls:
+        print("[CC Bridge] LAN access: no LAN IPv4 address detected")
+    print(f"[CC Bridge] Press Ctrl+C to stop")
 
-        # 自动打开浏览器（仅当显式设置环境变量时启用）
-        if os.environ.get("CCB_GUI_OPEN_BROWSER") == "1":
-            import webbrowser
-            webbrowser.open(local_url)
+    # 自动打开浏览器（仅当显式设置环境变量时启用）
+    if os.environ.get("CCB_GUI_OPEN_BROWSER") == "1":
+        import webbrowser
+        webbrowser.open(local_url)
 
     async with server:
         try:
@@ -1905,5 +1883,4 @@ if __name__ == "__main__":
     try:
         asyncio.run(main())
     except KeyboardInterrupt:
-        if "--sidecar" not in sys.argv:
-            print("\n[CC Bridge] Server stopped.")
+        print("\n[CC Bridge] Server stopped.")

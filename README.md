@@ -1,8 +1,8 @@
-# CC Bridge Client
+# CC Bridge
 
 > 把 Claude Code CLI 变成一个更顺手、更可视、更适合日常工作的本地控制台。
 
-CC Bridge 是一个轻量级 Client，用浏览器桥接 `ccb` / `claude` CLI：保留 Claude Code 的能力与会话体系，同时补上流式界面、历史会话、附件、模型/CLI 切换、远程诊断和更清晰的运行状态。
+CC Bridge 是一个轻量级 Web GUI，用浏览器桥接 `ccb` / `claude` CLI：保留 Claude Code 的能力与会话体系，同时补上流式界面、历史会话、附件、模型/CLI 切换、远程诊断和更清晰的运行状态。
 
 服务端只使用 **Python 标准库**，前端是 **静态 HTML / CSS / Vanilla JavaScript**，没有数据库、没有构建步骤、没有 Web 框架。下载后即可启动，特别适合 Windows 本机使用。
 
@@ -149,94 +149,10 @@ static/i18n/zh.json
 
 ---
 
-## 桌面打包
-
-CC Bridge 支持打包为 **Windows / macOS / Linux 桌面安装程序**，使用 **Tauri v2** 作为桌面壳 + **PyInstaller** 将 Python 后端编译为独立可执行文件。
-
-### 打包原理
-
-```
-桌面应用 (.exe / .app / AppImage)
-  └── Tauri Shell (Rust, ~5.6 MB)
-       ├── WebView 内嵌 GUI 前端 (static/)
-       └── Python Sidecar 子进程 (PyInstaller → server.exe, ~14 MB)
-            └── server.py --sidecar
-                 └── ccb/claude CLI 子进程
-```
-
-Tauri 负责窗口管理、系统托盘、自动更新；Python 侧载进程在后台启动 HTTP 服务并回传端口号，WebView 连接到 `http://127.0.0.1:<port>` 加载界面。
-
-### 构建前准备
-
-| 工具 | 用途 | 安装方式 |
-|------|------|----------|
-| Rust 1.84+ | 编译 Tauri 桌面壳 | `curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs \| sh` |
-| Node.js 20+ | Tauri CLI (npm) | [nodejs.org](https://nodejs.org/) |
-| Python 3.11+ | PyInstaller 打包 & 服务端运行 | [python.org](https://python.org/) |
-
-### 开发模式（热重载）
-
-```bash
-# 终端 1：启动 Python 服务端（与平时一样）
-python server.py
-
-# 终端 2：启动 Tauri 开发模式（连接到上面的服务端）
-cd desktop
-npm install          # 首次运行
-npx tauri dev
-```
-
-### 生产构建
-
-```bash
-cd desktop
-
-# 步骤 1：将 Python 服务端编译为独立可执行文件
-npm run build:python
-# 等价于：
-# python -m PyInstaller build/pyinstaller.spec \
-#   --distpath src-tauri/binaries/server \
-#   --workpath build/pyinstaller-work \
-#   --clean --noconfirm
-
-# 步骤 2：构建 Tauri 桌面安装包
-npm run build:all
-# 等价于：npm run build:python && npx tauri build
-```
-
-构建产物位置：
-
-| 平台 | 产物 |
-|------|------|
-| Windows | `src-tauri/target/release/bundle/msi/*.msi` + `nsis/*.exe` |
-| macOS | `src-tauri/target/release/bundle/dmg/*.dmg` |
-| Linux | `src-tauri/target/release/bundle/deb/*.deb` + `appimage/*.AppImage` |
-
-### 关键配置
-
-| 文件 | 作用 |
-|------|------|
-| `desktop/build/pyinstaller.spec` | 指定 `server.py` 入口 + `static/` 数据目录 + hidden imports |
-| `desktop/src-tauri/tauri.conf.json` | 应用名/版本/图标路径、updater 公钥和更新端点 URL |
-| `desktop/src-tauri/capabilities/default.json` | 授予 Tauri updater/窗口操作的权限 |
-
-### 注意事项
-
-- **PyInstaller 需要对应平台执行**：Windows 只能在 Windows 上交叉编译 `.exe`；CI 流程会在三平台分别构建。
-- **Windows 需要 WebView2**：Win10+ 已预装；Win7/8 需手动安装。
-- **macOS 需要签名**：未签名的 `.dmg` 需用户在「安全性与隐私」中允许打开。
-- **Linux 需要 `libwebkit2gtk-4.1-dev`**：`sudo apt install libwebkit2gtk-4.1-dev`。
-
----
-
 ## 目录结构
 
 ```text
 cc-bridge/
-├── .gitignore                       # 过滤缓存、构建产物、本地配置
-├── .github/
-│   └── workflows/
-│       └── desktop-release.yml      # CI: tag 推送自动构建桌面安装包+发布
 ├── server.py                        # HTTP 静态服务、REST API、SSE
 ├── ccb_bridge.py                    # CLI 子进程管理与 stream-json 解析
 ├── remote_bridge.py                 # MCP 远程工具桥接服务
@@ -252,22 +168,6 @@ cc-bridge/
 │   └── i18n/
 │       ├── en.json                  # 英文文案
 │       └── zh.json                  # 中文文案
-├── desktop/                         # 桌面端封装（Tauri + PyInstaller）
-│   ├── README.md                    # 桌面端开发/构建说明
-│   ├── package.json                 # Tauri CLI (npm)
-│   ├── build/
-│   │   ├── pyinstaller.spec         # PyInstaller 打包规格（server.py → .exe）
-│   │   └── desktop.iss              # Inno Setup 安装程序脚本（备选）
-│   └── src-tauri/
-│       ├── Cargo.toml               # Rust 依赖（tauri + updater）
-│       ├── build.rs                 # Tauri 构建钩子
-│       ├── tauri.conf.json          # 应用元数据、资源路径、更新端点
-│       ├── capabilities/
-│       │   └── default.json         # 权限声明（窗口、更新器）
-│       ├── icons/                   # 应用图标（多分辨率）
-│       └── src/
-│           ├── main.rs              # Rust 入口 + 侧载进程启动/关闭
-│           └── lib.rs               # 侧载解析/窗口管理/自动更新
 └── README.md
 ```
 
