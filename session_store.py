@@ -394,7 +394,7 @@ def rename_session(session_id: str, title: str) -> tuple[bool, str]:
 
 
 def update_session_cwd(session_id: str, new_cwd: str) -> tuple[bool, str]:
-    """更新会话的工作目录。"""
+    """更新会话的工作目录，并将 JSONL 转录文件迁移到新项目目录。"""
     if not session_id:
         return False, "missing_session_id"
     new_cwd = (new_cwd or "").strip()
@@ -405,25 +405,63 @@ def update_session_cwd(session_id: str, new_cwd: str) -> tuple[bool, str]:
 
     sessions = _load()
     now = datetime.now().isoformat(timespec="seconds")
+
+    old_cwd = ""
     for s in sessions:
         if s["session_id"] == session_id:
+            old_cwd = (s.get("cwd") or "").strip()
             s["cwd"] = new_cwd
             s["updated_at"] = now
             _save(sessions)
+            _migrate_session_file(session_id, old_cwd, new_cwd)
             return True, ""
 
     # 会话不在索引中（由 CLI 原生创建），插入新记录
     discovered = next((s for s in discover_local_sessions() if s.get("session_id") == session_id), None)
     if discovered:
+        old_cwd = (discovered.get("cwd") or "").strip()
         discovered["cwd"] = new_cwd
         discovered["total_cost_usd"] = float(discovered.get("total_cost_usd") or 0)
         discovered["total_tokens"] = normalize_tokens(discovered.get("total_tokens"))
         discovered["updated_at"] = now
         sessions.insert(0, discovered)
         _save(sessions)
+        _migrate_session_file(session_id, old_cwd, new_cwd)
         return True, ""
 
+    # 完全不存在的会话，也可能有残留的 JSONL 文件需要迁移
+    _migrate_session_file(session_id, "", new_cwd)
     return False, "not_found"
+
+
+def _migrate_session_file(session_id: str, old_cwd: str, new_cwd: str):
+    """将会话 JSONL 文件从旧项目目录迁移到新项目目录。"""
+    if not old_cwd or not new_cwd:
+        return
+    if _sanitize_cwd(old_cwd) == _sanitize_cwd(new_cwd):
+        return
+
+    old_path = _jsonl_path(session_id, old_cwd)
+    if not old_path.exists():
+        return
+
+    new_path = _jsonl_path(session_id, new_cwd)
+    if new_path.exists():
+        return  # 新位置已有文件，跳过迁移（可能是用户改回了之前的目录）
+
+    try:
+        new_path.parent.mkdir(parents=True, exist_ok=True)
+        old_path.rename(new_path)
+
+        # 如果旧项目目录已空，清理之
+        try:
+            remaining = list(old_path.parent.iterdir())
+            if not remaining:
+                old_path.parent.rmdir()
+        except OSError:
+            pass
+    except OSError:
+        pass  # 迁移失败不阻塞 CWD 更新
 
 
 def _sanitize_cwd(cwd: str) -> str:

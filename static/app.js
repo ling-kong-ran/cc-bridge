@@ -3774,13 +3774,12 @@ function renderSessionList(sessions) {
       e.stopPropagation();
       const sessionId = item.dataset.sid;
       const oldCwd = item.dataset.cwd || '';
-      const newCwd = window.prompt(t('cwdChangePrompt'), oldCwd || cwdInput.value.trim() || '');
+      const newCwd = await promptCwdForSession(oldCwd);
       if (!newCwd || !newCwd.trim() || newCwd.trim() === oldCwd) return;
       const result = await updateSessionCwd(sessionId, newCwd.trim());
       if (result.ok) {
         addSystemMsg(t('cwdChanged', { path: newCwd.trim() }));
         loadSessions();
-        // 如果是当前会话，同步更新输入框
         if (sessionId === currentSessionId) {
           cwdInput.value = newCwd.trim();
         }
@@ -3924,11 +3923,12 @@ function isCwdError(errorMsg) {
   return /\u5de5\u4f5c\u76ee\u5f55\u4e0d\u53ef\u7528|director|not exist|find the (file|path)/i.test(errorMsg);
 }
 
-function promptCwdForSession(unused) {
-  const promptText = t('cwdChangePrompt');
-  const newPath = window.prompt(promptText, cwdInput.value.trim() || '');
-  if (!newPath || !newPath.trim()) return null;
-  return newPath.trim();
+function promptCwdForSession(oldCwd) {
+  return new Promise((resolve) => {
+    openPicker(oldCwd || cwdInput.value.trim() || '/', (selectedPath) => {
+      resolve(selectedPath || null);
+    });
+  });
 }
 
 async function updateSessionCwd(sessionId, newCwd) {
@@ -4014,7 +4014,7 @@ async function resumeSession(sessionId, cwd, model, savedCost = 0, remoteTargetI
   // 目录无效时，让用户手动指定新目录
   if (result && !result.ok && isCwdError(result.error || '')) {
     addSystemMsg(t('cwdNotExist', { path: resumeCwd || '(空)' }), true);
-    const newCwd = promptCwdForSession(sessionId);
+    const newCwd = await promptCwdForSession(resumeCwd);
     if (newCwd) {
       const updateResult = await updateSessionCwd(sessionId, newCwd);
       if (updateResult.ok) {
@@ -4195,6 +4195,7 @@ const pickerSelect = document.getElementById('picker-select');
 const pickerNewdir = document.getElementById('picker-newdir');
 const btnBrowse = document.getElementById('btn-browse');
 let pickerCurrentDir = '/';
+let pickerCallback = null;  // 选择后回调，用于 CWD 更新等场景
 
 btnBrowse.addEventListener('click', () => {
   if (!sessionActive) openPicker();
@@ -4207,6 +4208,13 @@ pickerUp.addEventListener('click', () => {
   navigatePicker(pickerCurrentDir === '/' ? '/' : getParentPath(pickerCurrentDir));
 });
 pickerSelect.addEventListener('click', () => {
+  if (pickerCallback) {
+    const cb = pickerCallback;
+    pickerCallback = null;
+    cb(pickerCurrentDir);
+    closePicker();
+    return;
+  }
   cwdInput.value = pickerCurrentDir;
   slashCommands = [];
   closeSlashCommandPanel();
@@ -4241,13 +4249,19 @@ pickerNewdir.addEventListener('click', async () => {
   }
 });
 
-function openPicker() {
+function openPicker(initialPath, callback) {
   pickerOverlay.style.display = 'flex';
-  navigatePicker(cwdInput.value || '/');
+  if (callback) {
+    pickerCallback = callback;
+  }
+  navigatePicker(initialPath || cwdInput.value || '/');
 }
 
 function closePicker() {
+  const cb = pickerCallback;
   pickerOverlay.style.display = 'none';
+  pickerCallback = null;
+  if (cb) cb(null);  // 未选择就关闭，通知调用方
 }
 
 async function navigatePicker(path) {
