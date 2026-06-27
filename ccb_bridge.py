@@ -67,6 +67,27 @@ _slash_command_locks: dict[str, asyncio.Lock] = {}
 def get_current_cli() -> str:
     return _current_cli
 
+
+def validate_cli(cli_path: str) -> str:
+    """校验 CLI 路径可用，不可用时抛出 FileNotFoundError 并包含清晰提示。"""
+    import shutil as _shutil
+    resolved = _shutil.which(cli_path) if not os.path.isabs(cli_path) else cli_path
+    if not resolved or not os.path.isfile(resolved):
+        raise FileNotFoundError(
+            f"CLI 不可用：{cli_path}。请确保已安装 Claude Code CLI（ccb 或 claude），"
+            "可在设置中切换或点击「安装 CLI」按钮。"
+        )
+    return resolved
+
+
+def validate_cwd(cwd: str) -> str:
+    """校验工作目录存在且可访问。"""
+    if not cwd or not os.path.isdir(cwd):
+        raise FileNotFoundError(
+            f"工作目录不可用：{cwd or '(空)'}。目录可能已被删除或重命名，请检查路径是否正确。"
+        )
+    return cwd
+
 def set_current_cli(path: str):
     global _current_cli
     _current_cli = path
@@ -274,7 +295,7 @@ class CCBSession:
     ):
         """初始化会话参数"""
         self.model = model
-        self.cwd = cwd or DEFAULT_CWD
+        self.cwd = validate_cwd(cwd or DEFAULT_CWD)
         self.session_id = resume_id
         self._on_event = on_event
         self.skip_permissions = skip_permissions
@@ -399,8 +420,10 @@ class CCBSession:
     async def _start_persistent_proc(self, proc_key: tuple):
         await self._kill_proc()
 
+        cli = validate_cli(self.cli or get_current_cli())
+        cwd = validate_cwd(self.cwd or "")
         cmd = [
-            self.cli or get_current_cli(),
+            cli,
             "-p",
             "--input-format", "stream-json",
             "--output-format", "stream-json",
@@ -430,7 +453,7 @@ class CCBSession:
             stdin=asyncio.subprocess.PIPE,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
-            cwd=self.cwd,
+            cwd=cwd,
             limit=1024 * 1024 * 20,
         )
         self._persistent = True
@@ -442,8 +465,10 @@ class CCBSession:
         # 如果上一个进程还在跑，先终止
         await self._kill_proc()
 
+        cli = validate_cli(self.cli or get_current_cli())
+        cwd = validate_cwd(self.cwd or "")
         cmd = [
-            self.cli or get_current_cli(),
+            cli,
             "-p",
             "--output-format", "stream-json",
             "--verbose",
@@ -471,7 +496,7 @@ class CCBSession:
             stdin=asyncio.subprocess.PIPE,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
-            cwd=self.cwd,
+            cwd=cwd,
             limit=1024 * 1024 * 20,  # 20MB buffer for large image responses
         )
 

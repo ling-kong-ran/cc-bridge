@@ -99,7 +99,7 @@ def list_sessions() -> list[dict]:
             else:
                 merged["title"] = discovered.get("title") or existing.get("title", "")
             merged["model"] = discovered.get("model") or existing.get("model", "")
-            merged["cwd"] = discovered.get("cwd") or existing.get("cwd", "")
+            merged["cwd"] = existing.get("cwd") or discovered.get("cwd", "")
             merged["total_cost_usd"] = float(existing.get("total_cost_usd") or 0)
             merged["total_tokens"] = normalize_tokens(existing.get("total_tokens"))
             merged["remote_target_id"] = existing.get("remote_target_id", "")
@@ -161,7 +161,7 @@ def parse_session_jsonl(jsonl_path: Path) -> dict | None:
                     continue
 
                 session_id = obj.get("sessionId") or obj.get("session_id") or session_id
-                if obj.get("cwd"):
+                if obj.get("cwd") and not cwd:
                     cwd = obj.get("cwd", "")
                 timestamp = obj.get("timestamp")
                 if timestamp:
@@ -226,7 +226,8 @@ def save_session(session_id: str, title: str, model: str, cwd: str,
             else:
                 s["title"] = s.get("title", "")
             s["model"] = model
-            s["cwd"] = cwd
+            if not s.get("cwd"):
+                s["cwd"] = cwd
             s["total_cost_usd"] = float(s.get("total_cost_usd") or 0)
             s["total_tokens"] = normalize_tokens(s.get("total_tokens"))
             s["updated_at"] = now
@@ -390,6 +391,39 @@ def rename_session(session_id: str, title: str) -> tuple[bool, str]:
     sessions.insert(0, discovered)
     _save(sessions)
     return True, ""
+
+
+def update_session_cwd(session_id: str, new_cwd: str) -> tuple[bool, str]:
+    """更新会话的工作目录。"""
+    if not session_id:
+        return False, "missing_session_id"
+    new_cwd = (new_cwd or "").strip()
+    if not new_cwd:
+        return False, "empty_cwd"
+    if not os.path.isdir(new_cwd):
+        return False, "cwd_not_exist"
+
+    sessions = _load()
+    now = datetime.now().isoformat(timespec="seconds")
+    for s in sessions:
+        if s["session_id"] == session_id:
+            s["cwd"] = new_cwd
+            s["updated_at"] = now
+            _save(sessions)
+            return True, ""
+
+    # 会话不在索引中（由 CLI 原生创建），插入新记录
+    discovered = next((s for s in discover_local_sessions() if s.get("session_id") == session_id), None)
+    if discovered:
+        discovered["cwd"] = new_cwd
+        discovered["total_cost_usd"] = float(discovered.get("total_cost_usd") or 0)
+        discovered["total_tokens"] = normalize_tokens(discovered.get("total_tokens"))
+        discovered["updated_at"] = now
+        sessions.insert(0, discovered)
+        _save(sessions)
+        return True, ""
+
+    return False, "not_found"
 
 
 def _sanitize_cwd(cwd: str) -> str:

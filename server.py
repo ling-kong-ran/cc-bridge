@@ -41,11 +41,15 @@ from config_manager import (
     get_agent,
     get_agents_for_cli,
 )
-from session_store import list_sessions, save_session, add_session_usage, delete_session, load_session_history, rename_session
+from session_store import list_sessions, save_session, add_session_usage, delete_session, load_session_history, rename_session, update_session_cwd
 from memory_index import list_memory_files, search_memory, get_memory_file, delete_memory_file, save_memory_file, index_memory
 import remote_manager
 
-STATIC_DIR = Path(__file__).parent / "static"
+# PyInstaller one-file 模式下，数据文件解压到 sys._MEIPASS
+if hasattr(sys, "_MEIPASS"):
+    STATIC_DIR = Path(sys._MEIPASS) / "static"  # type: ignore[attr-defined]
+else:
+    STATIC_DIR = Path(__file__).parent / "static"
 DEFAULT_CWD = str(Path(__file__).parent.resolve())  # 项目根目录作为默认 CWD
 HOST = "0.0.0.0"  # 监听所有网卡，允许局域网设备访问
 BROWSER_HOST = "127.0.0.1"
@@ -984,7 +988,11 @@ async def handle_http(reader: asyncio.StreamReader, writer: asyncio.StreamWriter
         pass
     except Exception as e:
         try:
-            await send_response(writer, 500, "text/plain", str(e).encode())
+            if route_path.startswith("/api/"):
+                err_body = json.dumps({"error": str(e)}, ensure_ascii=False).encode("utf-8")
+                await send_response(writer, 500, "application/json; charset=utf-8", err_body)
+            else:
+                await send_response(writer, 500, "text/plain", str(e).encode())
         except Exception:
             pass
     finally:
@@ -1172,8 +1180,14 @@ async def handle_action(body: bytes, writer: asyncio.StreamWriter):
                 await push_event(client_id, evt_type, event)
             # 其他事件（hook_started 等）忽略
 
-        await session.start(model=model, cwd=cwd, on_event=on_event, skip_permissions=skip_perms,
-                            remote_target=remote_target, allow_mutate=allow_mutate, cli=cli)
+        try:
+            await session.start(model=model, cwd=cwd, on_event=on_event, skip_permissions=skip_perms,
+                                remote_target=remote_target, allow_mutate=allow_mutate, cli=cli)
+        except Exception as exc:
+            await push_event(client_id, "error", {"message": str(exc)})
+            err = json.dumps({"ok": False, "error": str(exc)}, ensure_ascii=False).encode("utf-8")
+            await send_response(writer, 400, "application/json; charset=utf-8", err)
+            return
         await push_event(client_id, "session_started", {"model": model, "remote_target_id": remote_target_id, "cli": cli})
         await send_response(writer, 200, "application/json", b'{"ok":true}')
 
@@ -1373,7 +1387,13 @@ async def handle_action(body: bytes, writer: asyncio.StreamWriter):
             for vid in viewer_ids:
                 await push_event(vid, "user_message", {"content": content})
 
-            await session.send_message(content, owner_id=client_id)
+            try:
+                await session.send_message(content, owner_id=client_id)
+            except Exception as exc:
+                await push_event(client_id, "error", {"message": str(exc)})
+                err = json.dumps({"ok": False, "error": str(exc)}, ensure_ascii=False).encode("utf-8")
+                await send_response(writer, 500, "application/json; charset=utf-8", err)
+                return
             await send_response(writer, 200, "application/json", b'{"ok":true}')
         else:
             await push_event(client_id, "error", {"message": "Session not running"})
@@ -1598,6 +1618,12 @@ async def handle_api_post(path: str, body: bytes, writer: asyncio.StreamWriter):
         resp = json.dumps({"ok": ok, "error": error}, ensure_ascii=False).encode("utf-8")
         await send_response(writer, status, "application/json; charset=utf-8", resp)
         return
+    elif path == "/api/sessions/update-cwd":
+        ok, error = update_session_cwd(data.get("session_id", ""), data.get("cwd", ""))
+        status = 200 if ok else 400
+        resp = json.dumps({"ok": ok, "error": error}, ensure_ascii=False).encode("utf-8")
+        await send_response(writer, status, "application/json; charset=utf-8", resp)
+        return
     elif path == "/api/sessions/history":
         sid = data.get("session_id", "")
         cwd = data.get("cwd", "")
@@ -1816,6 +1842,8 @@ async def send_response(writer: asyncio.StreamWriter, status: int, content_type:
 
 
 async def main():
+    sidecar_mode = "--sidecar" in sys.argv
+
     # 恢复上次选中的 CLI（启动时 _current_cli 默认是第一个检测到的，这里覆盖为用户上次的选择）
     saved_cli = get_gui_settings().get("cli_path", "")
     if saved_cli and saved_cli in [c["path"] for c in get_available_clis()]:
@@ -1835,26 +1863,47 @@ async def main():
 
     local_url = f"http://{BROWSER_HOST}:{port}"
     lan_urls = [f"http://{ip}:{port}" for ip in get_lan_ips()]
-    if port != DEFAULT_PORT:
-        print(f"[CC Bridge] Port {DEFAULT_PORT} is unavailable, using {port}")
-    print(f"[CC Bridge] Server running at {local_url}")
-    for lan_url in lan_urls:
-        print(f"[CC Bridge] LAN access: {lan_url}")
-    if not lan_urls:
-        print("[CC Bridge] LAN access: no LAN IPv4 address detected")
-    print(f"[CC Bridge] Press Ctrl+C to stop")
 
-    # 自动打开浏览器（仅当显式设置环境变量时启用）
-    if os.environ.get("CCB_GUI_OPEN_BROWSER") == "1":
-        import webbrowser
-        webbrowser.open(local_url)
+    if sidecar_mode:
+        # Tauri sidecar mode: report port to parent process via stdout
+        print(f"SIDECAR_PORT:{port}", flush=True)
+        # Monitor stdin: when Tauri closes it, shut down gracefully
+        import threading
+        _loop = asyncio.get_running_loop()
+        def _watch_stdin():
+            try:
+                sys.stdin.read(1)
+            except Exception:
+                pass
+            _loop.call_soon_threadsafe(
+                lambda: server.close() if server else None
+            )
+        threading.Thread(target=_watch_stdin, daemon=True).start()
+    else:
+        if port != DEFAULT_PORT:
+            print(f"[CC Bridge] Port {DEFAULT_PORT} is unavailable, using {port}")
+        print(f"[CC Bridge] Server running at {local_url}")
+        for lan_url in lan_urls:
+            print(f"[CC Bridge] LAN access: {lan_url}")
+        if not lan_urls:
+            print("[CC Bridge] LAN access: no LAN IPv4 address detected")
+        print(f"[CC Bridge] Press Ctrl+C to stop")
+
+        # 自动打开浏览器（仅当显式设置环境变量时启用）
+        if os.environ.get("CCB_GUI_OPEN_BROWSER") == "1":
+            import webbrowser
+            webbrowser.open(local_url)
 
     async with server:
-        await server.serve_forever()
+        try:
+            await server.serve_forever()
+        except asyncio.CancelledError:
+            pass
 
 
 if __name__ == "__main__":
     try:
         asyncio.run(main())
     except KeyboardInterrupt:
-        print("\n[CC Bridge] Server stopped.")
+        if "--sidecar" not in sys.argv:
+            print("\n[CC Bridge] Server stopped.")

@@ -3747,7 +3747,7 @@ function renderSessionList(sessions) {
 
   el.querySelectorAll('.session-item').forEach(item => {
     item.addEventListener('click', (e) => {
-      if (e.target.classList.contains('session-item-delete') || e.target.classList.contains('session-item-rename')) return;
+      if (e.target.classList.contains('session-item-delete') || e.target.classList.contains('session-item-rename') || e.target.classList.contains('session-item-cwd')) return;
       const tokens = safeJsonParse(item.dataset.tokens, null);
       showPage('chat');
       resumeSession(item.dataset.sid, item.dataset.cwd, item.dataset.model, Number(item.dataset.cost || 0), item.dataset.remoteTarget || '', tokens, item.dataset.cli || '');
@@ -3769,6 +3769,24 @@ function renderSessionList(sessions) {
       const nextTitle = window.prompt(t('renameSessionPrompt'), currentTitle);
       if (!nextTitle || nextTitle.trim() === currentTitle) return;
       await renameSession(item.dataset.sid, nextTitle.trim());
+    });
+    item.querySelector('.session-item-cwd').addEventListener('click', async (e) => {
+      e.stopPropagation();
+      const sessionId = item.dataset.sid;
+      const oldCwd = item.dataset.cwd || '';
+      const newCwd = window.prompt(t('cwdChangePrompt'), oldCwd || cwdInput.value.trim() || '');
+      if (!newCwd || !newCwd.trim() || newCwd.trim() === oldCwd) return;
+      const result = await updateSessionCwd(sessionId, newCwd.trim());
+      if (result.ok) {
+        addSystemMsg(t('cwdChanged', { path: newCwd.trim() }));
+        loadSessions();
+        // 如果是当前会话，同步更新输入框
+        if (sessionId === currentSessionId) {
+          cwdInput.value = newCwd.trim();
+        }
+      } else {
+        addSystemMsg(t('cwdNotChanged', { message: result.error || t('unknownError') }), true);
+      }
     });
   });
 }
@@ -3853,6 +3871,7 @@ function renderSessionItem(s) {
       <div class="session-item-meta">${modelLabel ? `${esc(modelLabel)} · ` : ''}${esc(time)}${savedCost > 0 ? ` · $${savedCost.toFixed(4)}` : ''}${tokenTotal > 0 ? ` · ${formatTokenCount(tokenTotal)} tok` : ''}</div>
     </div>
     <div class="session-item-actions">
+      <button class="session-item-cwd" title="${esc(t('changeCwd'))}">📁</button>
       <button class="session-item-rename" title="${esc(t('rename'))}">✎</button>
       <button class="session-item-delete" title="${esc(t('delete'))}">&times;</button>
     </div>
@@ -3897,6 +3916,32 @@ function openCurrentCwdSessionGroup() {
   const current = cwdInput.value.trim();
   if (!current) return;
   sessionGroupOpenState.set(normalizeCwdKey(current), true);
+}
+
+// ─── 目录更新辅助函数 ──────────────────────────────────────────
+function isCwdError(errorMsg) {
+  if (!errorMsg) return false;
+  return /\u5de5\u4f5c\u76ee\u5f55\u4e0d\u53ef\u7528|director|not exist|find the (file|path)/i.test(errorMsg);
+}
+
+function promptCwdForSession(unused) {
+  const promptText = t('cwdChangePrompt');
+  const newPath = window.prompt(promptText, cwdInput.value.trim() || '');
+  if (!newPath || !newPath.trim()) return null;
+  return newPath.trim();
+}
+
+async function updateSessionCwd(sessionId, newCwd) {
+  try {
+    const resp = await fetch('/api/sessions/update-cwd', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ session_id: sessionId, cwd: newCwd }),
+    });
+    return await resp.json();
+  } catch (e) {
+    return { ok: false, error: e.message };
+  }
 }
 
 async function resumeSession(sessionId, cwd, model, savedCost = 0, remoteTargetId = '', savedTokens = null, cli = '') {
@@ -3955,15 +4000,42 @@ async function resumeSession(sessionId, cwd, model, savedCost = 0, remoteTargetI
     console.error('历史消息加载失败:', e);
   }
 
-  const result = await sendAction('resume_session', {
+  let resumeCwd = cwd || cwdInput.value.trim() || null;
+  let result = await sendAction('resume_session', {
     session_id: sessionId,
     model: model || modelSelect.value,
     cli: cli || document.getElementById('cli-select')?.value || '',
-    cwd: cwd || cwdInput.value.trim() || null,
+    cwd: resumeCwd,
     skip_permissions: document.getElementById('skip-permissions').checked,
     remote_target_id: remoteTargetId || '',
     allow_remote_mutate: !!remoteAllowMutate?.checked,
   });
+
+  // 目录无效时，让用户手动指定新目录
+  if (result && !result.ok && isCwdError(result.error || '')) {
+    addSystemMsg(t('cwdNotExist', { path: resumeCwd || '(空)' }), true);
+    const newCwd = promptCwdForSession(sessionId);
+    if (newCwd) {
+      const updateResult = await updateSessionCwd(sessionId, newCwd);
+      if (updateResult.ok) {
+        addSystemMsg(t('cwdChanged', { path: newCwd }));
+        cwdInput.value = newCwd;
+        resumeCwd = newCwd;
+        // 重试 resume
+        result = await sendAction('resume_session', {
+          session_id: sessionId,
+          model: model || modelSelect.value,
+          cli: cli || document.getElementById('cli-select')?.value || '',
+          cwd: resumeCwd,
+          skip_permissions: document.getElementById('skip-permissions').checked,
+          remote_target_id: remoteTargetId || '',
+          allow_remote_mutate: !!remoteAllowMutate?.checked,
+        });
+      } else {
+        addSystemMsg(t('cwdNotChanged', { message: updateResult.error || t('unknownError') }), true);
+      }
+    }
+  }
 
   if (result && result.ok) {
     sessionActive = true;

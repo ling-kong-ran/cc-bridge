@@ -3,3 +3,14 @@ __pycache__/
 uploads/
 ccb.exe
 vendor/
+
+# Desktop packaging
+desktop/node_modules/
+desktop/src-tauri/target/
+desktop/src-tauri/gen/
+desktop/src-tauri/binaries/
+desktop/build/pyinstaller-work/
+desktop/build/pyinstaller/
+
+# Claude Code local
+.claude/
