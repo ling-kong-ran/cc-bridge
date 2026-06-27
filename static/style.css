@@ -604,6 +604,7 @@ html.light-theme .select {
   background: transparent;
   color: var(--text-base);
   cursor: pointer;
+  -webkit-touch-callout: none;
   font-family: var(--font-mono);
   text-align: left;
   transition: all var(--t-fast);
@@ -1176,6 +1177,7 @@ html.light-theme .select {
   max-width: 840px; margin: 0 auto 16px;
   display: flex; gap: 12px;
   animation: msgIn var(--t-base) var(--ease-out) both;
+  -webkit-touch-callout: none;
 }
 
 @keyframes msgIn {

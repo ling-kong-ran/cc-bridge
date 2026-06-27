@@ -2040,6 +2040,32 @@ function domText(el) {
   return (el.querySelector('.msg-content') || el).textContent.trim();
 }
 
+// ─── 长按模拟右键（移动端） ──────────────────────────────────
+function addLongPressSupport(el, handler) {
+  let pressTimer = null;
+  let pressPos = null;
+
+  el.addEventListener('contextmenu', handler);
+
+  el.addEventListener('touchstart', (e) => {
+    if (e.touches.length !== 1) { clearPress(); return; }
+    pressPos = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+    pressTimer = setTimeout(() => {
+      handler({ clientX: pressPos.x, clientY: pressPos.y, preventDefault: () => {}, target: e.target });
+      clearPress();
+    }, 500);
+  }, { passive: true });
+
+  function clearPress() {
+    clearTimeout(pressTimer);
+    pressTimer = null;
+    pressPos = null;
+  }
+  el.addEventListener('touchend', clearPress);
+  el.addEventListener('touchmove', clearPress);
+  el.addEventListener('touchcancel', clearPress);
+}
+
 // ─── 消息右键引用 ────────────────────────────────────────────
 function hideMsgContextMenu() {
   const menu = document.getElementById('msg-context-menu');
@@ -2084,13 +2110,12 @@ function initMessageContextMenu() {
   const menu = document.getElementById('msg-context-menu');
   if (!menu) return;
 
-  messagesEl.addEventListener('contextmenu', (e) => {
+  addLongPressSupport(messagesEl, (e) => {
     const msgEl = e.target.closest('.message');
     if (!msgEl) return;
     e.preventDefault();
     quoteSourceText = domText(msgEl);
     if (!quoteSourceText) return;
-    // 先显示以便测量尺寸，再做视口边界收敛（visibility:hidden 防止闪烁）
     menu.style.display = 'block';
     const rect = menu.getBoundingClientRect();
     let x = e.clientX;
@@ -3742,7 +3767,7 @@ function renderSessionList(sessions) {
       if (chevron) chevron.textContent = isOpen ? '▸' : '▾';
       sessionGroupOpenState.set(key, !isOpen);
     });
-    header.addEventListener('contextmenu', (e) => showCwdContextMenu(e, header.closest('.session-group')?.dataset.cwd || ''));
+    addLongPressSupport(header, (e) => showCwdContextMenu(e, header.closest('.session-group')?.dataset.cwd || ''));
   });
 
   el.querySelectorAll('.session-item').forEach(item => {
