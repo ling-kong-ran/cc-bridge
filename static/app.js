@@ -1155,6 +1155,8 @@ function showPage(page) {
   // 更新全局 titlebar
   const pageLabel = document.getElementById('titlebar-page-label');
   if (pageLabel) pageLabel.textContent = t(page === 'config' ? 'settings' : page === 'remote' ? 'remoteDiag' : 'chat');
+  const backBtn = document.getElementById('btn-titlebar-back');
+  if (backBtn) backBtn.style.display = page === 'chat' ? 'none' : '';
   const titlebarMeta = document.getElementById('titlebar-meta');
   if (titlebarMeta) titlebarMeta.style.display = page === 'chat' ? '' : 'none';
   const btnExport = document.getElementById('btn-export-chat');
@@ -1176,6 +1178,11 @@ function initNavigation() {
   const btnNavSettings = document.getElementById('btn-nav-settings');
   if (btnNavSettings) {
     btnNavSettings.addEventListener('click', () => showPage('config'));
+  }
+  // 全局 titlebar 返回聊天按钮
+  const btnBack = document.getElementById('btn-titlebar-back');
+  if (btnBack) {
+    btnBack.addEventListener('click', () => showPage('chat'));
   }
 }
 

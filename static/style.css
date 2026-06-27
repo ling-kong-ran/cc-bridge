@@ -266,6 +266,12 @@ html, body {
   height: 26px;
 }
 
+.titlebar-back-btn {
+  font-size: 14px;
+  padding: 3px 8px;
+  line-height: 1;
+}
+
 .titlebar-btn:hover {
   border-color: var(--amber);
   color: var(--amber);
