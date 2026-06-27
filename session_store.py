@@ -104,13 +104,14 @@ def list_sessions() -> list[dict]:
             merged["total_tokens"] = normalize_tokens(existing.get("total_tokens"))
             merged["remote_target_id"] = existing.get("remote_target_id", "")
             merged["cli"] = existing.get("cli", "")
+            merged["pinned"] = bool(existing.get("pinned"))
             merged["manual_title"] = bool(existing.get("manual_title"))
             merged["created_at"] = existing.get("created_at") or discovered.get("created_at", "")
             merged["source"] = existing.get("source") or "gui"
         sessions_by_id[sid] = merged
 
     sessions = list(sessions_by_id.values())
-    sessions.sort(key=lambda s: s.get("mtime", 0), reverse=True)
+    sessions.sort(key=lambda s: (not bool(s.get("pinned")), -(s.get("mtime", 0) or 0)))
     return sessions
 
 
@@ -232,6 +233,7 @@ def save_session(session_id: str, title: str, model: str, cwd: str,
             s["total_tokens"] = normalize_tokens(s.get("total_tokens"))
             s["updated_at"] = now
             s["remote_target_id"] = remote_target_id
+            s["pinned"] = bool(s.get("pinned"))
             if cli:
                 s["cli"] = cli
             _save(sessions)
@@ -327,6 +329,32 @@ def _delete_session_files(session_id: str, cwd: str = "") -> bool:
         except OSError:
             pass
     return deleted
+
+
+def toggle_pin(session_id: str) -> bool:
+    """切换会话置顶状态，返回当前 pinned 值。"""
+    if not session_id:
+        return False
+    sessions = _load()
+    now = datetime.now().isoformat(timespec="seconds")
+    for s in sessions:
+        if s["session_id"] == session_id:
+            s["pinned"] = not s.get("pinned", False)
+            s["updated_at"] = now
+            _save(sessions)
+            return s["pinned"]
+
+    # 会话不在 GUI 索引中（由 CLI 原生创建），插入一条 pinned 记录
+    discovered = next((s for s in discover_local_sessions() if s.get("session_id") == session_id), None)
+    if discovered:
+        discovered["pinned"] = True
+        discovered["total_cost_usd"] = float(discovered.get("total_cost_usd") or 0)
+        discovered["total_tokens"] = normalize_tokens(discovered.get("total_tokens"))
+        discovered["updated_at"] = now
+        sessions.insert(0, discovered)
+        _save(sessions)
+        return True
+    return False
 
 
 def delete_session(session_id: str, cwd: str = "") -> bool:

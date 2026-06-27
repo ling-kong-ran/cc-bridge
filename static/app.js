@@ -24,6 +24,9 @@ let currentTurnTimer = null;
 let currentTurnAttachmentCount = 0;
 let lastFocusConfigReloadAt = 0;
 let cachedSessions = [];
+let sessionOffset = 0;
+let sessionTotal = 0;
+const SESSION_PAGE_SIZE = 50;
 let sidebarCollapsed = false;
 
 // ─── DOM ─────────────────────────────────────────────────────
@@ -97,6 +100,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   initMobileLayout();
   initSSE();
   initInput();
+  initModelPill();
   initCliInstallModal();
   initUpdateModal();
   initMessageContextMenu();
@@ -106,6 +110,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   initMcpManager();
   initAgentModal();
   initSessionAgentPanel();
+  initFileTreePanel();
   initMentionAutocomplete();
   initMemoryUI();
   loadDefaultCwd();
@@ -1124,6 +1129,7 @@ async function loadModels() {
     const availableModels = Array.isArray(models) ? models.filter(Boolean) : [];
     if (!availableModels.length) {
       modelSelect.innerHTML = '<option value="claude-sonnet-4-6">Sonnet 4.6</option>';
+      renderModelPill();
       return;
     }
     modelSelect.innerHTML = availableModels.map((model, idx) => (
@@ -1132,8 +1138,10 @@ async function loadModels() {
     if (previousModel && !availableModels.includes(previousModel)) {
       modelSelect.value = availableModels[0] || '';
     }
+    renderModelPill();
   } catch (e) {
     modelSelect.innerHTML = '<option value="claude-sonnet-4-6">Sonnet 4.6</option>';
+    renderModelPill();
   }
 }
 
@@ -1362,6 +1370,8 @@ function bindSSEEvents() {
     const data = JSON.parse(e.data);
     const modelLabel = getDisplayModelName(data.model || '');
     renderTopbarMeta(data.model || '');
+    if (data.model && modelSelect) { modelSelect.value = data.model; }
+    renderModelPill();
     if (modelLabel) addSystemMsg(t('modelChanged', { model: modelLabel }));
   });
 
@@ -1935,10 +1945,40 @@ function addSystemMsg(text, isError) {
   scrollToBottom();
 }
 
+// ─── Toast 通知 ─────────────────────────────────────────────────
+const toastContainer = document.getElementById('toast-container');
+let toastTimer = null;
+
+function showToast(msg, type = 'info', duration = 3000) {
+  const icon = { success: '✓', error: '✗', warning: '!', info: 'i' }[type] || 'i';
+  const toast = document.createElement('div');
+  toast.className = `toast ${type}`;
+  toast.innerHTML = `<span class="toast-icon">${icon}</span><span class="toast-msg">${msg}</span><button class="toast-close">&times;</button>`;
+  toast.querySelector('.toast-close').addEventListener('click', () => dismissToast(toast));
+  toast.addEventListener('mouseenter', () => { if (toast._timer) clearTimeout(toast._timer); });
+  toast.addEventListener('mouseleave', () => { toast._timer = setTimeout(() => dismissToast(toast), 2000); });
+  toastContainer.appendChild(toast);
+  toast._timer = setTimeout(() => dismissToast(toast), duration);
+  // 最多保留 5 条，旧的自上而下消失
+  while (toastContainer.children.length > 5) {
+    dismissToast(toastContainer.firstElementChild);
+  }
+}
+
+function dismissToast(toast) {
+  if (toast._dismissing) return;
+  toast._dismissing = true;
+  if (toast._timer) { clearTimeout(toast._timer); toast._timer = null; }
+  toast.classList.add('dismissing');
+  setTimeout(() => { if (toast.parentNode) toast.remove(); }, 200);
+}
+
 // ─── 输入 ────────────────────────────────────────────────────
 const btnAttach = document.getElementById('btn-attach');
 const fileInput = document.getElementById('file-input');
 const attachmentsBar = document.getElementById('attachments-bar');
+const modelPill = document.getElementById('model-pill');
+const modelPillPopover = document.getElementById('model-pill-popover');
 const quotePreviewBar = document.getElementById('quote-preview-bar');
 const slashCommandPanel = document.getElementById('slash-command-panel');
 const inputWrapper = document.querySelector('.input-wrapper');
@@ -1999,6 +2039,7 @@ function initInput() {
   document.getElementById('welcome-new-session')?.addEventListener('click', startNewSession);
   modelSelect.addEventListener('change', () => {
     renderTopbarMeta();
+    renderModelPill();
     slashCommands = [];
     closeSlashCommandPanel();
     // 记住选择，刷新后恢复
@@ -2373,6 +2414,69 @@ function closeSlashCommandPanel() {
   slashCommandPanel.style.display = 'none';
   slashCommandMatches = [];
   slashCommandIndex = 0;
+}
+
+// ─── 模型胶囊 (输入栏内模型切换) ──────────────────────────────
+
+function renderModelPill() {
+  if (!modelPill) return;
+  const val = modelSelect.value;
+  modelPill.textContent = getDisplayModelName(val) || 'Model';
+  // 同步刷新弹出列表里的选项选中态
+  if (modelPillPopover && modelPillPopover.style.display === 'block') {
+    renderModelPillPopoverOptions();
+  }
+}
+
+function renderModelPillPopoverOptions() {
+  if (!modelPillPopover) return;
+  const current = modelSelect.value;
+  modelPillPopover.innerHTML = Array.from(modelSelect.options)
+    .filter(function(o) { return o.value; })
+    .map(function(o) {
+      return '<button class="model-pill-option' + (o.value === current ? ' active' : '') + '" data-model="' + esc(o.value) + '">' + esc(o.textContent) + '</button>';
+    })
+    .join('');
+  modelPillPopover.querySelectorAll('.model-pill-option').forEach(function(btn) {
+    btn.addEventListener('click', function() {
+      var model = btn.dataset.model;
+      if (model && model !== modelSelect.value) {
+        modelSelect.value = model;
+        modelSelect.dispatchEvent(new Event('change'));
+      }
+      closeModelPillPopover();
+    });
+  });
+}
+
+function openModelPillPopover() {
+  if (!modelPillPopover) return;
+  if (modelPillPopover.style.display === 'block') { closeModelPillPopover(); return; }
+  closeSlashCommandPanel();
+  renderModelPillPopoverOptions();
+  modelPillPopover.style.display = 'block';
+  modelPill.classList.add('open');
+}
+
+function closeModelPillPopover() {
+  if (!modelPillPopover) return;
+  modelPillPopover.style.display = 'none';
+  modelPill.classList.remove('open');
+}
+
+function initModelPill() {
+  if (!modelPill) return;
+  modelPill.addEventListener('click', function(e) {
+    e.stopPropagation();
+    openModelPillPopover();
+  });
+  document.addEventListener('click', function(e) {
+    if (modelPillPopover && modelPillPopover.style.display === 'block' &&
+        !modelPillPopover.contains(e.target) && e.target !== modelPill) {
+      closeModelPillPopover();
+    }
+  });
+  renderModelPill();
 }
 
 function cleanupUploadedFiles(files) {
@@ -3237,6 +3341,7 @@ function initSessionAgentPanel() {
     const closePanel = () => {
       sidebar.classList.remove('open');
       toggleBtn.classList.remove('active');
+      document.getElementById('btn-files-toggle')?.classList.remove('active');
     };
 
     toggleBtn.addEventListener('click', () => {
@@ -3248,9 +3353,10 @@ function initSessionAgentPanel() {
     });
 
     // 点击面板外部关闭
+    const filesToggleBtn = document.getElementById('btn-files-toggle');
     document.addEventListener('click', (e) => {
       if (!sidebar.classList.contains('open')) return;
-      if (!sidebar.contains(e.target) && e.target !== toggleBtn && !toggleBtn.contains(e.target)) {
+      if (!sidebar.contains(e.target) && e.target !== toggleBtn && !toggleBtn.contains(e.target) && e.target !== filesToggleBtn && !filesToggleBtn?.contains(e.target)) {
         closePanel();
       }
     });
@@ -3288,6 +3394,111 @@ function initSessionAgentPanel() {
     }
   });
   loadSessionAgents();
+}
+
+// ─── 文件树面板 ──────────────────────────────────────────────────
+let fileTreePath = '';
+
+function initFileTreePanel() {
+  const tabs = document.querySelectorAll('.chat-sidebar-tab');
+  tabs.forEach(tab => {
+    tab.addEventListener('click', () => {
+      tabs.forEach(t => t.classList.remove('active'));
+      tab.classList.add('active');
+      const isMembers = tab.dataset.tab === 'members';
+      document.getElementById('group-member-panel').style.display = isMembers ? '' : 'none';
+      document.getElementById('file-tree-panel').style.display = isMembers ? 'none' : '';
+      document.getElementById('btn-session-agent-add').style.display = isMembers ? '' : 'none';
+      if (!isMembers) {
+        const cwd = (cwdInput?.value || '').trim();
+        if (cwd) loadFileTree(cwd);
+      }
+    });
+  });
+  document.getElementById('btn-file-tree-refresh')?.addEventListener('click', () => {
+    const cwd = (cwdInput?.value || '').trim();
+    if (cwd) loadFileTree(cwd);
+  });
+
+  // 浮动文件夹按钮 → 打开 Files 面板
+  const filesToggle = document.getElementById('btn-files-toggle');
+  const sidebar = document.getElementById('chat-sidebar');
+  if (filesToggle && sidebar) {
+    filesToggle.addEventListener('click', () => {
+      const isOpen = sidebar.classList.contains('open') && document.getElementById('file-tree-panel').style.display !== 'none';
+      if (isOpen) {
+        sidebar.classList.remove('open');
+        document.getElementById('btn-members-toggle')?.classList.remove('active');
+        filesToggle.classList.remove('active');
+        return;
+      }
+      sidebar.classList.add('open');
+      filesToggle.classList.add('active');
+      // 切换到 Files tab
+      document.querySelectorAll('.chat-sidebar-tab').forEach(t => t.classList.remove('active'));
+      const filesTab = document.querySelector('.chat-sidebar-tab[data-tab="files"]');
+      if (filesTab) filesTab.classList.add('active');
+      document.getElementById('group-member-panel').style.display = 'none';
+      document.getElementById('file-tree-panel').style.display = '';
+      document.getElementById('btn-session-agent-add').style.display = 'none';
+      const cwd = (cwdInput?.value || '').trim();
+      if (cwd) loadFileTree(cwd);
+    });
+  }
+}
+
+async function loadFileTree(path) {
+  const content = document.getElementById('file-tree-content');
+  if (!content) return;
+  content.innerHTML = '<div class="file-tree-empty">Loading...</div>';
+  try {
+    const resp = await fetch(`/api/browse?path=${encodeURIComponent(path)}`);
+    const data = await resp.json();
+    fileTreePath = path;
+    if (data.items) {
+      let html = '';
+      if (data.parent) {
+        html += `<div class="file-tree-entry dir" data-path="${esc(data.parent)}"><span class="ft-icon">📁</span>..</div>`;
+      }
+      const dirs = (data.items || []).filter(c => c.type === 'dir').sort((a,b) => a.name.localeCompare(b.name));
+      const files = (data.items || []).filter(c => c.type !== 'dir').sort((a,b) => a.name.localeCompare(b.name));
+      for (const d of dirs) {
+        const fullPath = path.replace(/\\/g, '/').replace(/\/+$/, '') + '/' + d.name;
+        html += `<div class="file-tree-entry dir" data-path="${esc(fullPath)}"><span class="ft-icon">📁</span>${esc(d.name)}</div>`;
+      }
+      for (const f of files) {
+        const fPath = path.replace(/\\/g, '/').replace(/\/+$/, '') + '/' + f.name;
+        const selected = attachedFiles.some(af => af.path === fPath);
+        html += `<div class="file-tree-entry${selected ? ' selected' : ''}" data-path="${esc(fPath)}"><span class="ft-icon">${selected ? '✓' : '📄'}</span>${esc(f.name)}</div>`;
+      }
+      content.innerHTML = html || '<div class="file-tree-empty">' + esc(t('emptyDir')) + '</div>';
+      content.querySelectorAll('.file-tree-entry.dir').forEach(el => {
+        el.addEventListener('click', (e) => { e.stopPropagation(); loadFileTree(el.dataset.path); });
+      });
+      content.querySelectorAll('.file-tree-entry:not(.dir)').forEach(el => {
+        el.addEventListener('click', (e) => {
+          e.stopPropagation();
+          const filePath = el.dataset.path;
+          const fileName = filePath.split('/').pop();
+          const icon = el.querySelector('.ft-icon');
+          if (attachedFiles.some(f => f.path === filePath)) {
+            attachedFiles = attachedFiles.filter(f => f.path !== filePath);
+            el.classList.remove('selected');
+            if (icon) icon.textContent = '📄';
+          } else {
+            attachedFiles.push({ name: fileName, path: filePath, isImage: false, uploaded: false, source: 'server', originalPath: filePath });
+            el.classList.add('selected');
+            if (icon) icon.textContent = '✓';
+          }
+          renderAttachments();
+        });
+      });
+    } else {
+      content.innerHTML = '<div class="file-tree-empty">' + esc(t('emptyDir')) + '</div>';
+    }
+  } catch (e) {
+    content.innerHTML = '<div class="file-tree-empty">' + esc(t('unknownError')) + '</div>';
+  }
 }
 
 // ─── @提及自动补全 ────────────────────────────────────────────────
@@ -3691,11 +3902,48 @@ function initMemoryUI() {
 // ─── 会话管理 ─────────────────────────────────────────────────
 async function loadSessions() {
   try {
-    cachedSessions = await (await fetch('/api/sessions')).json();
+    const resp = await fetch(`/api/sessions?offset=0&limit=${SESSION_PAGE_SIZE}`);
+    const data = await resp.json();
+    cachedSessions = data.sessions || [];
+    sessionOffset = cachedSessions.length;
+    sessionTotal = data.total || 0;
     renderSessionList(cachedSessions);
     renderWelcomeSessions(cachedSessions);
+    renderLoadMore();
   } catch (e) {
     console.error('历史会话加载失败:', e);
+  }
+}
+
+async function loadMoreSessions() {
+  try {
+    const resp = await fetch(`/api/sessions?offset=${sessionOffset}&limit=${SESSION_PAGE_SIZE}`);
+    const data = await resp.json();
+    const more = data.sessions || [];
+    cachedSessions = cachedSessions.concat(more);
+    sessionOffset = cachedSessions.length;
+    sessionTotal = data.total || 0;
+    renderSessionList(cachedSessions);
+    renderLoadMore();
+  } catch (e) {
+    console.error('加载更多会话失败:', e);
+  }
+}
+
+function renderLoadMore() {
+  const el = document.getElementById('session-list');
+  let btn = document.getElementById('btn-load-more');
+  if (sessionOffset < sessionTotal) {
+    if (!btn) {
+      btn = document.createElement('button');
+      btn.id = 'btn-load-more';
+      btn.className = 'btn-load-more';
+      btn.textContent = t('loadMore');
+      btn.addEventListener('click', loadMoreSessions);
+    }
+    el.appendChild(btn);
+  } else if (btn) {
+    btn.remove();
   }
 }
 
@@ -3752,9 +4000,29 @@ function renderSessionList(sessions) {
     return;
   }
 
-  const groups = groupSessionsByCwd(filtered);
+  // 拆分置顶会话
+  const pinned = filtered.filter(s => s.pinned);
+  const unpinned = filtered.filter(s => !s.pinned);
+  const groups = groupSessionsByCwd(unpinned);
 
-  el.innerHTML = groups.map(group => {
+  let pinnedHtml = '';
+  if (pinned.length) {
+    const sessionsHtml = pinned.map(s => renderSessionItem(s, true)).join('');
+    pinnedHtml = `<div class="session-group pinned-group open" data-group-key="__pinned__">
+      <button type="button" class="session-group-header" aria-expanded="true">
+        <span class="session-group-chevron">▾</span>
+        <span class="session-group-main">
+          <span class="session-group-title">📌 ${esc(t('pinnedSessions'))}</span>
+        </span>
+        <span class="session-group-meta">${esc(t('itemCount', { count: pinned.length }))}</span>
+      </button>
+      <div class="session-group-body">
+        ${sessionsHtml}
+      </div>
+    </div>`;
+  }
+
+  el.innerHTML = pinnedHtml + groups.map(group => {
     const forcedOpen = group.sessions.some(s => s.session_id === currentSessionId);
     const savedOpen = sessionGroupOpenState.get(group.key);
     const defaultOpen = isCurrentCwd(group.cwd) || groups.length === 1;
@@ -3798,11 +4066,37 @@ function renderSessionList(sessions) {
 
   el.querySelectorAll('.session-item').forEach(item => {
     item.addEventListener('click', (e) => {
-      if (e.target.classList.contains('session-item-delete') || e.target.classList.contains('session-item-rename') || e.target.classList.contains('session-item-cwd')) return;
+      if (e.target.classList.contains('session-item-delete') || e.target.classList.contains('session-item-rename') || e.target.classList.contains('session-item-cwd') || e.target.classList.contains('session-item-pin')) return;
       const tokens = safeJsonParse(item.dataset.tokens, null);
       showPage('chat');
       resumeSession(item.dataset.sid, item.dataset.cwd, item.dataset.model, Number(item.dataset.cost || 0), item.dataset.remoteTarget || '', tokens, item.dataset.cli || '');
     });
+    const pinBtn = item.querySelector('.session-item-pin');
+    if (pinBtn) {
+      pinBtn.addEventListener('click', async (e) => {
+        e.stopPropagation();
+        const btn = e.currentTarget;
+        const sid = item.dataset.sid;
+        console.log('[pin] toggle', sid);
+        try {
+          const resp = await fetch('/api/sessions/toggle-pin', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ session_id: sid }),
+          });
+          const data = await resp.json();
+          console.log('[pin] response', data);
+          if (resp.ok) {
+            btn.classList.toggle('pinned', data.pinned);
+            btn.dataset.pinned = data.pinned ? '1' : '0';
+            btn.title = t(data.pinned ? 'unpinSession' : 'pinSession');
+            loadSessions();
+          }
+        } catch (err) {
+          console.error('[pin] error', err);
+        }
+      });
+    }
     item.querySelector('.session-item-delete').addEventListener('click', async (e) => {
       e.stopPropagation();
       const title = item.querySelector('.session-item-title')?.textContent?.trim() || t('newChat');
@@ -3892,7 +4186,7 @@ function initCwdContextMenu() {
 // ─── 会话迁移弹窗 ────────────────────────────────────────────
 let migrateTargetCwd = '';
 
-function showMigrateSessionPopover(targetCwd) {
+async function showMigrateSessionPopover(targetCwd) {
   const overlay = document.getElementById('session-migrate-overlay');
   const list = document.getElementById('session-migrate-list');
   const footer = document.getElementById('session-migrate-footer');
@@ -3900,7 +4194,8 @@ function showMigrateSessionPopover(targetCwd) {
 
   migrateTargetCwd = targetCwd;
   const normalizedTarget = targetCwd.replace(/\\/g, '/').replace(/\/+$/, '').toLowerCase();
-  const otherSessions = (cachedSessions || []).filter(s => {
+  const allSessions = await (await fetch('/api/sessions?offset=0&limit=9999')).json();
+  const otherSessions = (allSessions.sessions || allSessions || []).filter(s => {
     const sCwd = (s.cwd || '').replace(/\\/g, '/').replace(/\/+$/, '').toLowerCase();
     return sCwd && sCwd !== normalizedTarget && s.session_id;
   });
@@ -4012,7 +4307,7 @@ function filterSessions(sessions) {
   });
 }
 
-function renderSessionItem(s) {
+function renderSessionItem(s, showCwd = false) {
   const isActive = s.session_id === currentSessionId;
   const title = s.title || t('newChat');
   const time = formatTime(s.updated_at);
@@ -4020,12 +4315,15 @@ function renderSessionItem(s) {
   const savedTokens = normalizeTokenUsage(s.total_tokens);
   const tokenTotal = tokenUsageTotal(savedTokens);
   const modelLabel = getDisplayModelName(s.model || '', false);
+  const cwdLine = showCwd && s.cwd ? `<div class="session-item-cwd-line">${esc(s.cwd)}</div>` : '';
   return `<div class="session-item${isActive ? ' active' : ''}" data-sid="${esc(s.session_id)}" data-cwd="${esc(s.cwd)}" data-model="${esc(s.model)}" data-cli="${esc(s.cli || '')}" data-cost="${esc(savedCost)}" data-tokens="${esc(JSON.stringify(savedTokens))}" data-remote-target="${esc(s.remote_target_id || '')}">
     <div class="session-item-main">
       <div class="session-item-title">${esc(title)}</div>
       <div class="session-item-meta">${modelLabel ? `${esc(modelLabel)} · ` : ''}${esc(time)}${savedCost > 0 ? ` · $${savedCost.toFixed(4)}` : ''}${tokenTotal > 0 ? ` · ${formatTokenCount(tokenTotal)} tok` : ''}</div>
+      ${cwdLine}
     </div>
     <div class="session-item-actions">
+      <button class="session-item-pin${s.pinned ? ' pinned' : ''}" title="${esc(t(s.pinned ? 'unpinSession' : 'pinSession'))}" data-pinned="${s.pinned ? '1' : '0'}">📌</button>
       <button class="session-item-cwd" title="${esc(t('changeCwd'))}">📁</button>
       <button class="session-item-rename" title="${esc(t('rename'))}">✎</button>
       <button class="session-item-delete" title="${esc(t('delete'))}">&times;</button>

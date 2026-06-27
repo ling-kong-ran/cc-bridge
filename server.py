@@ -41,7 +41,7 @@ from config_manager import (
     get_agent,
     get_agents_for_cli,
 )
-from session_store import list_sessions, save_session, add_session_usage, delete_session, load_session_history, rename_session, update_session_cwd
+from session_store import list_sessions, save_session, add_session_usage, delete_session, load_session_history, rename_session, update_session_cwd, toggle_pin
 from memory_index import list_memory_files, search_memory, get_memory_file, delete_memory_file, save_memory_file, index_memory
 import remote_manager
 
@@ -1470,6 +1470,9 @@ async def handle_api_get(path: str, writer: asyncio.StreamWriter, query: dict = 
             "current": get_current_cli() if available else "",
             "install_command": INSTALL_CLI_COMMAND,
         }
+    elif path == "/api/browse":
+        p = (query or {}).get("path", [""])[0]
+        data = browse_files(p)
     elif path == "/api/default-cwd":
         data = {"cwd": DEFAULT_CWD}
     elif path == "/api/memory/files":
@@ -1498,7 +1501,14 @@ async def handle_api_get(path: str, writer: asyncio.StreamWriter, query: dict = 
                 active_sids.add(sid)
         for s in sessions:
             s["is_active"] = s.get("session_id") in active_sids
-        data = sessions
+        total = len(sessions)
+        try:
+            offset = max(0, int((query or {}).get("offset", ["0"])[0]))
+            limit = max(1, min(200, int((query or {}).get("limit", ["200"])[0])))
+        except (ValueError, IndexError):
+            offset = 0
+            limit = 200
+        data = {"sessions": sessions[offset:offset + limit], "total": total}
     elif path == "/api/file":
         # 提供上传文件（图片预览）
         file_path = (query or {}).get("path", [""])[0]
@@ -1600,6 +1610,12 @@ async def handle_api_post(path: str, body: bytes, writer: asyncio.StreamWriter):
     elif path == "/api/remote-files/cache":
         result = await asyncio.get_event_loop().run_in_executor(None, remote_cache_file, data.get("target_id", ""), data.get("path", ""), data.get("cwd", ""))
         resp = json.dumps(result, ensure_ascii=False).encode("utf-8")
+        await send_response(writer, 200, "application/json; charset=utf-8", resp)
+        return
+    elif path == "/api/sessions/toggle-pin":
+        sid = data.get("session_id", "")
+        pinned = toggle_pin(sid)
+        resp = json.dumps({"ok": True, "pinned": pinned}, ensure_ascii=False).encode("utf-8")
         await send_response(writer, 200, "application/json; charset=utf-8", resp)
         return
     elif path == "/api/sessions/delete":
