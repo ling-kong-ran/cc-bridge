@@ -124,7 +124,7 @@ jobs:
           cat > dist/latest.json << EOF
           {
             "version": "${VERSION}",
-            "notes": "See https://github.com/ling-kong-ran/cc-gui/releases/tag/${TAG}",
+            "notes": "See https://github.com/ling-kong-ran/cc-bridge/releases/tag/${TAG}",
             "pub_date": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
             "platforms": {}
           }
