@@ -101,6 +101,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   initUpdateModal();
   initMessageContextMenu();
   initCwdContextMenu();
+  initMigrateSessionPopover();
   initRemote();
   initMcpManager();
   initAgentModal();
@@ -206,20 +207,34 @@ function initNotifications() {
     return;
   }
 
-  notificationsToggle.addEventListener('change', async () => {
+  notificationsToggle.addEventListener('change', () => {
     if (!notificationsToggle.checked) {
       notificationsEnabled = false;
-      await saveGuiSettings({ notifications_enabled: false });
+      saveGuiSettings({ notifications_enabled: false });
       return;
     }
-
-    const permission = await requestNotificationPermission();
-    notificationsEnabled = permission === 'granted';
-    notificationsToggle.checked = notificationsEnabled;
-    await saveGuiSettings({ notifications_enabled: notificationsEnabled });
-    if (!notificationsEnabled) {
-      addSystemMsg(t('notifyPermissionDenied'), true);
+    // 同步分支：权限已确定，无需弹窗
+    if (Notification.permission === 'granted') {
+      notificationsEnabled = true;
+      saveGuiSettings({ notifications_enabled: true });
+      return;
     }
+    if (Notification.permission === 'denied') {
+      notificationsEnabled = false;
+      notificationsToggle.checked = false;
+      saveGuiSettings({ notifications_enabled: false });
+      addSystemMsg(t('notifyPermissionDenied'), true);
+      return;
+    }
+    // permission === 'default'：必须同步调用 requestPermission 以保留用户手势
+    Notification.requestPermission().then(permission => {
+      notificationsEnabled = permission === 'granted';
+      notificationsToggle.checked = notificationsEnabled;
+      saveGuiSettings({ notifications_enabled: notificationsEnabled });
+      if (!notificationsEnabled) {
+        addSystemMsg(t('notifyPermissionDenied'), true);
+      }
+    });
   });
 }
 
@@ -235,18 +250,6 @@ function applyLanAccessPreference(settings) {
   const isLocalhost = Boolean(settings.is_localhost);
   lanAccessRow.style.display = isLocalhost ? '' : 'none';
   lanAccessToggle.checked = settings.lan_access_enabled !== false;
-}
-
-async function requestNotificationPermission() {
-  if (!("Notification" in window)) return 'unsupported';
-  if (Notification.permission === 'granted' || Notification.permission === 'denied') {
-    return Notification.permission;
-  }
-  try {
-    return await Notification.requestPermission();
-  } catch (e) {
-    return Notification.permission || 'default';
-  }
 }
 
 function applyNotificationPreference(enabled, persist = false) {
@@ -301,7 +304,7 @@ function notifyComplete(kind, detail = {}) {
       notification.close();
     };
     setTimeout(() => notification.close(), 8000);
-  } catch (e) { /* ignore */ }
+  } catch (e) { console.warn('Notification creation failed:', e); }
 }
 
 function summarizePrompt(text, maxLen = 90) {
@@ -1437,6 +1440,7 @@ function bindSSEEvents() {
       cleanupUploadedFiles(uploadedFilesPendingCleanup);
       uploadedFilesPendingCleanup = [];
       updateUI();
+      notifyComplete('process');
     }
     if (eventSource.readyState === EventSource.CLOSED) {
       setConnectionStatus(false);
@@ -3867,12 +3871,117 @@ function initCwdContextMenu() {
     startNewSessionFromCwd(cwd);
   });
 
+  menu.querySelector('[data-action="migrate-session-to-cwd"]')?.addEventListener('click', () => {
+    const cwd = contextMenuCwd;
+    hideCwdContextMenu();
+    showMigrateSessionPopover(cwd);
+  });
+
   document.addEventListener('click', (e) => {
     if (!menu.contains(e.target)) hideCwdContextMenu();
   });
   document.addEventListener('scroll', hideCwdContextMenu, true);
   document.addEventListener('keydown', (e) => {
     if (e.key === 'Escape') hideCwdContextMenu();
+  });
+}
+
+// ─── 会话迁移弹窗 ────────────────────────────────────────────
+let migrateTargetCwd = '';
+
+function showMigrateSessionPopover(targetCwd) {
+  const overlay = document.getElementById('session-migrate-overlay');
+  const list = document.getElementById('session-migrate-list');
+  const footer = document.getElementById('session-migrate-footer');
+  if (!overlay || !list) return;
+
+  migrateTargetCwd = targetCwd;
+  const normalizedTarget = targetCwd.replace(/\\/g, '/').replace(/\/+$/, '').toLowerCase();
+  const otherSessions = (cachedSessions || []).filter(s => {
+    const sCwd = (s.cwd || '').replace(/\\/g, '/').replace(/\/+$/, '').toLowerCase();
+    return sCwd && sCwd !== normalizedTarget && s.session_id;
+  });
+
+  if (!otherSessions.length) {
+    list.innerHTML = `<div class="session-migrate-empty">
+      <p>${esc(t('migrateSessionEmpty'))}</p>
+      <button id="session-migrate-empty-close" class="btn-save" type="button" style="margin-top:10px; font-size:12px;" data-i18n="close">Close</button>
+    </div>`;
+    if (footer) footer.style.display = 'none';
+    document.getElementById('session-migrate-empty-close')?.addEventListener('click', hideMigrateSessionPopover);
+  } else {
+    list.innerHTML = otherSessions.map(s => `
+      <label class="session-migrate-item" data-sid="${esc(s.session_id)}">
+        <input type="checkbox" class="session-migrate-check">
+        <span class="session-migrate-item-title">${esc(s.title || s.session_id)}</span>
+        <span class="session-migrate-item-cwd" title="${esc(s.cwd || '')}">${shortenPath(s.cwd)}</span>
+      </label>
+    `).join('');
+    if (footer) footer.style.display = 'flex';
+    const checkAll = document.getElementById('session-migrate-check-all');
+    if (checkAll) checkAll.checked = false;
+  }
+
+  overlay.style.display = 'flex';
+}
+
+function hideMigrateSessionPopover() {
+  const overlay = document.getElementById('session-migrate-overlay');
+  if (overlay) overlay.style.display = 'none';
+}
+
+function initMigrateSessionPopover() {
+  const overlay = document.getElementById('session-migrate-overlay');
+  if (!overlay) return;
+  document.getElementById('session-migrate-close')?.addEventListener('click', hideMigrateSessionPopover);
+  overlay.addEventListener('click', (e) => {
+    if (e.target === overlay) hideMigrateSessionPopover();
+  });
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && overlay.style.display !== 'none') hideMigrateSessionPopover();
+  });
+
+  // 全选
+  document.getElementById('session-migrate-check-all')?.addEventListener('change', function () {
+    const list = document.getElementById('session-migrate-list');
+    if (!list) return;
+    list.querySelectorAll('.session-migrate-check').forEach(cb => { cb.checked = this.checked; });
+  });
+
+  // 批量迁移
+  document.getElementById('session-migrate-confirm')?.addEventListener('click', async function () {
+    const list = document.getElementById('session-migrate-list');
+    const footer = document.getElementById('session-migrate-footer');
+    if (!list || !footer) return;
+    const checked = list.querySelectorAll('.session-migrate-check:checked');
+    if (!checked.length) return;
+
+    // 禁用交互
+    const btn = this;
+    btn.disabled = true;
+    btn.textContent = t('migrating') || 'Migrating...';
+    footer.style.pointerEvents = 'none';
+    footer.style.opacity = '0.6';
+
+    let okCount = 0;
+    const total = checked.length;
+    for (let i = 0; i < checked.length; i++) {
+      const sid = checked[i].closest('.session-migrate-item')?.dataset.sid;
+      if (!sid) continue;
+      btn.textContent = `${t('migrating') || 'Migrating'} (${i + 1}/${total})`;
+      const result = await updateSessionCwd(sid, migrateTargetCwd);
+      if (result.ok) okCount++;
+    }
+
+    if (okCount > 0) {
+      hideMigrateSessionPopover();
+      loadSessions();
+      addSystemMsg(t('migrateSessionMoved', { count: okCount }));
+    }
+    // 恢复状态（弹窗已关闭则不需要）
+    btn.disabled = false;
+    footer.style.pointerEvents = '';
+    footer.style.opacity = '';
   });
 }
 
@@ -4221,6 +4330,14 @@ function esc(str) {
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;');
+}
+
+function shortenPath(path, maxSegments = 3) {
+  if (!path) return '';
+  const normalized = path.replace(/\\/g, '/').replace(/\/+$/, '');
+  const parts = normalized.split('/');
+  if (parts.length <= maxSegments) return esc(normalized);
+  return '.../' + esc(parts.slice(-maxSegments).join('/'));
 }
 
 function sanitizeLinkHref(href) {

@@ -746,6 +746,22 @@
 
   <div id="cwd-context-menu" class="msg-context-menu" style="display:none">
     <button type="button" class="msg-context-item" data-action="new-session-from-cwd" data-i18n="newSessionFromCwd">New session from this directory</button>
+    <button type="button" class="msg-context-item" data-action="migrate-session-to-cwd" data-i18n="migrateSessionToCwd">Move session to this directory</button>
+  </div>
+
+  <!-- 会话迁移弹窗 -->
+  <div id="session-migrate-overlay" class="session-migrate-overlay" style="display:none">
+    <div class="session-migrate-modal">
+      <div class="session-migrate-header">
+        <span class="session-migrate-title" data-i18n="migrateSessionTitle">Select a session to migrate</span>
+        <button id="session-migrate-close" class="picker-close" data-i18n="close">Close</button>
+      </div>
+      <div id="session-migrate-list" class="session-migrate-list"></div>
+      <div id="session-migrate-footer" class="session-migrate-footer" style="display:none">
+        <label class="session-migrate-select-all"><input type="checkbox" id="session-migrate-check-all"> <span data-i18n="selectAll">Select All</span></label>
+        <button id="session-migrate-confirm" class="btn btn-primary" type="button" style="width:auto; padding:6px 16px; font-size:12px;"><span data-i18n="migrateSelected">Migrate Selected</span></button>
+      </div>
+    </div>
   </div>
 
   <script src="/static/app.js"></script>
