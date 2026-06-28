@@ -1607,6 +1607,7 @@ body.pane-right-open .chat-sidebar {
 
 .tool-toggle {
   cursor: pointer;
+  user-select: none;
   text-align: left;
   border: none;
   outline: none;

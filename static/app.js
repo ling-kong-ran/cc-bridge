@@ -119,19 +119,31 @@ document.addEventListener('DOMContentLoaded', async () => {
   loadSessions();
   initFocusConfigReload();
   // 工具卡片折叠事件委托（支持 Shift+点击展开/折叠全部）
-  document.addEventListener('click', (e) => {
-    const toggle = e.target.closest('.tool-toggle');
-    if (!toggle) return;
-    e.preventDefault();
-    const card = toggle.closest('.tool-card');
-    if (!card) return;
-    if (e.shiftKey) {
+  function toggleCard(card, shiftKey) {
+    if (shiftKey) {
       const allCards = document.querySelectorAll('.tool-card');
       const anyCollapsed = Array.from(allCards).some(c => c.classList.contains('collapsed'));
       allCards.forEach(c => c.classList.toggle('collapsed', !anyCollapsed));
     } else {
       card.classList.toggle('collapsed');
     }
+  }
+  document.addEventListener('click', (e) => {
+    const toggle = e.target.closest('.tool-toggle');
+    if (!toggle) return;
+    e.preventDefault();
+    const card = toggle.closest('.tool-card');
+    if (!card) return;
+    toggleCard(card, e.shiftKey);
+  });
+  document.addEventListener('keydown', (e) => {
+    if (e.key !== 'Enter' && e.key !== ' ') return;
+    const toggle = e.target.closest('.tool-toggle');
+    if (!toggle) return;
+    e.preventDefault();
+    const card = toggle.closest('.tool-card');
+    if (!card) return;
+    toggleCard(card, e.shiftKey);
   });
   showPage('chat');
   if (autoUpdateEnabled) setTimeout(() => checkForUpdate(), 3000);
@@ -1839,13 +1851,13 @@ function renderToolCard(block, opts = {}) {
   cls.push('collapsed');
 
   return `<div class="${cls.join(' ')}" data-tool-id="${esc(block.id || '')}">
-    <button type="button" class="tool-header tool-toggle">
+    <div class="tool-header tool-toggle" role="button" tabindex="0">
       <span class="tool-arrow">&#9654;</span>
       <span class="tool-icon">${info.icon}</span>
       <span class="tool-label">${esc(info.label)}</span>
       <span class="tool-summary">${esc(info.summary)}</span>
       ${runningBadge}${resultBadge}
-    </button>
+    </div>
     <div class="tool-body">${bodyHtml}</div>
     ${resultHtml}
   </div>`;
