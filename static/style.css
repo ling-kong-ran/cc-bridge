@@ -1646,6 +1646,12 @@ body.pane-right-open .chat-sidebar {
 .tool-status.tool-ok  { color: var(--green); }
 .tool-status.tool-error { color: var(--red); }
 
+.tool-duration {
+  font-size: 9px; color: var(--text-ghost);
+  font-weight: 400; letter-spacing: 0.02em;
+  text-transform: none; flex-shrink: 0;
+}
+
 .tool-result {
   padding: 8px 12px;
   font-family: var(--font-mono); font-size: 12px;

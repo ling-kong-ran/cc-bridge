@@ -1701,6 +1701,10 @@ function renderToolCard(block, opts = {}) {
   const info = formatToolSummary(block);
   const input = typeof block.input === 'string' ? block.input : JSON.stringify(block.input, null, 2);
   const isRunning = opts.isRunning || false;
+  // 记录开始时间
+  if (block.id && !toolStartTimes.has(block.id) && !toolResults.has(block.id)) {
+    toolStartTimes.set(block.id, Date.now());
+  }
   const runningBadge = isRunning
     ? `<span class="tool-running-badge"><span class="agent-spinner"></span>${esc(t('running'))}</span>`
     : '';
@@ -1733,15 +1737,35 @@ function updateToolResult(toolId, content, isError) {
   const card = document.querySelector(`.tool-card[data-tool-id="${toolId}"]`);
   if (!card) return;
   card.classList.remove('tool-card-running');
-  // 添加状态标记
+  // 计算耗时
+  const startTime = toolStartTimes.get(toolId);
+  let durationStr = '';
+  if (startTime) {
+    const elapsed = (Date.now() - startTime) / 1000;
+    durationStr = elapsed >= 1 ? `${elapsed.toFixed(1)}s` : `${Math.round(elapsed * 1000)}ms`;
+    toolStartTimes.delete(toolId);
+  }
+  // 添加状态+耗时标记
   const header = card.querySelector('.tool-header');
   if (header) {
+    // 移除运行中标记
+    const runningBadge = header.querySelector('.tool-running-badge');
+    if (runningBadge) runningBadge.remove();
+    // 添加完成状态
     const existing = header.querySelector('.tool-status');
     if (!existing) {
       const badge = document.createElement('span');
       badge.className = `tool-status ${isError ? 'tool-error' : 'tool-ok'}`;
       badge.textContent = isError ? '✗' : '✓';
       header.appendChild(badge);
+    }
+    // 显示耗时
+    const dur = header.querySelector('.tool-duration');
+    if (!dur && durationStr) {
+      const durSpan = document.createElement('span');
+      durSpan.className = 'tool-duration';
+      durSpan.textContent = durationStr;
+      header.appendChild(durSpan);
     }
   }
   // 添加结果内容
@@ -1820,6 +1844,7 @@ function handleAssistantFinal(data) {
 // tool_use_id -> {type, desc, last}
 const runningTasks = new Map();
 const toolResults = new Map();
+const toolStartTimes = new Map();
 // 已结束的 Task id（partial assistant 事件会重复携带同一 tool_use 块，避免重新标记为运行中）
 const finishedTaskIds = new Set();
 
