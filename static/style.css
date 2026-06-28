@@ -2886,6 +2886,17 @@ body.pane-right-open .chat-sidebar {
   overflow-y: auto;
 }
 
+.help-section-title {
+  color: var(--text-bright);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  padding-bottom: 4px;
+  border-bottom: 1px solid var(--border-dim);
+}
+
 .shortcut-row {
   display: grid;
   grid-template-columns: auto auto auto minmax(0, 1fr);
