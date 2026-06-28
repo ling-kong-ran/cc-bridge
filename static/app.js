@@ -22,6 +22,7 @@ let currentTurnHasAssistantOutput = false;
 let currentTurnStartedAt = 0;
 let currentTurnTimer = null;
 let currentTurnAttachmentCount = 0;
+let completionHistorySyncTimer = null;
 let lastFocusConfigReloadAt = 0;
 let cachedSessions = [];
 let sessionOffset = 0;
@@ -1480,50 +1481,28 @@ function bindSSEEvents() {
   eventSource.addEventListener('session_lock_changed', (e) => {
     const data = JSON.parse(e.data || '{}');
     if (data.session_id && currentSessionId && data.session_id !== currentSessionId) return;
+    const wasResponding = isResponding;
     isResponding = !!data.locked;
-    if (!isResponding) {
-      if (currentAssistantEl) currentAssistantEl.classList.remove('streaming');
-      currentAssistantEl = null;
+    if (!isResponding && wasResponding) {
+      finishCurrentTurnFromProcess();
+      scheduleCompletionHistorySync(data.session_id || currentSessionId);
     }
     updateUI();
   });
 
   eventSource.addEventListener('process_ended', (e) => {
-    // ccb 进程结束 —— 确保前端退出 responding 状态
+    // ccb 进程结束 —— 确保前端退出 responding 状态；即使锁事件已先到达，也要补齐清理/通知。
     const data = JSON.parse(e.data || '{}');
-    clearRunningTasks({ keepFinished: true });
-    clearSubagentBubbles();
-    if (isResponding) {
-      const finishedTurn = currentTurnContent;
-      const hadAssistantOutput = currentTurnHasAssistantOutput;
-      const durationMs = Date.now() - currentTurnStartedAt;
-      stopTurnTimer();
-      updateAssistantMeta('done', durationMs);
-      isResponding = false;
-      const assistantEl = currentAssistantEl;
-      if (assistantEl) assistantEl.classList.remove('streaming');
-      currentTurnContent = '';
-      currentTurnHasAssistantOutput = false;
-      currentTurnStartedAt = 0;
-      currentTurnAttachmentCount = 0;
-      removePendingAssistantBubble(hadAssistantOutput);
-      currentAssistantEl = null;
-      notifyComplete('process', {
-        prompt: finishedTurn,
-        durationMs,
-        model: getDisplayModelName(modelSelect.value),
-      });
-      if (assistantEl && hadAssistantOutput) checkMemoryHits(assistantEl, finishedTurn);
-      updateUI();
-      if (isSlashCommand(finishedTurn) && !hadAssistantOutput) {
-        const command = getSlashCommandName(finishedTurn);
-        if (Number(data.exit_code || 0) === 0) {
-          addSystemMsg(t('commandCompleted', { command }));
-        } else {
-          addSystemMsg(t('commandEnded', { command }), true);
-        }
+    const finishedTurn = finishCurrentTurnFromProcess();
+    if (isSlashCommand(finishedTurn.prompt) && !finishedTurn.hadAssistantOutput) {
+      const command = getSlashCommandName(finishedTurn.prompt);
+      if (Number(data.exit_code || 0) === 0) {
+        addSystemMsg(t('commandCompleted', { command }));
+      } else {
+        addSystemMsg(t('commandEnded', { command }), true);
       }
     }
+    scheduleCompletionHistorySync(currentSessionId);
   });
 
   eventSource.addEventListener('generation_interrupted', () => {
@@ -2146,7 +2125,58 @@ function clearSubagentBubbles() {
   subagentBubbles.clear();
 }
 
+function finishCurrentTurnFromProcess() {
+  const finishedTurn = currentTurnContent;
+  const hadAssistantOutput = currentTurnHasAssistantOutput;
+  const durationMs = currentTurnStartedAt ? Date.now() - currentTurnStartedAt : 0;
+  const assistantEl = currentAssistantEl;
+  clearRunningTasks({ keepFinished: true });
+  clearSubagentBubbles();
+  stopTurnTimer();
+  if (assistantEl) {
+    updateAssistantMeta('done', durationMs);
+    assistantEl.classList.remove('streaming');
+  }
+  isResponding = false;
+  removePendingAssistantBubble(hadAssistantOutput);
+  currentAssistantEl = null;
+  currentContent = [];
+  streamBlocks = {};
+  currentTurnContent = '';
+  currentTurnHasAssistantOutput = false;
+  currentTurnStartedAt = 0;
+  currentTurnAttachmentCount = 0;
+  if (finishedTurn || hadAssistantOutput || assistantEl) {
+    notifyComplete('process', {
+      prompt: finishedTurn,
+      durationMs,
+      model: getDisplayModelName(modelSelect.value),
+    });
+  }
+  if (assistantEl && hadAssistantOutput) checkMemoryHits(assistantEl, finishedTurn);
+  updateUI();
+  return { prompt: finishedTurn, hadAssistantOutput, durationMs };
+}
+
+function clearCompletionHistorySync() {
+  if (!completionHistorySyncTimer) return;
+  clearTimeout(completionHistorySyncTimer);
+  completionHistorySyncTimer = null;
+}
+
+function scheduleCompletionHistorySync(sessionId) {
+  if (!sessionId) return;
+  clearCompletionHistorySync();
+  completionHistorySyncTimer = setTimeout(() => {
+    completionHistorySyncTimer = null;
+    if (sessionId === currentSessionId && !isResponding) {
+      reloadSessionHistory(sessionId, cwdInput.value.trim() || '');
+    }
+  }, 600);
+}
+
 function handleResult(data) {
+  clearCompletionHistorySync();
   const finishedTurn = currentTurnContent;
   const hadAssistantOutput = currentTurnHasAssistantOutput;
   const durationMs = Date.now() - currentTurnStartedAt;
@@ -4656,6 +4686,34 @@ async function loadSessionHistory(sessionId, cwd) {
     }
   } catch(e) {
     console.error('History load failed:', e);
+  }
+}
+
+async function reloadSessionHistory(sessionId, cwd) {
+  try {
+    const resp = await fetch('/api/sessions/history', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ session_id: sessionId, cwd: cwd || cwdInput.value.trim() || '' }),
+    });
+    const history = await resp.json();
+    if (!Array.isArray(history) || history.length === 0) return;
+    const systemMessages = Array.from(messagesEl.querySelectorAll('.system-msg')).map(el => ({
+      text: el.textContent || '',
+      isError: el.classList.contains('error'),
+    }));
+    messagesEl.innerHTML = '';
+    currentAssistantEl = null;
+    currentContent = [];
+    streamBlocks = {};
+    toolResults.clear();
+    toolStartTimes.clear();
+    renderHistory(history);
+    for (const msg of systemMessages) {
+      if (msg.text) addSystemMsg(msg.text, msg.isError);
+    }
+  } catch(e) {
+    console.error('History reload failed:', e);
   }
 }
 
