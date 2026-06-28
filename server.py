@@ -2367,6 +2367,39 @@ async def send_response(writer: asyncio.StreamWriter, status: int, content_type:
     await writer.drain()
 
 
+async def run_server(port: int = DEFAULT_PORT, cleanup_old_servers: bool = True):
+    if cleanup_old_servers:
+        cleanup_existing_app_servers()
+
+    # 恢复上次选中的 CLI（启动时 _current_cli 默认是第一个检测到的，这里覆盖为用户上次的选择）
+    saved_cli = get_gui_settings().get("cli_path", "")
+    if saved_cli and saved_cli in [c["path"] for c in get_available_clis()]:
+        set_current_cli(saved_cli)
+
+    server = await asyncio.start_server(handle_http, HOST, port)
+
+    local_url = f"http://{BROWSER_HOST}:{port}"
+    lan_urls = [f"http://{ip}:{port}" for ip in get_lan_ips()]
+
+    print(f"[CC Bridge] Server running at {local_url}")
+    for lan_url in lan_urls:
+        print(f"[CC Bridge] LAN access: {lan_url}")
+    if not lan_urls:
+        print("[CC Bridge] LAN access: no LAN IPv4 address detected")
+    print(f"[CC Bridge] Press Ctrl+C to stop")
+
+    # 自动打开浏览器（仅当显式设置环境变量时启用）
+    if os.environ.get("CCB_GUI_OPEN_BROWSER") == "1":
+        import webbrowser
+        webbrowser.open(local_url)
+
+    async with server:
+        try:
+            await server.serve_forever()
+        except asyncio.CancelledError:
+            pass
+
+
 async def main():
     cleanup_existing_app_servers()
 
