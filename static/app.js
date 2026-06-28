@@ -1476,8 +1476,9 @@ function bindSSEEvents() {
       stopTurnTimer();
       updateAssistantMeta('done', durationMs);
       isResponding = false;
-      if (isViewer) isViewer = false;
       const assistantEl = currentAssistantEl;
+      if (assistantEl) assistantEl.classList.remove('streaming');
+      if (isViewer) isViewer = false;
       currentTurnContent = '';
       currentTurnHasAssistantOutput = false;
       currentTurnStartedAt = 0;
@@ -1505,6 +1506,7 @@ function bindSSEEvents() {
   eventSource.addEventListener('generation_interrupted', () => {
     const hadAssistantOutput = currentTurnHasAssistantOutput;
     isResponding = false;
+    if (currentAssistantEl) currentAssistantEl.classList.remove('streaming');
     currentTurnContent = '';
     currentTurnHasAssistantOutput = false;
     stopTurnTimer();
@@ -1522,6 +1524,7 @@ function bindSSEEvents() {
       addSystemMsg(data.message || t('unknownError'), true);
       // 收到错误事件也要退出 responding 状态
       isResponding = false;
+      if (currentAssistantEl) currentAssistantEl.classList.remove('streaming');
       currentTurnContent = '';
       currentTurnHasAssistantOutput = false;
       stopTurnTimer();
@@ -1541,6 +1544,7 @@ function bindSSEEvents() {
     // SSE 断开时清除 responding 状态，避免 UI 卡在"运行中"
     if (isResponding) {
       isResponding = false;
+      if (currentAssistantEl) currentAssistantEl.classList.remove('streaming');
       currentTurnContent = '';
       currentTurnHasAssistantOutput = false;
       stopTurnTimer();
@@ -1682,7 +1686,7 @@ function renderCurrentState(final = false) {
   }
 
   if (isResponding && !Object.values(streamBlocks).some(b => b.type === 'text') && currentContent.length === 0 && Object.keys(streamBlocks).length === 0) {
-    html += '<span class="typing-cursor"></span>';
+    html += '<span class="stream-placeholder">正在接收回复<span class="typing-cursor"></span></span>';
   }
 
   el.innerHTML = html;
@@ -2185,12 +2189,13 @@ function handleResult(data) {
 }
 
 // ─── UI 组件 ─────────────────────────────────────────────────
-function createAssistantBubble() {
+function createAssistantBubble(streaming = true) {
   const el = document.createElement('div');
-  el.className = 'message assistant';
+  el.className = streaming ? 'message assistant streaming' : 'message assistant';
   el.innerHTML = `
     <div class="avatar assistant-avatar">C</div>
     <div class="msg-bubble">
+      <div class="stream-status"><span class="stream-dot"></span><span>${esc(t('streamingReply'))}</span></div>
       <div class="msg-content"></div>
       <div class="msg-meta"></div>
     </div>
@@ -2199,7 +2204,12 @@ function createAssistantBubble() {
   return el;
 }
 
+function finishAssistantStreaming() {
+  if (currentAssistantEl) currentAssistantEl.classList.remove('streaming');
+}
+
 function removePendingAssistantBubble(keepBubble) {
+  finishAssistantStreaming();
   if (!keepBubble && currentAssistantEl && !currentAssistantEl.querySelector('.msg-content')?.textContent.trim()) {
     currentAssistantEl.remove();
   }
@@ -3094,21 +3104,26 @@ function loadSelectedProfile() {
 }
 
 async function saveAsEnvProfile() {
-  const name = prompt(t('profileNamePrompt'));
+  const sel = document.getElementById('profile-select');
+  const currentName = sel ? sel.value : '';
+  const name = prompt(t('profileNamePrompt'), currentName);
   if (!name || !name.trim()) {
     if (name !== null) addSystemMsg(t('profileNameEmpty'));
     return;
   }
+  const trimmedName = name.trim();
+  if (_envProfilesCache[trimmedName] && !confirm(t('profileConfirmOverwrite', { name: trimmedName }))) return;
+
   const env = collectEditorEnv();
   await fetch('/api/env-profiles', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ name: name.trim(), env }),
+    body: JSON.stringify({ name: trimmedName, env }),
   });
-  addSystemMsg(t('profileSaved', { name: name.trim() }));
+  addSystemMsg(t('profileSaved', { name: trimmedName }));
   await loadEnvProfiles();
-  const sel = document.getElementById('profile-select');
-  if (sel) sel.value = name.trim();
+  const nextSel = document.getElementById('profile-select');
+  if (nextSel) nextSel.value = trimmedName;
 }
 
 async function deleteSelectedProfile() {
@@ -4575,7 +4590,7 @@ function renderHistory(history) {
     if (msg.role === 'user') {
       addUserMessage(msg.text);
     } else if (msg.role === 'assistant') {
-      const el = createAssistantBubble();
+      const el = createAssistantBubble(false);
       const contentEl = el.querySelector('.msg-content');
       let html = '';
       for (const block of (msg.blocks || [])) {

@@ -1383,6 +1383,16 @@ body.pane-right-open .chat-sidebar {
   to   { opacity: 1; transform: translateY(0); }
 }
 
+@keyframes streamRail {
+  0%, 100% { opacity: 0.3; transform: translateY(-35%); }
+  50% { opacity: 1; transform: translateY(35%); }
+}
+
+@keyframes streamPulse {
+  0%, 100% { opacity: 0.45; transform: scale(0.85); }
+  50% { opacity: 1; transform: scale(1.15); }
+}
+
 .message.user { flex-direction: row-reverse; }
 
 .avatar {
@@ -1426,6 +1436,51 @@ body.pane-right-open .chat-sidebar {
   border-bottom-left-radius: 3px;
   flex: 1; max-width: none;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  position: relative;
+  overflow: hidden;
+}
+
+.message.assistant.streaming .msg-bubble {
+  border-color: rgba(var(--accent-rgb), 0.32);
+  box-shadow: 0 0 0 1px rgba(var(--accent-rgb), 0.06), 0 10px 28px rgba(var(--accent-rgb), 0.08);
+}
+
+.message.assistant.streaming .msg-bubble::before {
+  content: '';
+  position: absolute;
+  left: 0; top: 0; bottom: 0;
+  width: 2px;
+  background: linear-gradient(180deg, transparent, var(--green), transparent);
+  animation: streamRail 1.4s ease-in-out infinite;
+}
+
+.stream-status {
+  display: none;
+  align-items: center;
+  gap: 7px;
+  margin-bottom: 8px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  color: var(--green-dim);
+  text-transform: uppercase;
+}
+
+.message.assistant.streaming .stream-status { display: flex; }
+
+.stream-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--green);
+  box-shadow: 0 0 10px var(--green-dim);
+  animation: streamPulse 1s ease-in-out infinite;
+}
+
+.stream-placeholder {
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  letter-spacing: 0.03em;
 }
 
 
@@ -1700,6 +1755,8 @@ body.pane-right-open .chat-sidebar {
 /* ─── Typing Cursor ─────────────────────────────────────────── */
 .typing-cursor::after {
   content: '\2588';
+  display: inline-block;
+  margin-left: 2px;
   animation: blink 0.9s step-end infinite;
   color: var(--green);
   text-shadow: 0 0 8px var(--green-dim);
@@ -3039,6 +3096,15 @@ html.light-theme .message.assistant .msg-bubble {
   background: #ffffff;
   border-color: var(--border-dim);
   box-shadow: 0 1px 4px rgba(0, 0, 0, 0.04);
+}
+
+html.light-theme .message.assistant.streaming .msg-bubble {
+  border-color: rgba(20, 140, 92, 0.35);
+  box-shadow: 0 0 0 1px rgba(20, 140, 92, 0.08), 0 8px 22px rgba(20, 140, 92, 0.08);
+}
+
+html.light-theme .stream-status {
+  color: var(--green);
 }
 
 html.light-theme .thinking-block {
