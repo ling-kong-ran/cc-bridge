@@ -1428,39 +1428,6 @@ body.pane-right-open .chat-sidebar {
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
 }
 
-.history-arrow {
-  color: var(--green-dim);
-  font-size: 8px;
-  opacity: 0.7;
-  transition: transform var(--t-base) var(--ease-out);
-}
-
-.history-label {
-  color: var(--green-dim);
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-}
-
-.history-preview {
-  flex: 1;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  opacity: 0.58;
-}
-
-.history-tool-toggle {
-  width: 100%;
-  border: none;
-  cursor: pointer;
-  text-align: left;
-}
-
-.history-tool-toggle:hover { color: var(--green); }
-.history-tool-collapsible:not(.history-tool-open) .tool-body { display: none; }
-.history-tool-collapsible.history-tool-open .history-arrow { transform: rotate(90deg); }
 
 /* ─── System Message ────────────────────────────────────────── */
 .system-msg {
@@ -1616,27 +1583,57 @@ body.pane-right-open .chat-sidebar {
 .tool-card {
   border: 1px solid var(--border-dim);
   border-radius: var(--radius-sm);
-  margin: 8px 0; overflow: hidden;
+  margin: 6px 0; overflow: hidden;
   background: var(--tool-bg);
+  transition: border-color var(--t-fast);
 }
+
+.tool-card.collapsed .tool-body { display: none; }
+.tool-card.collapsed .tool-arrow { transform: rotate(0deg); }
+.tool-card:not(.collapsed) .tool-arrow { transform: rotate(90deg); }
+.tool-card:not(.collapsed) { border-color: var(--green-dim); }
 
 .tool-header {
   background: var(--bg-raised);
-  padding: 6px 12px;
-  display: flex; align-items: center; gap: 7px;
+  padding: 5px 10px;
+  display: flex; align-items: center; gap: 6px;
   font-size: 11px; font-weight: 600;
   font-family: var(--font-mono);
   color: var(--green-dim);
-  text-transform: uppercase; letter-spacing: 0.08em;
+  text-transform: uppercase; letter-spacing: 0.06em;
   border-bottom: 1px solid var(--border-dim);
+  width: 100%;
 }
 
-.tool-header .tool-icon { width: 11px; height: 11px; opacity: 0.6; }
+.tool-toggle {
+  cursor: pointer;
+  text-align: left;
+  border: none;
+  outline: none;
+  font: inherit;
+  color: inherit;
+  transition: background var(--t-fast);
+}
+.tool-toggle:hover { background: var(--bg-hover); }
+
+.tool-arrow {
+  display: inline-block; font-size: 9px; width: 11px;
+  transition: transform var(--t-fast); flex-shrink: 0;
+}
+.tool-icon { width: 13px; height: 13px; flex-shrink: 0; font-size: 12px; line-height: 1; }
+.tool-label { flex-shrink: 0; }
+.tool-summary {
+  flex: 1; min-width: 0;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  color: var(--text-dim); font-weight: 400;
+  text-transform: none; letter-spacing: 0;
+  font-size: 10px;
+}
 
 .tool-body {
   padding: 10px 12px;
   font-family: var(--font-mono); font-size: 12px;
-  max-height: 200px; overflow-y: auto;
+  max-height: 280px; overflow-y: auto;
   white-space: pre-wrap; word-break: break-all;
   color: var(--text-base); line-height: 1.6;
 }

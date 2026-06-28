@@ -1645,10 +1645,7 @@ function renderCurrentState(final = false) {
     } else if (block.type === 'text' && block.text) {
       html += `<div class="text-block">${renderStreamingText(block.text)}<span class="typing-cursor"></span></div>`;
     } else if (block.type === 'tool_use') {
-      html += `<div class="tool-card">
-        <div class="tool-header"><span class="tool-icon">&#9881;</span> ${esc(block.name || t('tool'))}</div>
-        <div class="tool-body">${esc(block.input)}</div>
-      </div>`;
+      html += renderToolCard(block);
     }
   }
 
@@ -1657,6 +1654,63 @@ function renderCurrentState(final = false) {
   }
 
   el.innerHTML = html;
+}
+
+function formatToolSummary(block) {
+  let input = {};
+  try {
+    input = typeof block.input === 'string' ? JSON.parse(block.input) : (block.input || {});
+  } catch (e) {}
+
+  const name = block.name || '';
+  switch (name) {
+    case 'Read':
+      return { icon: '📄', label: 'Read', summary: (input.file_path || '').split('/').pop() + (input.offset ? ` L${input.offset}-${input.offset + (input.limit || 0)}` : '') };
+    case 'Write':
+      return { icon: '✏', label: 'Write', summary: (input.file_path || '').split('/').pop() };
+    case 'Edit': {
+      const oldStr = (input.old_string || '').substring(0, 40);
+      return { icon: '✏', label: 'Edit', summary: (input.file_path || '').split('/').pop() + (oldStr ? ` · "${oldStr}..."` : '') };
+    }
+    case 'Bash':
+      return { icon: '>$', label: 'Bash', summary: (input.command || '').substring(0, 80) };
+    case 'Grep':
+      return { icon: '🔍', label: 'Grep', summary: `"${(input.pattern || '').substring(0, 40)}"` + (input.path ? ` in ${input.path}` : '') };
+    case 'Glob':
+      return { icon: '📁', label: 'Glob', summary: (input.pattern || '') };
+    case 'Task':
+      return { icon: '🤖', label: 'Task', summary: (input.description || input.subagent_type || '').substring(0, 60) };
+    case 'TodoWrite':
+      return { icon: '☑', label: 'TodoWrite', summary: (input.todos || []).length + ' items' };
+    default: {
+      const keys = Object.keys(input);
+      const firstKV = keys.length > 0 ? `${keys[0]}: ${String(input[keys[0]]).substring(0, 50)}` : '';
+      return { icon: '⚙', label: name || 'Tool', summary: firstKV };
+    }
+  }
+}
+
+function renderToolCard(block, opts = {}) {
+  const info = formatToolSummary(block);
+  const input = typeof block.input === 'string' ? block.input : JSON.stringify(block.input, null, 2);
+  const isRunning = opts.isRunning || false;
+  const runningBadge = isRunning
+    ? `<span class="tool-running-badge"><span class="agent-spinner"></span>${esc(t('running'))}</span>`
+    : '';
+  const cls = ['tool-card'];
+  if (isRunning) cls.push('tool-card-running');
+  cls.push('collapsed');
+
+  return `<div class="${cls.join(' ')}" data-tool-id="${esc(block.id || '')}">
+    <button type="button" class="tool-header tool-toggle" onclick="this.parentElement.classList.toggle('collapsed')">
+      <span class="tool-arrow">&#9654;</span>
+      <span class="tool-icon">${info.icon}</span>
+      <span class="tool-label">${esc(info.label)}</span>
+      <span class="tool-summary">${esc(info.summary)}</span>
+      ${runningBadge}
+    </button>
+    <div class="tool-body">${esc(input)}</div>
+  </div>`;
 }
 
 function renderStreamingText(text) {
@@ -1677,15 +1731,8 @@ function renderBlock(block) {
   } else if (block.type === 'text' && block.text) {
     return `<div class="text-block">${renderMd(block.text)}</div>`;
   } else if (block.type === 'tool_use') {
-    const input = typeof block.input === 'string' ? block.input : JSON.stringify(block.input, null, 2);
     const isRunningTask = block.name === 'Task' && block.id && runningTasks.has(block.id);
-    const runningBadge = isRunningTask
-      ? `<span class="tool-running-badge"><span class="agent-spinner"></span>${esc(t('running'))}</span>`
-      : '';
-    return `<div class="tool-card${isRunningTask ? ' tool-card-running' : ''}">
-      <div class="tool-header"><span class="tool-icon">&#9881;</span> ${esc(block.name || t('tool'))}${runningBadge}</div>
-      <div class="tool-body">${esc(input)}</div>
-    </div>`;
+    return renderToolCard(block, { isRunning: isRunningTask });
   }
   return '';
 }
@@ -4620,32 +4667,13 @@ function renderHistory(history) {
         }
       }
       contentEl.innerHTML = html;
-      initHistoryToolCards(contentEl);
     }
   }
   scrollToBottom();
 }
 
 function renderHistoryToolCard(block) {
-  const input = typeof block.input === 'string' ? block.input : JSON.stringify(block.input, null, 2);
-  const preview = input.replace(/\s+/g, ' ').trim().substring(0, 100);
-  return `<div class="tool-card history-tool-collapsible">
-    <button type="button" class="tool-header history-tool-toggle">
-      <span class="history-arrow">&#9654;</span>
-      <span class="tool-icon">&#9881;</span>
-      <span class="history-label">${esc(block.name || t('tool'))}</span>
-      <span class="history-preview">${esc(preview || t('historyEmpty'))}</span>
-    </button>
-    <div class="tool-body">${esc(input)}</div>
-  </div>`;
-}
-
-function initHistoryToolCards(root) {
-  root.querySelectorAll('.history-tool-toggle').forEach(toggle => {
-    toggle.addEventListener('click', () => {
-      toggle.closest('.history-tool-collapsible')?.classList.toggle('history-tool-open');
-    });
-  });
+  return renderToolCard(block);
 }
 
 function formatTime(isoStr) {
