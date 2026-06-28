@@ -3627,7 +3627,8 @@ function initRightPanel() {
     if (cwd) loadFileTree(cwd);
   };
 
-  const closePanel = () => {
+  const closePanel = (force = false) => {
+    if (!force && !isMobile()) return;
     sidebar.classList.remove('open');
     document.body.classList.remove('pane-right-open');
     document.body.classList.remove('mobile-overlay');
@@ -3640,13 +3641,13 @@ function initRightPanel() {
   // Titlebar 切换按钮
   if (toggleBtn) {
     toggleBtn.addEventListener('click', () => {
-      if (panelOpen()) closePanel(); else openPanel();
+      if (panelOpen() && isMobile()) closePanel(); else openPanel();
     });
   }
 
   // 面板内 × 关闭按钮
   if (closeBtn) {
-    closeBtn.addEventListener('click', closePanel);
+    closeBtn.addEventListener('click', () => closePanel(true));
   }
 
   // 标签切换
