@@ -691,6 +691,7 @@ class CCBSession:
                         return
                     if self.is_running:
                         await self._emit_event({"type": "error", "message": "持久 CLI 进程已退出，下一条消息将自动回退为普通模式"})
+                self._message_owner_id = None
                 await self._emit_event({"type": "process_ended", "exit_code": exit_code})
 
         except asyncio.CancelledError:

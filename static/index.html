@@ -118,6 +118,10 @@
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>
           <span data-i18n="chat">Chat</span>
         </button>
+        <button class="nav-btn" data-page="artifacts">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path><path d="M3.27 6.96 12 12.01l8.73-5.05"></path><path d="M12 22.08V12"></path></svg>
+          <span data-i18n="artifacts">Artifacts</span>
+        </button>
       </nav>
 
       <!-- 状态栏 -->
@@ -213,6 +217,31 @@
             <div id="group-member-panel" class="group-member-panel" style="display:none"></div>
             <div id="agent-add-popover" class="agent-add-popover" style="display:none"></div>
           </div>
+        </div>
+      </div>
+
+      <!-- 资产页 -->
+      <div id="page-artifacts" class="page artifacts-page">
+        <div class="artifacts-shell">
+          <header class="artifacts-header">
+            <div>
+              <div class="artifacts-kicker" data-i18n="artifactsKicker">Session outputs</div>
+              <h2 data-i18n="artifacts">Artifacts</h2>
+              <p data-i18n="artifactsSubtitle">Images, files, and links found in recent assistant and tool outputs.</p>
+            </div>
+            <button id="btn-artifacts-refresh" class="btn-mini" type="button" data-i18n="refresh">Refresh</button>
+          </header>
+          <div class="artifacts-toolbar">
+            <div class="artifacts-tabs" role="tablist">
+              <button class="artifacts-tab active" data-filter="all" type="button" data-i18n="all">All</button>
+              <button class="artifacts-tab" data-filter="image" type="button" data-i18n="images">Images</button>
+              <button class="artifacts-tab" data-filter="file" type="button" data-i18n="files">Files</button>
+              <button class="artifacts-tab" data-filter="link" type="button" data-i18n="links">Links</button>
+            </div>
+            <input id="artifacts-search" class="input artifacts-search" type="search" placeholder="Search artifacts..." data-i18n-placeholder="artifactsSearchPlaceholder">
+          </div>
+          <div id="artifacts-summary" class="artifacts-summary"></div>
+          <div id="artifacts-content" class="artifacts-content"></div>
         </div>
       </div>
 

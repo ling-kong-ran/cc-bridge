@@ -15,7 +15,7 @@ import base64
 import shlex
 import subprocess
 from pathlib import Path
-from urllib.parse import urlparse, parse_qs
+from urllib.parse import urlparse, parse_qs, quote
 
 sys.path.insert(0, str(Path(__file__).parent))
 
@@ -41,7 +41,7 @@ from config_manager import (
     get_agent,
     get_agents_for_cli,
 )
-from session_store import list_sessions, save_session, add_session_usage, delete_session, load_session_history, rename_session, update_session_cwd, toggle_pin
+from session_store import list_sessions, save_session, add_session_usage, delete_session, load_session_history, rename_session, update_session_cwd, toggle_pin, _find_jsonl_path
 from memory_index import list_memory_files, search_memory, get_memory_file, delete_memory_file, save_memory_file, index_memory
 import remote_manager
 
@@ -280,6 +280,172 @@ def extract_tool_results(event: dict) -> list[dict]:
                     "is_error": bool(block.get("is_error")),
                 })
     return results
+
+
+MARKDOWN_IMAGE_RE = re.compile(r"!\[([^\]]*)\]\(([^)\s]+)\)")
+MARKDOWN_LINK_RE = re.compile(r"(?<!!)\[([^\]]+)\]\(([^)\s]+)\)")
+URL_RE = re.compile(r"https?://[^\s<>\"')]+")
+PATH_RE = re.compile(r"(^|[\s(\"'`])((?:[A-Za-z]:[\\/]|/|~/|\.\.?/)[^\s\"'`<>]+(?:\.[a-zA-Z0-9]{1,8})?)")
+IMAGE_EXT_RE = re.compile(r"\.(?:png|jpe?g|gif|webp|svg|bmp)(?:\?.*)?$", re.I)
+FILE_EXT_RE = re.compile(r"\.(?:png|jpe?g|gif|webp|svg|bmp|pdf|txt|json|md|csv|zip|tar|gz|mp3|wav|mp4|mov|html?)(?:\?.*)?$", re.I)
+KEY_HINT_RE = re.compile(r"(path|file|url|image|artifact|output|download|result|target)", re.I)
+
+
+def normalize_artifact_value(value: str) -> str:
+    value = str(value or "").strip().strip(".,;:)]}")
+    return value.replace("\\", "/")
+
+
+def looks_like_path_or_url(value: str) -> bool:
+    if not value or len(value) > 1200:
+        return False
+    if re.match(r"^https?://", value, re.I):
+        return True
+    if re.match(r"^(?:[A-Za-z]:/|/|~/|\.\.?/)", value):
+        return bool(FILE_EXT_RE.search(value) or "/" in value)
+    return False
+
+
+def looks_like_artifact(value: str) -> bool:
+    return looks_like_path_or_url(value) and (bool(FILE_EXT_RE.search(value)) or re.match(r"^https?://", value, re.I) is not None)
+
+
+def artifact_kind(value: str) -> str:
+    if IMAGE_EXT_RE.search(value):
+        return "image"
+    if FILE_EXT_RE.search(value):
+        return "file"
+    return "link"
+
+
+def artifact_label(value: str) -> str:
+    clean = value.split("?", 1)[0].rstrip("/")
+    name = clean.rsplit("/", 1)[-1]
+    return name or value
+
+
+def artifact_href(value: str) -> str:
+    if re.match(r"^https?://", value, re.I):
+        return value
+    fp = is_allowed_upload_path(value)
+    if fp and fp.exists():
+        return "/api/file?path=" + quote(str(fp).replace("\\", "/"), safe="")
+    return ""
+
+
+def collect_string_values(value, key_path: str, collector):
+    if isinstance(value, str):
+        if KEY_HINT_RE.search(key_path) or looks_like_path_or_url(normalize_artifact_value(value)):
+            collector(value)
+    elif isinstance(value, list):
+        for index, item in enumerate(value):
+            collect_string_values(item, f"{key_path}.{index}" if key_path else str(index), collector)
+    elif isinstance(value, dict):
+        for key, item in value.items():
+            collect_string_values(item, f"{key_path}.{key}" if key_path else str(key), collector)
+
+
+def collect_artifacts_from_text(text: str, push_value):
+    if not text:
+        return
+    for match in MARKDOWN_IMAGE_RE.finditer(text):
+        push_value(match.group(2))
+    for match in MARKDOWN_LINK_RE.finditer(text):
+        push_value(match.group(2))
+    for match in URL_RE.finditer(text):
+        push_value(match.group(0))
+    for match in PATH_RE.finditer(text):
+        push_value(match.group(2))
+
+
+def collect_artifacts_for_session(session: dict, max_records: int = 200) -> list[dict]:
+    session_id = session.get("session_id", "")
+    jsonl_path = _find_jsonl_path(session_id, session.get("cwd", "")) if session_id else None
+    if not jsonl_path:
+        return []
+
+    found = {}
+    title = session.get("title") or "新会话"
+
+    def push(value: str, timestamp: str = ""):
+        value = normalize_artifact_value(value)
+        if not looks_like_artifact(value):
+            return
+        key = f"{session_id}:{value}"
+        if key in found:
+            return
+        found[key] = {
+            "id": key,
+            "kind": artifact_kind(value),
+            "value": value,
+            "href": artifact_href(value),
+            "label": artifact_label(value),
+            "session_id": session_id,
+            "session_title": title,
+            "cwd": (session.get("cwd") or "").replace("\\", "/"),
+            "timestamp": timestamp or session.get("updated_at", ""),
+        }
+
+    try:
+        lines = jsonl_path.read_text(encoding="utf-8").splitlines()
+        for line in reversed(lines):
+            if len(found) >= max_records:
+                break
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                obj = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            msg_type = obj.get("type", "")
+            if msg_type not in ("assistant", "user"):
+                continue
+            timestamp = obj.get("timestamp") or session.get("updated_at", "")
+            content = (obj.get("message") or {}).get("content")
+            if msg_type == "assistant":
+                if isinstance(content, list):
+                    for block in content:
+                        if not isinstance(block, dict):
+                            continue
+                        if block.get("type") == "text":
+                            collect_artifacts_from_text(block.get("text") or "", lambda v, ts=timestamp: push(v, ts))
+                        elif block.get("type") == "tool_use":
+                            collect_string_values(block.get("input"), "tool_use.input", lambda v, ts=timestamp: push(v, ts))
+                elif isinstance(content, str):
+                    collect_artifacts_from_text(content, lambda v, ts=timestamp: push(v, ts))
+            elif msg_type == "user":
+                if isinstance(content, list):
+                    for block in content:
+                        if not isinstance(block, dict):
+                            continue
+                        if block.get("type") == "text":
+                            collect_artifacts_from_text(block.get("text") or "", lambda v, ts=timestamp: push(v, ts))
+                        elif block.get("type") == "tool_result":
+                            result = block.get("content")
+                            if isinstance(result, str):
+                                collect_artifacts_from_text(result, lambda v, ts=timestamp: push(v, ts))
+                                try:
+                                    collect_string_values(json.loads(result), "tool_result", lambda v, ts=timestamp: push(v, ts))
+                                except json.JSONDecodeError:
+                                    pass
+                            else:
+                                collect_string_values(result, "tool_result", lambda v, ts=timestamp: push(v, ts))
+                elif isinstance(content, str):
+                    collect_artifacts_from_text(content, lambda v, ts=timestamp: push(v, ts))
+    except OSError:
+        return []
+
+    return list(found.values())
+
+
+def list_artifacts(limit_sessions: int = 30) -> dict:
+    sessions = list_sessions()[:max(1, min(100, limit_sessions))]
+    artifacts = []
+    for session in sessions:
+        artifacts.extend(collect_artifacts_for_session(session))
+    artifacts.sort(key=lambda item: item.get("timestamp") or "", reverse=True)
+    return {"artifacts": artifacts, "total": len(artifacts)}
 
 
 def get_default_model() -> str:
@@ -1406,11 +1572,113 @@ async def handle_action(body: bytes, writer: asyncio.StreamWriter):
     elif action == "send_message":
         content = data.get("content", "")
         requested_model = data.get("model") or ""
-        # viewer 不能发送消息（无独立 CLI 进程）
-        if client_viewing.get(client_id):
-            await push_event(client_id, "error", {"message": "Viewer cannot send message"})
-            await send_response(writer, 200, "application/json", b'{"ok":false,"error":"viewer cannot send"}')
-            return
+        # viewer 在 owner 正在生成时只读；生成结束后允许接管并发送，避免原 owner 长时间占线
+        viewing_owner = client_viewing.get(client_id)
+        if viewing_owner:
+            owner_session = session_manager.get_session(viewing_owner)
+            if owner_session and owner_session._message_owner_id:
+                await push_event(client_id, "error", {"message": "Viewer cannot send message while generation is running"})
+                await send_response(writer, 200, "application/json", b'{"ok":false,"error":"viewer cannot send while generation is running"}')
+                return
+
+            resume_id = client_session_ids.get(client_id) or client_session_ids.get(viewing_owner, "")
+            takeover_viewers = [viewing_owner]
+            takeover_viewers.extend(
+                vid for vid, oid in list(client_viewing.items())
+                if oid == viewing_owner and vid != client_id and vid not in takeover_viewers
+            )
+            if owner_session:
+                owner_session.remove_viewer(client_id)
+                for vid in takeover_viewers:
+                    owner_session.remove_viewer(vid)
+                await owner_session.stop()
+            client_viewing.pop(client_id, None)
+            if resume_id:
+                session_owner[resume_id] = client_id
+                client_session_ids[client_id] = resume_id
+
+            _, takeover_session = session_manager.create_session(client_id)
+            meta = dict(client_meta.get(client_id) or client_meta.get(viewing_owner) or {})
+            if requested_model:
+                meta["model"] = requested_model
+            if data.get("cli"):
+                meta["cli"] = data.get("cli")
+            if "remote_target_id" in data:
+                meta["remote_target_id"] = data.get("remote_target_id") or ""
+            client_meta[client_id] = meta
+
+            async def on_takeover_event(event: dict):
+                evt_type = event.get("type", "unknown")
+                if evt_type == "session_id_captured":
+                    sid = event.get("session_id", resume_id)
+                    client_session_ids[client_id] = sid
+                    session_owner[sid] = client_id
+                    meta_now = client_meta.get(client_id, {})
+                    save_session(sid, "", meta_now.get("model", ""), meta_now.get("cwd", ""),
+                                 remote_target_id=meta_now.get("remote_target_id", ""), cli=meta_now.get("cli", ""))
+                    await push_event(client_id, "session_id_captured", event)
+                elif evt_type == "result":
+                    await push_event(client_id, evt_type, persist_result_usage(client_id, event))
+                elif evt_type == "user":
+                    results = extract_tool_results(event)
+                    if results:
+                        await push_event(client_id, "tool_result", {
+                            "results": results,
+                            "parent_tool_use_id": event.get("parent_tool_use_id"),
+                        })
+                elif evt_type in ("assistant", "stream_event", "system", "error", "process_ended", "model_changed"):
+                    await push_event(client_id, evt_type, event)
+
+            remote_target = remote_manager.get_target(meta.get("remote_target_id") or "")
+            try:
+                await takeover_session.start(
+                    model=meta.get("model") or requested_model or get_default_model(),
+                    cwd=meta.get("cwd"),
+                    resume_id=resume_id,
+                    on_event=on_takeover_event,
+                    skip_permissions=True,
+                    remote_target=remote_target,
+                    allow_mutate=bool(data.get("allow_remote_mutate", False)),
+                    cli=meta.get("cli") or data.get("cli") or get_current_cli(),
+                )
+            except Exception as exc:
+                await push_event(client_id, "error", {"message": str(exc)})
+                err = json.dumps({"ok": False, "error": str(exc)}, ensure_ascii=False).encode("utf-8")
+                await send_response(writer, 400, "application/json; charset=utf-8", err)
+                return
+            async def on_takeover_viewer_event(viewer_id: str, event: dict):
+                evt_type = event.get("type", "unknown")
+                if evt_type == "session_id_captured":
+                    client_session_ids[viewer_id] = event.get("session_id", resume_id)
+                    await push_event(viewer_id, "session_id_captured", event)
+                elif evt_type in ("assistant", "stream_event", "system", "error",
+                                   "process_ended", "model_changed", "result", "tool_result", "user",
+                                   "session_stopped"):
+                    await push_event(viewer_id, evt_type, event)
+
+            for vid in takeover_viewers:
+                if vid == client_id:
+                    continue
+                client_viewing[vid] = client_id
+                client_session_ids[vid] = resume_id
+                client_meta[vid] = dict(client_meta.get(vid) or meta)
+                takeover_session.add_viewer(vid, lambda event, viewer_id=vid: on_takeover_viewer_event(viewer_id, event))
+                await push_event(vid, "session_started", {
+                    "model": takeover_session.model,
+                    "resumed": bool(resume_id),
+                    "session_id": resume_id,
+                    "remote_target_id": client_meta.get(vid, {}).get("remote_target_id", ""),
+                    "cli": takeover_session.cli or client_meta.get(vid, {}).get("cli", ""),
+                    "cwd": takeover_session.cwd or client_meta.get(vid, {}).get("cwd", ""),
+                    "viewing": True,
+                })
+                await push_event(vid, "session_taken", {
+                    "session_id": resume_id,
+                    "model": takeover_session.model,
+                    "cwd": takeover_session.cwd or "",
+                    "cli": takeover_session.cli or "",
+                    "remote_target_id": client_meta.get(vid, {}).get("remote_target_id", ""),
+                })
         session = session_manager.get_session(client_id)
         if session and session.is_running and content:
             if requested_model and requested_model != session.model:
@@ -1588,6 +1856,12 @@ async def handle_api_get(path: str, writer: asyncio.StreamWriter, query: dict = 
             offset = 0
             limit = 200
         data = {"sessions": sessions[offset:offset + limit], "total": total}
+    elif path == "/api/artifacts":
+        try:
+            limit_sessions = int((query or {}).get("limit_sessions", ["30"])[0])
+        except (ValueError, IndexError):
+            limit_sessions = 30
+        data = list_artifacts(limit_sessions)
     elif path == "/api/file":
         # 提供上传文件（图片预览）
         file_path = (query or {}).get("path", [""])[0]
