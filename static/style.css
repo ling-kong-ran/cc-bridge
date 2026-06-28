@@ -568,10 +568,10 @@ body.sidebar-collapsed .sidebar {
   flex-shrink: 0;
 }
 
-.theme-icon-moon { display: none; }
-.theme-icon-sun { display: block; }
-html.light-theme .theme-icon-moon { display: block; }
-html.light-theme .theme-icon-sun { display: none; }
+.titlebar-btn .theme-icon-moon { display: none; }
+.titlebar-btn .theme-icon-sun { display: block; }
+html.light-theme .titlebar-btn .theme-icon-moon { display: block; }
+html.light-theme .titlebar-btn .theme-icon-sun { display: none; }
 
 /* ─── Buttons ───────────────────────────────────────────────── */
 .btn {
