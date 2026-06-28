@@ -118,6 +118,21 @@ document.addEventListener('DOMContentLoaded', async () => {
   loadConfig();
   loadSessions();
   initFocusConfigReload();
+  // 工具卡片折叠事件委托（支持 Shift+点击展开/折叠全部）
+  document.addEventListener('click', (e) => {
+    const toggle = e.target.closest('.tool-toggle');
+    if (!toggle) return;
+    e.preventDefault();
+    const card = toggle.closest('.tool-card');
+    if (!card) return;
+    if (e.shiftKey) {
+      const allCards = document.querySelectorAll('.tool-card');
+      const anyCollapsed = Array.from(allCards).some(c => c.classList.contains('collapsed'));
+      allCards.forEach(c => c.classList.toggle('collapsed', !anyCollapsed));
+    } else {
+      card.classList.toggle('collapsed');
+    }
+  });
   showPage('chat');
   if (autoUpdateEnabled) setTimeout(() => checkForUpdate(), 3000);
 });
@@ -1721,7 +1736,7 @@ function renderToolCard(block, opts = {}) {
   cls.push('collapsed');
 
   return `<div class="${cls.join(' ')}" data-tool-id="${esc(block.id || '')}">
-    <button type="button" class="tool-header tool-toggle" onclick="this.parentElement.classList.toggle('collapsed')">
+    <button type="button" class="tool-header tool-toggle">
       <span class="tool-arrow">&#9654;</span>
       <span class="tool-icon">${info.icon}</span>
       <span class="tool-label">${esc(info.label)}</span>
