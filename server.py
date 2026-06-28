@@ -326,6 +326,63 @@ MIME_TYPES = {
 }
 
 
+# ─── 审查 (Git Review) ──────────────────────────────────────
+def git_review(cwd: str) -> dict:
+    """返回工作目录的 git 状态概览，用于右侧审查面板。"""
+    if not cwd or not os.path.isdir(cwd):
+        return {"error": "工作目录不存在"}
+
+    # 检查是否 git 仓库
+    if not os.path.isdir(os.path.join(cwd, ".git")):
+        return {"git": False, "message": "当前目录不是 Git 仓库"}
+
+    def _git(args):
+        try:
+            r = subprocess.run(
+                ["git"] + args, cwd=cwd,
+                capture_output=True, text=True, timeout=8,
+                creationflags=0x08000000 if sys.platform == "win32" else 0
+            )
+            return r.stdout.strip() if r.returncode == 0 else ""
+        except Exception:
+            return ""
+
+    # git status --porcelain
+    raw = _git(["status", "--porcelain"])
+    files = []
+    if raw:
+        for line in raw.split("\n"):
+            if not line:
+                continue
+            st = line[:2].strip()
+            fn = line[3:].strip()
+            status = "modified" if st in ("M", " M", "MM") else \
+                     "added" if st in ("A", " A", "AM") else \
+                     "deleted" if st in ("D", " D") else \
+                     "renamed" if st.startswith("R") else \
+                     "untracked" if st.startswith("??") else "changed"
+            files.append({"status": status, "file": fn.replace("\\", "/"), "raw": st})
+
+    # git diff --stat 获取变更统计
+    stat_output = _git(["diff", "--stat", "HEAD"])
+    # git branch
+    branch = _git(["branch", "--show-current"]) or _git(["rev-parse", "--abbrev-ref", "HEAD"])
+
+    # 暂存区统计
+    staged = _git(["diff", "--cached", "--stat", "HEAD"])
+    unstaged = _git(["diff", "--stat"])
+
+    return {
+        "git": True,
+        "branch": branch or "unknown",
+        "files": files,
+        "stat": stat_output,
+        "stagedStat": staged,
+        "unstagedStat": unstaged,
+        "totalChanges": len(files),
+    }
+
+
 # ─── 文件+目录浏览 ──────────────────────────────────────────
 def browse_files(path: str) -> dict:
     """列出指定目录下的子目录和文件（用于附件选择器）"""
@@ -1470,6 +1527,9 @@ async def handle_api_get(path: str, writer: asyncio.StreamWriter, query: dict = 
             "current": get_current_cli() if available else "",
             "install_command": INSTALL_CLI_COMMAND,
         }
+    elif path == "/api/review":
+        cwd = (query or {}).get("cwd", [""])[0] or DEFAULT_CWD
+        data = git_review(cwd)
     elif path == "/api/browse":
         p = (query or {}).get("path", [""])[0]
         data = browse_files(p)

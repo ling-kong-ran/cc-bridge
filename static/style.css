@@ -32,6 +32,7 @@
   --cyan-dim:    #56d0e8;
 
   --amber:       #e8a730;
+  --amber-faint: rgba(232, 167, 48, 0.1);
   --red:         #f05050;
   --red-dim:     rgba(240, 80, 80, 0.5);
   --danger:      var(--red);
@@ -98,6 +99,7 @@ html.light-theme {
   --cyan-dim:    #0884a4;
 
   --amber:       #b07c14;
+  --amber-faint: rgba(176, 124, 20, 0.08);
   --red:         #d63a48;
   --red-dim:     rgba(214, 58, 72, 0.38);
   --danger:      var(--red);
@@ -266,15 +268,40 @@ html, body {
   height: 26px;
 }
 
-.titlebar-back-btn {
-  font-size: 14px;
-  padding: 3px 8px;
+/* ─── Titlebar Back Button ──────────────────────────────────── */
+.titlebar-back {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--border-dim);
+  border-radius: var(--radius-xs);
+  background: transparent;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  font-size: 12px;
   line-height: 1;
+  padding: 5px 12px;
+  cursor: pointer;
+  transition: all var(--t-fast);
+  margin-right: 8px;
+  height: 28px;
+  white-space: nowrap;
+}
+
+.titlebar-back:hover {
+  border-color: var(--amber);
+  color: var(--amber);
+  background: var(--amber-faint);
 }
 
 .titlebar-btn:hover {
   border-color: var(--amber);
   color: var(--amber);
+}
+
+.titlebar-btn.active {
+  border-color: var(--green-dim);
+  color: var(--green);
 }
 
 .titlebar-btn svg {
@@ -1053,38 +1080,69 @@ body.pane-right-open .chat-sidebar {
   text-align: center; color: var(--text-ghost);
   font-size: 11px; padding: 20px 0;
 }
-/* 会话成员浮动开关按钮（PC + 移动端共用） */
-.float-buttons {
-  position: fixed;
-  bottom: 88px; right: 14px;
-  z-index: 99;
+/* ─── Review Panel ────────────────────────────────────────── */
+.review-panel {
+  font-size: 11px;
   display: flex; flex-direction: column; gap: 8px;
-  transition: right var(--t-base);
 }
-body.pane-right-open .float-buttons {
-  right: 294px;
+
+.review-loading,
+.review-empty {
+  text-align: center; color: var(--text-ghost);
+  font-size: 11px; padding: 20px 0;
 }
-.btn-members-toggle {
-  display: flex;
-  width: 42px; height: 42px;
-  border-radius: 50%;
-  background: var(--bg-raised);
-  border: 1px solid var(--border);
-  color: var(--text-muted);
-  cursor: pointer;
-  align-items: center;
-  justify-content: center;
-  box-shadow: 0 4px 16px rgba(0,0,0,0.35);
-  transition: color var(--t-fast), background var(--t-fast);
+
+.review-branch {
+  display: flex; align-items: center; gap: 6px;
+  padding: 4px 0; margin-bottom: 2px;
+  color: var(--text-muted); font-size: 10px;
 }
-.btn-members-toggle:hover,
-.btn-members-toggle:active {
-  color: var(--text-base);
-  background: var(--bg-float);
+.review-branch-name {
+  color: var(--green); font-weight: 600;
 }
-.btn-members-toggle.active {
-  color: var(--accent);
-  border-color: rgba(var(--accent-rgb),0.4);
+
+.review-section-title {
+  font-size: 9px; text-transform: uppercase;
+  letter-spacing: 0.1em; color: var(--text-ghost);
+  margin: 6px 0 4px;
+  padding-bottom: 3px;
+  border-bottom: 1px solid var(--border-dim);
+}
+
+.review-file-list {
+  display: flex; flex-direction: column; gap: 1px;
+}
+
+.review-file-item {
+  display: flex; align-items: center; gap: 6px;
+  padding: 3px 4px; border-radius: 3px;
+  cursor: pointer; transition: background var(--t-fast);
+  color: var(--text-muted); font-size: 10.5px;
+  overflow: hidden;
+}
+.review-file-item:hover {
+  background: var(--bg-raised); color: var(--text-base);
+}
+.review-file-item .rf-name {
+  flex: 1; min-width: 0;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.review-file-item .rf-badge {
+  font-size: 9px; padding: 1px 5px; border-radius: 3px;
+  font-weight: 600; letter-spacing: 0.04em;
+  flex-shrink: 0;
+}
+.rf-badge.modified  { color: var(--amber); background: rgba(232,167,48,0.1); }
+.rf-badge.added     { color: var(--green); background: rgba(61,220,132,0.1); }
+.rf-badge.deleted   { color: var(--red);   background: rgba(240,80,80,0.1); }
+.rf-badge.renamed   { color: var(--cyan);  background: rgba(86,208,232,0.1); }
+.rf-badge.untracked { color: var(--text-ghost); background: rgba(255,255,255,0.04); }
+.rf-badge.changed   { color: var(--text-dim); background: rgba(255,255,255,0.05); }
+
+.review-stat-block {
+  font-size: 10px; font-family: var(--font-mono);
+  color: var(--text-dim); white-space: pre-wrap;
+  line-height: 1.5; padding: 4px 0;
 }
 
 .btn-icon-mini {
@@ -1922,12 +1980,6 @@ body.pane-right-open .float-buttons {
 
 .input-actions { display: flex; flex-direction: column; gap: 5px; }
 
-.input-hint {
-  text-align: right; padding: 3px 0 0; max-width: 840px; margin: 0 auto;
-  font-size: 10.5px; color: var(--text-ghost); opacity: 0.6;
-  letter-spacing: 0.02em; pointer-events: none;
-}
-
 .btn-send {
   padding: 12px 18px;
   background: var(--green-faint);
@@ -2115,6 +2167,49 @@ body.pane-right-open .float-buttons {
 .title-prefix {
   color: var(--text-ghost); opacity: 0.6;
 }
+
+/* ─── Settings Tabs ─────────────────────────────────────────── */
+.settings-tabs {
+  display: flex;
+  flex: 0 0 auto;
+  gap: 0;
+  border-bottom: 1px solid var(--border-dim);
+  margin-bottom: 22px;
+  padding: 0 2px;
+}
+
+.settings-tab {
+  position: relative;
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  padding: 9px 16px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: color var(--t-fast), border-color var(--t-fast);
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+}
+
+.settings-tab.active {
+  color: var(--green);
+  border-bottom-color: var(--green);
+}
+
+.settings-tab:hover:not(.active) {
+  color: var(--text-base);
+  border-bottom-color: var(--border-dim);
+}
+
+.config-tab-panels {
+  flex: 1;
+  overflow-y: auto;
+}
+
+.config-tab-panel { display: none; }
+.config-tab-panel.active { display: block; }
 
 .config-section { margin-bottom: 28px; }
 
@@ -2835,6 +2930,10 @@ html.light-theme .titlebar {
   backdrop-filter: blur(12px);
 }
 
+html.light-theme .titlebar-back {
+  border-color: #d0d5dc;
+}
+
 html.light-theme .welcome-art {
   text-shadow: none;
 }
@@ -2872,6 +2971,16 @@ html.light-theme .thinking-block {
 
 html.light-theme .config-card {
   box-shadow: 0 1px 6px rgba(0, 0, 0, 0.05);
+}
+
+html.light-theme .settings-tab.active {
+  color: var(--green);
+  border-bottom-color: var(--green);
+}
+
+html.light-theme .settings-tab:hover:not(.active) {
+  color: #333;
+  border-bottom-color: #ccc;
 }
 
 html.light-theme .tool-card {
@@ -3167,7 +3276,7 @@ html.light-theme .agent-status-bar {
   }
 
   .app {
-    height: 100dvh;
+    height: calc(100dvh - 36px);
     grid-template-columns: 1fr;
   }
 
@@ -3247,6 +3356,15 @@ html.light-theme .agent-status-bar {
     transform: translateX(0);
   }
 
+  /* 移动端右侧面板 escaping overflow 裁切 + z-index 层级 */
+  body.mobile-overlay .main,
+  body.mobile-overlay .page.active {
+    overflow: visible;
+  }
+  body.mobile-overlay .page.active {
+    z-index: 90;
+  }
+
   .sidebar-header {
     padding: 12px 14px 8px;
   }
@@ -3266,7 +3384,6 @@ html.light-theme .agent-status-bar {
 
   .main {
     width: 100%;
-    height: 100dvh;
     min-width: 0;
     min-height: 0;
   }
@@ -3279,6 +3396,13 @@ html.light-theme .agent-status-bar {
     height: 36px;
     padding: 0 8px;
     gap: 6px;
+  }
+
+  .titlebar-back {
+    font-size: 11px;
+    padding: 4px 8px;
+    margin-right: 4px;
+    height: 26px;
   }
 
   .titlebar-brand .titlebar-logo {
@@ -3302,6 +3426,10 @@ html.light-theme .agent-status-bar {
     padding: 3px 5px;
     font-size: 10px;
     height: 24px;
+  }
+
+  #btn-sidebar-collapse {
+    display: none !important;
   }
 
   .messages {
@@ -3373,6 +3501,19 @@ html.light-theme .agent-status-bar {
 
   .config-inner {
     padding: 16px 10px;
+  }
+
+  .settings-tabs {
+    gap: 0;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .settings-tab {
+    padding: 8px 11px;
+    font-size: 10px;
+    white-space: nowrap;
+    flex-shrink: 0;
   }
 
   .settings-row {

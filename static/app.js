@@ -109,8 +109,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   initRemote();
   initMcpManager();
   initAgentModal();
-  initSessionAgentPanel();
-  initFileTreePanel();
+  initRightPanel();
   initMentionAutocomplete();
   initMemoryUI();
   loadDefaultCwd();
@@ -1161,6 +1160,8 @@ function showPage(page) {
   if (titlebarMeta) titlebarMeta.style.display = page === 'chat' ? '' : 'none';
   const btnExport = document.getElementById('btn-export-chat');
   if (btnExport) btnExport.style.display = page === 'chat' ? '' : 'none';
+  const btnPanel = document.getElementById('btn-toggle-right-panel');
+  if (btnPanel) btnPanel.style.display = page === 'chat' ? '' : 'none';
   if (page === 'chat') {
     renderTopbarMeta();
     renderTopbarStatusSummary();
@@ -1184,6 +1185,17 @@ function initNavigation() {
   if (btnBack) {
     btnBack.addEventListener('click', () => showPage('chat'));
   }
+  // 设置页标签切换
+  document.querySelectorAll('.settings-tab').forEach(tab => {
+    tab.addEventListener('click', () => {
+      const tabName = tab.dataset.tab;
+      document.querySelectorAll('.settings-tab').forEach(t => t.classList.remove('active'));
+      document.querySelectorAll('.config-tab-panel').forEach(p => p.classList.remove('active'));
+      tab.classList.add('active');
+      const panel = document.querySelector(`.config-tab-panel[data-tab="${tabName}"]`);
+      if (panel) panel.classList.add('active');
+    });
+  });
 }
 
 function initMobileLayout() {
@@ -3347,12 +3359,70 @@ function hideAgentAddPopover() {
   if (popover) popover.style.display = 'none';
 }
 
-function initSessionAgentPanel() {
+function initRightPanel() {
+  const sidebar = document.getElementById('chat-sidebar');
+  const toggleBtn = document.getElementById('btn-toggle-right-panel');
+  const closeBtn = document.getElementById('btn-chat-sidebar-close');
   const addBtn = document.getElementById('btn-session-agent-add');
   const popover = document.getElementById('agent-add-popover');
-  const sidebar = document.getElementById('chat-sidebar');
-  const toggleBtn = document.getElementById('btn-members-toggle');
 
+  const isMobile = () => window.matchMedia('(max-width: 760px)').matches;
+
+  const openPanel = () => {
+    if (isMobile()) {
+      sidebar.classList.add('open');
+      document.body.classList.add('mobile-overlay');
+      document.getElementById('mobile-sidebar-backdrop')?.classList.add('visible');
+    } else {
+      document.body.classList.add('pane-right-open');
+    }
+    if (toggleBtn) toggleBtn.classList.add('active');
+    // 默认打开 Files 标签
+    switchToSidebarTab('files');
+    const cwd = (cwdInput?.value || '').trim();
+    if (cwd) loadFileTree(cwd);
+  };
+
+  const closePanel = () => {
+    sidebar.classList.remove('open');
+    document.body.classList.remove('pane-right-open');
+    document.body.classList.remove('mobile-overlay');
+    document.getElementById('mobile-sidebar-backdrop')?.classList.remove('visible');
+    if (toggleBtn) toggleBtn.classList.remove('active');
+  };
+
+  const panelOpen = () => sidebar.classList.contains('open') || document.body.classList.contains('pane-right-open');
+
+  // Titlebar 切换按钮
+  if (toggleBtn) {
+    toggleBtn.addEventListener('click', () => {
+      if (panelOpen()) closePanel(); else openPanel();
+    });
+  }
+
+  // 面板内 × 关闭按钮
+  if (closeBtn) {
+    closeBtn.addEventListener('click', closePanel);
+  }
+
+  // 标签切换
+  document.querySelectorAll('.chat-sidebar-tab').forEach(tab => {
+    tab.addEventListener('click', () => {
+      const tabName = tab.dataset.tab;
+      switchToSidebarTab(tabName);
+      const cwd = (cwdInput?.value || '').trim();
+      if (tabName === 'files' && cwd) loadFileTree(cwd);
+      if (tabName === 'review' && cwd) loadReview(cwd);
+    });
+  });
+
+  // 文件树刷新按钮
+  document.getElementById('btn-file-tree-refresh')?.addEventListener('click', () => {
+    const cwd = (cwdInput?.value || '').trim();
+    if (cwd) loadFileTree(cwd);
+  });
+
+  // 添加 agent 按钮
   if (addBtn) {
     addBtn.addEventListener('click', () => {
       if (popover && popover.style.display === 'block') {
@@ -3363,63 +3433,7 @@ function initSessionAgentPanel() {
     });
   }
 
-  // 统一浮动按钮：点击展开/收起面板（PC + 移动端）
-  if (toggleBtn && sidebar) {
-    const isMobile = () => window.matchMedia('(max-width: 760px)').matches;
-    const openPanel = (tab) => {
-      if (isMobile()) {
-        sidebar.classList.add('open');
-        document.body.classList.add('mobile-overlay');
-        document.getElementById('mobile-sidebar-backdrop')?.classList.add('visible');
-      } else {
-        document.body.classList.add('pane-right-open');
-      }
-      if (tab === 'members') toggleBtn.classList.add('active');
-      document.getElementById('btn-files-toggle')?.classList.remove('active');
-    };
-    const closePanel = () => {
-      sidebar.classList.remove('open');
-      document.body.classList.remove('pane-right-open');
-      document.body.classList.remove('mobile-overlay');
-      document.getElementById('mobile-sidebar-backdrop')?.classList.remove('visible');
-      toggleBtn.classList.remove('active');
-      document.getElementById('btn-files-toggle')?.classList.remove('active');
-    };
-
-    toggleBtn.addEventListener('click', () => {
-      if (sidebar.classList.contains('open') || document.body.classList.contains('pane-right-open')) {
-        closePanel();
-      } else {
-        openPanel('members');
-        switchToSidebarTab('members');
-      }
-    });
-
-    // 点击面板外部关闭
-    const filesToggleBtn = document.getElementById('btn-files-toggle');
-    document.addEventListener('click', (e) => {
-      const panelOpen = sidebar.classList.contains('open') || document.body.classList.contains('pane-right-open');
-      if (!panelOpen) return;
-      if (!sidebar.contains(e.target) && e.target !== toggleBtn && !toggleBtn.contains(e.target) && e.target !== filesToggleBtn && !filesToggleBtn?.contains(e.target)) {
-        closePanel();
-      }
-    });
-
-    // Escape 关闭
-    document.addEventListener('keydown', (e) => {
-      if (e.key === 'Escape' && (sidebar.classList.contains('open') || document.body.classList.contains('pane-right-open'))) {
-        closePanel();
-      }
-    });
-
-    // 面板内 X 关闭按钮
-    const closeBtn = document.getElementById('btn-chat-sidebar-close');
-    if (closeBtn) {
-      closeBtn.addEventListener('click', closePanel);
-    }
-  }
-
-  // 弹窗内事件委托：点击 agent 项 → 拉入
+  // 弹窗内点击 agent → 拉入
   if (popover) {
     popover.addEventListener('click', (e) => {
       const item = e.target.closest('.agent-add-popover-item');
@@ -3429,7 +3443,15 @@ function initSessionAgentPanel() {
     });
   }
 
-  // 点击面板外关闭弹窗
+  // 点击面板外侧关闭
+  document.addEventListener('click', (e) => {
+    if (!panelOpen()) return;
+    if (!sidebar.contains(e.target) && e.target !== toggleBtn && !toggleBtn?.contains(e.target)) {
+      closePanel();
+    }
+  });
+
+  // 点击面板外关闭 agent 弹窗
   document.addEventListener('click', (e) => {
     const pv = document.getElementById('agent-add-popover');
     if (!pv || pv.style.display !== 'block') return;
@@ -3437,69 +3459,79 @@ function initSessionAgentPanel() {
       hideAgentAddPopover();
     }
   });
+
+  // Escape 关闭
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && panelOpen()) {
+      closePanel();
+    }
+  });
+
   loadSessionAgents();
-}
-
-// ─── 文件树面板 ──────────────────────────────────────────────────
-let fileTreePath = '';
-
-function initFileTreePanel() {
-  const tabs = document.querySelectorAll('.chat-sidebar-tab');
-  tabs.forEach(tab => {
-    tab.addEventListener('click', () => {
-      const tabName = tab.dataset.tab;
-      switchToSidebarTab(tabName);
-      if (tabName === 'files') {
-        const cwd = (cwdInput?.value || '').trim();
-        if (cwd) loadFileTree(cwd);
-      }
-    });
-  });
-  document.getElementById('btn-file-tree-refresh')?.addEventListener('click', () => {
-    const cwd = (cwdInput?.value || '').trim();
-    if (cwd) loadFileTree(cwd);
-  });
-
-  // 浮动文件夹按钮 → 打开 Files 面板
-  const filesToggle = document.getElementById('btn-files-toggle');
-  const sidebar = document.getElementById('chat-sidebar');
-  if (filesToggle && sidebar) {
-    const isMobile = () => window.matchMedia('(max-width: 760px)').matches;
-    filesToggle.addEventListener('click', () => {
-      const alreadyFiles = (sidebar.classList.contains('open') || document.body.classList.contains('pane-right-open'))
-        && document.getElementById('file-tree-panel').style.display !== 'none';
-      if (alreadyFiles) {
-        sidebar.classList.remove('open');
-        document.body.classList.remove('pane-right-open');
-        document.body.classList.remove('mobile-overlay');
-        filesToggle.classList.remove('active');
-        document.getElementById('btn-members-toggle')?.classList.remove('active');
-        return;
-      }
-      if (isMobile()) {
-        sidebar.classList.add('open');
-        document.body.classList.add('mobile-overlay');
-        document.getElementById('mobile-sidebar-backdrop')?.classList.add('visible');
-      } else {
-        document.body.classList.add('pane-right-open');
-      }
-      filesToggle.classList.add('active');
-      document.getElementById('btn-members-toggle')?.classList.remove('active');
-      switchToSidebarTab('files');
-      const cwd = (cwdInput?.value || '').trim();
-      if (cwd) loadFileTree(cwd);
-    });
-  }
 }
 
 function switchToSidebarTab(tab) {
   document.querySelectorAll('.chat-sidebar-tab').forEach(t => t.classList.remove('active'));
   const tabEl = document.querySelector(`.chat-sidebar-tab[data-tab="${tab}"]`);
   if (tabEl) tabEl.classList.add('active');
-  const isMembers = tab === 'members';
-  document.getElementById('group-member-panel').style.display = isMembers ? '' : 'none';
-  document.getElementById('file-tree-panel').style.display = isMembers ? 'none' : '';
-  document.getElementById('btn-session-agent-add').style.display = isMembers ? '' : 'none';
+  document.getElementById('file-tree-panel').style.display = tab === 'files' ? '' : 'none';
+  document.getElementById('review-panel').style.display = tab === 'review' ? '' : 'none';
+  document.getElementById('group-member-panel').style.display = tab === 'members' ? '' : 'none';
+  document.getElementById('btn-session-agent-add').style.display = tab === 'members' ? '' : 'none';
+}
+
+let fileTreePath = '';
+
+async function loadReview(cwd) {
+  const panel = document.getElementById('review-panel');
+  if (!panel) return;
+  panel.innerHTML = `<div class="review-loading">${esc(t('reviewLoading'))}</div>`;
+  try {
+    const resp = await fetch(`/api/review?cwd=${encodeURIComponent(cwd)}`);
+    const data = await resp.json();
+    if (data.error) {
+      panel.innerHTML = `<div class="review-empty">${esc(data.error)}</div>`;
+      return;
+    }
+    if (!data.git) {
+      panel.innerHTML = `<div class="review-empty">${esc(data.message || t('reviewNoGit'))}</div>`;
+      return;
+    }
+    const files = data.files || [];
+    let html = '';
+    // 分支名
+    html += `<div class="review-branch"><span data-i18n="reviewBranch">${esc(t('reviewBranch'))}</span><span class="review-branch-name">${esc(data.branch)}</span><span class="review-branch-count">${esc(t('itemCount', { count: files.length }))}</span></div>`;
+    // 文件列表
+    if (files.length === 0) {
+      html += `<div class="review-empty">${esc(t('reviewNoChanges'))}</div>`;
+    } else {
+      html += `<div class="review-section-title" data-i18n="filesTab">${esc(t('filesTab'))}</div>`;
+      html += `<div class="review-file-list">`;
+      const statusLabel = {
+        modified: t('statusModified'), added: t('statusAdded'), deleted: t('statusDeleted'),
+        renamed: t('statusRenamed'), untracked: t('statusUntracked'), changed: t('statusChanged')
+      };
+      for (const f of files) {
+        html += `<div class="review-file-item"><span class="rf-name">${esc(f.file)}</span><span class="rf-badge ${f.status}">${esc(statusLabel[f.status] || f.status)}</span></div>`;
+      }
+      html += `</div>`;
+    }
+    // 变更统计
+    if (data.stagedStat) {
+      html += `<div class="review-section-title" data-i18n="reviewStaged">${esc(t('reviewStaged'))}</div>`;
+      html += `<div class="review-stat-block">${esc(data.stagedStat)}</div>`;
+    }
+    if (data.unstagedStat) {
+      html += `<div class="review-section-title" data-i18n="reviewUnstaged">${esc(t('reviewUnstaged'))}</div>`;
+      html += `<div class="review-stat-block">${esc(data.unstagedStat)}</div>`;
+    }
+    if (!data.stagedStat && !data.unstagedStat && files.length > 0) {
+      html += `<div class="review-stat-block" style="color:var(--text-ghost)">${esc(data.stat || '')}</div>`;
+    }
+    panel.innerHTML = html;
+  } catch (e) {
+    panel.innerHTML = `<div class="review-empty">${esc(t('unknownError'))}</div>`;
+  }
 }
 
 async function loadFileTree(path) {

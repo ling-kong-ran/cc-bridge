@@ -29,10 +29,10 @@
         <span></span><span></span><span></span>
       </button>
       <button id="btn-sidebar-collapse" class="titlebar-btn" type="button" title="Collapse sidebar" data-i18n-title="collapseSidebar" style="display:none">&lt;</button>
+      <button id="btn-titlebar-back" class="titlebar-back" type="button" data-i18n="backToChat" style="display:none">← 返回对话</button>
       <span class="titlebar-brand">
         <span class="titlebar-bracket">[</span><span class="titlebar-logo">CCB</span><span class="titlebar-bracket">]</span>
       </span>
-      <button id="btn-titlebar-back" class="titlebar-btn" type="button" title="Back to chat" style="display:none">←</button>
       <span id="titlebar-page-label" class="titlebar-page-label" data-i18n="chat">Chat</span>
     </div>
     <div id="titlebar-meta" class="titlebar-meta" aria-live="polite" style="display:none">
@@ -46,6 +46,7 @@
       </span>
     </div>
     <div class="titlebar-right">
+      <button id="btn-toggle-right-panel" class="titlebar-btn" type="button" title="Toggle panel" style="display:none">◧</button>
       <button id="btn-export-chat" class="titlebar-btn" type="button" title="Copy as Markdown" data-i18n-title="copyMarkdown">MD</button>
       <button id="btn-shortcuts" class="titlebar-btn" type="button" title="Keyboard Shortcuts" data-i18n-title="shortcutsTitle">?</button>
       <button id="btn-theme-toggle" class="titlebar-btn" type="button" title="Switch Theme" aria-label="Switch theme">
@@ -187,14 +188,14 @@
               </div>
             </div>
             <input type="file" id="file-input" multiple style="display:none">
-            <div class="input-hint"><span data-i18n="inputHint">Enter to send, Shift+Enter for newline</span></div>
           </div>
         </div>
         <div class="chat-sidebar" id="chat-sidebar">
           <div class="chat-sidebar-header">
             <div class="chat-sidebar-tabs">
-              <button class="chat-sidebar-tab active" data-tab="members" data-i18n="sessionMembers">Members</button>
-              <button class="chat-sidebar-tab" data-tab="files" data-i18n="filesTab">Files</button>
+              <button class="chat-sidebar-tab active" data-tab="files" data-i18n="filesTab">Files</button>
+              <button class="chat-sidebar-tab" data-tab="review" data-i18n="reviewTab">Review</button>
+              <button class="chat-sidebar-tab" data-tab="members" data-i18n="sessionMembers">Members</button>
             </div>
             <div class="chat-sidebar-header-actions">
               <button id="btn-session-agent-add" class="btn-icon-mini" title="拉入成员" data-i18n-title="pullMember">+</button>
@@ -202,301 +203,319 @@
             </div>
           </div>
           <div class="chat-sidebar-body">
-            <div id="group-member-panel" class="group-member-panel"></div>
-            <div id="file-tree-panel" class="file-tree-panel" style="display:none">
+            <div id="file-tree-panel" class="file-tree-panel">
               <div class="file-tree-toolbar">
                 <button id="btn-file-tree-refresh" class="btn-icon-mini" title="Refresh">↻</button>
               </div>
               <div id="file-tree-content" class="file-tree-content"></div>
             </div>
+            <div id="review-panel" class="review-panel" style="display:none"></div>
+            <div id="group-member-panel" class="group-member-panel" style="display:none"></div>
             <div id="agent-add-popover" class="agent-add-popover" style="display:none"></div>
           </div>
-        </div>
-        <!-- 右侧面板浮动开关 -->
-        <div class="float-buttons">
-          <button id="btn-files-toggle" class="btn-members-toggle" type="button" title="Browse Files" data-i18n-title="filesTab" aria-label="文件">
-            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
-          </button>
-          <button id="btn-members-toggle" class="btn-members-toggle" type="button" aria-label="会话成员">
-            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 4-7 8-7s8 3 8 7"/></svg>
-          </button>
         </div>
       </div>
 
       <!-- 配置页 -->
       <div id="page-config" class="page config-page">
         <div class="config-inner">
-          <section class="config-section">
-            <h3 class="config-title"><span class="title-prefix">[01]</span> <span data-i18n="uiSettings">Interface Settings</span></h3>
-            <div class="config-card ui-settings-card">
-              <div class="settings-row">
-                <label class="field-label" for="language-select" data-i18n="language">Language</label>
-                <select id="language-select" class="select">
-                  <option value="en">English</option>
-                  <option value="zh">中文</option>
-                </select>
-              </div>
-              <div class="settings-row">
-                <label class="field-label" for="font-size-range" data-i18n="fontSize">Font Size</label>
-                <div class="font-size-control">
-                  <input id="font-size-range" type="range" min="85" max="125" step="5" value="100">
-                  <span id="font-size-value" class="font-size-value">100%</span>
-                </div>
-              </div>
-              <div id="notifications-row" class="settings-row">
-                <label class="field-label" for="notifications-toggle" data-i18n="notifications">Notifications</label>
-                <label class="toggle-label settings-toggle">
-                  <span class="toggle-track">
-                    <input type="checkbox" id="notifications-toggle">
-                    <span class="toggle-indicator"></span>
-                  </span>
-                  <span class="toggle-text" data-i18n="notifyWhenUnfocused">Notify when work completes while unfocused</span>
-                </label>
-              </div>
-              <div id="lan-access-row" class="settings-row" style="display:none">
-                <label class="field-label" for="lan-access-toggle" data-i18n="lanAccess">LAN Access</label>
-                <label class="toggle-label settings-toggle">
-                  <span class="toggle-track">
-                    <input type="checkbox" id="lan-access-toggle">
-                    <span class="toggle-indicator"></span>
-                  </span>
-                  <span class="toggle-text" data-i18n="allowLanAccess">Allow devices outside localhost to access this GUI</span>
-                </label>
-              </div>
-              <div class="settings-row">
-                <label class="field-label" data-i18n="autoUpdate">Auto Update</label>
-                <label class="toggle-label settings-toggle">
-                  <span class="toggle-track">
-                    <input type="checkbox" id="auto-update-toggle">
-                    <span class="toggle-indicator"></span>
-                  </span>
-                  <span class="toggle-text" data-i18n="autoUpdateDesc">Check for updates on startup</span>
-                </label>
-              </div>
-              <div class="settings-row">
-                <label class="field-label" data-i18n="version">Version</label>
-                <div class="update-check-row">
-                  <span id="app-version" class="app-version">—</span>
-                  <button id="btn-check-update" class="btn-mini" type="button" data-i18n="checkUpdate">Check for updates</button>
-                  <span id="update-check-hint" class="update-check-hint"></span>
-                </div>
-              </div>
-            </div>
-          </section>
-          <section class="config-section">
-            <h3 class="config-title"><span class="title-prefix">[02]</span> <span data-i18n="agentDefaults">Agent Defaults</span></h3>
-            <div class="config-card ui-settings-card">
-              <div class="settings-row">
-                <label class="field-label" for="cli-select" data-i18n="cliTool">CLI Tool</label>
-                <select id="cli-select" class="select"></select>
-                <button id="btn-cli-install-guide" class="cli-install-link" style="display:none" data-i18n="cliInstallGuideLink">How to install the CLI?</button>
-              </div>
-              <div class="settings-row">
-                <label class="field-label" data-i18n="skipPermissions">Skip Permissions</label>
-                <label class="toggle-label settings-toggle">
-                  <span class="toggle-track">
-                    <input type="checkbox" id="skip-permissions" checked>
-                    <span class="toggle-indicator"></span>
-                  </span>
-                  <span class="toggle-text" data-i18n="skipPermissionDesc">Skip permission prompts for tool calls</span>
-                </label>
-              </div>
-            </div>
-          </section>
-          <section class="config-section">
-            <h3 class="config-title"><span class="title-prefix">[03]</span> <span data-i18n="envVars">Environment Variables</span></h3>
-            <div class="config-card">
-              <div id="env-profiles-bar"></div>
-              <div id="env-fields"></div>
-              <div id="env-paste-section"></div>
-              <button id="btn-save-env" class="btn-save">
-                <span class="btn-prefix">&gt;</span> <span data-i18n="saveConfig">Save Config</span>
-              </button>
-            </div>
-          </section>
-          <section class="config-section">
-            <h3 class="config-title"><span class="title-prefix">[04]</span> <span data-i18n="mcpServers">MCP Servers</span></h3>
-            <div class="config-card">
-              <div id="mcp-list" class="mcp-list">
-                <p class="empty-state" data-i18n="loading">Loading...</p>
-              </div>
-              <button id="btn-mcp-add" class="btn-save" type="button">
-                <span class="btn-prefix">&gt;</span> <span data-i18n="mcpAddServer">Add MCP</span>
-              </button>
-            </div>
-          </section>
-          <section class="config-section" id="mcp-form-section" style="display:none">
-            <h3 class="config-title"><span class="title-prefix">[05]</span> <span data-i18n="mcpNewServer">New MCP Server</span></h3>
-            <div class="config-card ui-settings-card">
-              <div class="settings-row">
-                <label class="field-label" for="mcp-form-name" data-i18n="mcpName">Name</label>
-                <input id="mcp-form-name" class="input" placeholder="github">
-              </div>
-              <div class="settings-row">
-                <label class="field-label" for="mcp-form-scope" data-i18n="mcpScope">Scope</label>
-                <select id="mcp-form-scope" class="select">
-                  <option value="global" data-i18n="mcpScopeGlobal">Global settings.json</option>
-                  <option value="project" data-i18n="mcpScopeProject">Project .mcp.json</option>
-                </select>
-              </div>
-              <div class="settings-row">
-                <label class="field-label" for="mcp-form-type" data-i18n="mcpType">Type</label>
-                <select id="mcp-form-type" class="select">
-                  <option value="stdio">stdio</option>
-                  <option value="sse">SSE / URL</option>
-                  <option value="http">HTTP / URL</option>
-                </select>
-              </div>
-              <div id="mcp-stdio-fields">
-                <div class="settings-row">
-                  <label class="field-label" for="mcp-form-command" data-i18n="mcpCommand">Command</label>
-                  <input id="mcp-form-command" class="input" placeholder="npx">
-                </div>
-                <div class="settings-row">
-                  <label class="field-label" for="mcp-form-args" data-i18n="mcpArgs">Args</label>
-                  <input id="mcp-form-args" class="input" placeholder="-y @modelcontextprotocol/server-filesystem C:/project">
-                </div>
-              </div>
-              <div id="mcp-url-fields" style="display:none">
-                <div class="settings-row">
-                  <label class="field-label" for="mcp-form-url" data-i18n="mcpUrl">URL</label>
-                  <input id="mcp-form-url" class="input" placeholder="https://example.com/mcp">
-                </div>
-              </div>
-              <div class="settings-row align-top">
-                <label class="field-label" for="mcp-form-env" data-i18n="mcpEnv">Env JSON</label>
-                <textarea id="mcp-form-env" class="input mcp-env-text" rows="4" spellcheck="false" placeholder='{"TOKEN":"..."}'></textarea>
-              </div>
-              <div class="remote-form-actions">
-                <button id="btn-mcp-save" class="btn btn-primary" type="button" style="width:auto; padding:8px 20px;">
-                  <span class="btn-prefix">&gt;</span> <span data-i18n="save">Save</span>
-                </button>
-                <button id="btn-mcp-cancel" class="btn-save" type="button"><span data-i18n="cancel">Cancel</span></button>
-              </div>
-              <div id="mcp-form-status" class="remote-form-status" style="display:none"></div>
-            </div>
-          </section>
-          <section class="config-section">
-            <h3 class="config-title"><span class="title-prefix">[06]</span> <span data-i18n="skills">Skills</span></h3>
-            <div id="skills-list" class="config-card">
-              <p class="empty-state" data-i18n="loading">Loading...</p>
-            </div>
-          </section>
-          <section class="config-section">
-            <h3 class="config-title"><span class="title-prefix">[07]</span> <span data-i18n="agents">Agents</span></h3>
-            <div class="config-card">
-              <div id="agents-list">
-                <p class="empty-state" data-i18n="loading">Loading...</p>
-              </div>
-              <button id="btn-agent-add" class="btn-save" type="button">
-                <span class="btn-prefix">&gt;</span> <span data-i18n="addAgent">Add Agent</span>
-              </button>
-            </div>
-          </section>
+          <!-- 设置子导航标签 -->
+          <nav class="settings-tabs">
+            <button class="settings-tab active" data-tab="general" data-i18n="settingsTabGeneral">General</button>
+            <button class="settings-tab" data-tab="env" data-i18n="settingsTabEnv">Environment</button>
+            <button class="settings-tab" data-tab="remote" data-i18n="settingsTabRemote">Remote</button>
+            <button class="settings-tab" data-tab="integrations" data-i18n="settingsTabIntegrations">Integrations</button>
+            <button class="settings-tab" data-tab="memory" data-i18n="settingsTabMemory">Memory</button>
+          </nav>
 
-          <section class="config-section">
-            <h3 class="config-title"><span class="title-prefix">[08]</span> <span data-i18n="memory">Memory</span></h3>
-            <div class="config-card">
-              <div class="memory-search-row">
-                <input id="memory-search-input" type="search" class="input" placeholder="Search memory..." data-i18n-placeholder="searchMemory">
-                <button id="btn-memory-index" class="btn-mini" type="button" data-i18n="indexMemory">Index</button>
-              </div>
-              <div id="memory-list">
-                <p class="empty-state" data-i18n="loading">Loading...</p>
-              </div>
-              <div class="memory-actions">
-                <button id="btn-memory-new" class="btn-mini" type="button">&plus; <span data-i18n="newMemory">New</span></button>
-                <button id="btn-dream" class="btn-save" type="button"><span class="btn-prefix">&#9733;</span> <span data-i18n="dream">/dream</span></button>
-              </div>
-            </div>
-          </section>
-
-          <!-- Remote 远程目标 -->
-          <section class="config-section">
-            <h3 class="config-title"><span class="title-prefix">[09]</span> <span data-i18n="remoteTargets">Targets</span></h3>
-            <div class="config-card">
-              <div id="remote-target-list" class="remote-target-list">
-                <p class="empty-state" data-i18n="loading">Loading...</p>
-              </div>
-              <button id="btn-remote-add" class="btn-save">
-                <span class="btn-prefix">&gt;</span> <span data-i18n="remoteAddTarget">Add Target</span>
-              </button>
-            </div>
-          </section>
-
-          <section class="config-section" id="remote-form-section" style="display:none">
-            <h3 class="config-title"><span class="title-prefix">[10]</span> <span id="remote-form-title" data-i18n="remoteNewTarget">New Target</span></h3>
-            <div class="config-card ui-settings-card">
-              <input type="hidden" id="remote-form-id">
-              <div class="settings-row">
-                <label class="field-label" for="remote-form-name" data-i18n="remoteName">Name</label>
-                <input id="remote-form-name" class="input" placeholder="prod-db">
-              </div>
-              <div class="settings-row">
-                <label class="field-label" for="remote-form-host" data-i18n="remoteHost">Host / IP</label>
-                <input id="remote-form-host" class="input" placeholder="10.0.0.5">
-              </div>
-              <div class="settings-row">
-                <label class="field-label" for="remote-form-user" data-i18n="remoteUser">SSH User</label>
-                <input id="remote-form-user" class="input" placeholder="ubuntu">
-              </div>
-              <div class="settings-row">
-                <label class="field-label" for="remote-form-port" data-i18n="remotePort">Port</label>
-                <input id="remote-form-port" class="input" type="number" value="22" min="1" max="65535">
-              </div>
-              <div class="settings-row">
-                <label class="field-label" for="remote-form-auth" data-i18n="remoteAuth">Auth Method</label>
-                <select id="remote-form-auth" class="select">
-                  <option value="key" data-i18n="remoteAuthKey">SSH Key</option>
-                  <option value="password" data-i18n="remoteAuthPassword">Password</option>
-                </select>
-              </div>
-              <div id="remote-auth-key">
-                <div class="settings-row">
-                  <label class="field-label" for="remote-form-key" data-i18n="remoteKeyPath">Key Path</label>
-                  <input id="remote-form-key" class="input" placeholder="~/.ssh/id_ed25519">
-                </div>
-                <div class="settings-row align-top">
-                  <label class="field-label" for="remote-form-key-text" data-i18n="remoteKeyText">Paste Key</label>
-                  <div class="remote-key-field">
-                    <textarea id="remote-form-key-text" class="input remote-key-text" rows="5" spellcheck="false" placeholder="-----BEGIN OPENSSH PRIVATE KEY-----"></textarea>
-                    <span class="remote-key-hint" id="remote-key-hint" data-i18n="remoteKeyHint">Fill the key path above, or paste the private key here.</span>
+          <div class="config-tab-panels">
+            <!-- 通用 -->
+            <div class="config-tab-panel active" data-tab="general">
+              <section class="config-section">
+                <h3 class="config-title" data-i18n="uiSettings">Interface Settings</h3>
+                <div class="config-card ui-settings-card">
+                  <div class="settings-row">
+                    <label class="field-label" for="language-select" data-i18n="language">Language</label>
+                    <select id="language-select" class="select">
+                      <option value="en">English</option>
+                      <option value="zh">中文</option>
+                    </select>
+                  </div>
+                  <div class="settings-row">
+                    <label class="field-label" for="font-size-range" data-i18n="fontSize">Font Size</label>
+                    <div class="font-size-control">
+                      <input id="font-size-range" type="range" min="85" max="125" step="5" value="100">
+                      <span id="font-size-value" class="font-size-value">100%</span>
+                    </div>
+                  </div>
+                  <div id="notifications-row" class="settings-row">
+                    <label class="field-label" for="notifications-toggle" data-i18n="notifications">Notifications</label>
+                    <label class="toggle-label settings-toggle">
+                      <span class="toggle-track">
+                        <input type="checkbox" id="notifications-toggle">
+                        <span class="toggle-indicator"></span>
+                      </span>
+                      <span class="toggle-text" data-i18n="notifyWhenUnfocused">Notify when work completes while unfocused</span>
+                    </label>
+                  </div>
+                  <div id="lan-access-row" class="settings-row" style="display:none">
+                    <label class="field-label" for="lan-access-toggle" data-i18n="lanAccess">LAN Access</label>
+                    <label class="toggle-label settings-toggle">
+                      <span class="toggle-track">
+                        <input type="checkbox" id="lan-access-toggle">
+                        <span class="toggle-indicator"></span>
+                      </span>
+                      <span class="toggle-text" data-i18n="allowLanAccess">Allow devices outside localhost to access this GUI</span>
+                    </label>
+                  </div>
+                  <div class="settings-row">
+                    <label class="field-label" data-i18n="autoUpdate">Auto Update</label>
+                    <label class="toggle-label settings-toggle">
+                      <span class="toggle-track">
+                        <input type="checkbox" id="auto-update-toggle">
+                        <span class="toggle-indicator"></span>
+                      </span>
+                      <span class="toggle-text" data-i18n="autoUpdateDesc">Check for updates on startup</span>
+                    </label>
+                  </div>
+                  <div class="settings-row">
+                    <label class="field-label" data-i18n="version">Version</label>
+                    <div class="update-check-row">
+                      <span id="app-version" class="app-version">—</span>
+                      <button id="btn-check-update" class="btn-mini" type="button" data-i18n="checkUpdate">Check for updates</button>
+                      <span id="update-check-hint" class="update-check-hint"></span>
+                    </div>
                   </div>
                 </div>
-              </div>
-              <div id="remote-auth-password" style="display:none">
-                <div class="settings-row align-top">
-                  <label class="field-label" for="remote-form-password" data-i18n="remotePassword">Password</label>
-                  <div class="remote-key-field">
-                    <input id="remote-form-password" class="input" type="password" autocomplete="off" autocapitalize="off">
-                    <span class="remote-key-hint" id="remote-pass-hint" data-i18n="remotePasswordHint">The SSH user's login password. Uses the system ssh client — no extra dependency.</span>
+              </section>
+              <section class="config-section">
+                <h3 class="config-title" data-i18n="agentDefaults">Agent Defaults</h3>
+                <div class="config-card ui-settings-card">
+                  <div class="settings-row">
+                    <label class="field-label" for="cli-select" data-i18n="cliTool">CLI Tool</label>
+                    <select id="cli-select" class="select"></select>
+                    <button id="btn-cli-install-guide" class="cli-install-link" style="display:none" data-i18n="cliInstallGuideLink">How to install the CLI?</button>
+                  </div>
+                  <div class="settings-row">
+                    <label class="field-label" data-i18n="skipPermissions">Skip Permissions</label>
+                    <label class="toggle-label settings-toggle">
+                      <span class="toggle-track">
+                        <input type="checkbox" id="skip-permissions" checked>
+                        <span class="toggle-indicator"></span>
+                      </span>
+                      <span class="toggle-text" data-i18n="skipPermissionDesc">Skip permission prompts for tool calls</span>
+                    </label>
                   </div>
                 </div>
-              </div>
-              <div class="settings-row">
-                <label class="field-label" for="remote-form-desc" data-i18n="remoteDesc">Notes</label>
-                <input id="remote-form-desc" class="input">
-              </div>
-              <div class="remote-form-actions">
-                <button id="btn-remote-test" class="btn-save" type="button"><span data-i18n="remoteTest">Test Connection</span></button>
-                <button id="btn-remote-save" class="btn btn-primary" type="button" style="width:auto; padding:8px 20px;">
-                  <span class="btn-prefix">&gt;</span> <span data-i18n="save">Save</span>
-                </button>
-                <button id="btn-remote-cancel" class="btn-save" type="button"><span data-i18n="cancel">Cancel</span></button>
-              </div>
-              <div id="remote-form-status" class="remote-form-status" style="display:none"></div>
+              </section>
             </div>
-          </section>
 
-          <section class="config-section">
-            <h3 class="config-title"><span class="title-prefix">[11]</span> <span data-i18n="remoteSecurity">Security &amp; Usage</span></h3>
-            <div class="config-card remote-notes">
-              <p data-i18n="remoteNoteUsage">Pick a target under runtime settings before starting a session. The agent will inspect that host through SSH tools instead of the local machine.</p>
-              <p data-i18n="remoteNoteReadonly">Default is read-only mode (logs, status, sysinfo). Enable "Read-write mode" to let the agent run changing commands; every remote command is written to ~/.ccb/remote_audit.log.</p>
-              <p data-i18n="remoteNotePrereq">The target only needs an SSH server. Use key-based auth and a least-privilege account; restrict its sshd to this machine.</p>
+            <!-- 环境 -->
+            <div class="config-tab-panel" data-tab="env">
+              <section class="config-section">
+                <h3 class="config-title" data-i18n="envVars">Environment Variables</h3>
+                <div class="config-card">
+                  <div id="env-profiles-bar"></div>
+                  <div id="env-fields"></div>
+                  <div id="env-paste-section"></div>
+                  <button id="btn-save-env" class="btn-save">
+                    <span class="btn-prefix">&gt;</span> <span data-i18n="saveConfig">Save Config</span>
+                  </button>
+                </div>
+              </section>
             </div>
-          </section>
 
+            <!-- 远程 -->
+            <div class="config-tab-panel" data-tab="remote">
+              <section class="config-section">
+                <h3 class="config-title" data-i18n="remoteTargets">Targets</h3>
+                <div class="config-card">
+                  <div id="remote-target-list" class="remote-target-list">
+                    <p class="empty-state" data-i18n="loading">Loading...</p>
+                  </div>
+                  <button id="btn-remote-add" class="btn-save">
+                    <span class="btn-prefix">&gt;</span> <span data-i18n="remoteAddTarget">Add Target</span>
+                  </button>
+                </div>
+              </section>
+
+              <section class="config-section" id="remote-form-section" style="display:none">
+                <h3 class="config-title" id="remote-form-title" data-i18n="remoteNewTarget">New Target</h3>
+                <div class="config-card ui-settings-card">
+                  <input type="hidden" id="remote-form-id">
+                  <div class="settings-row">
+                    <label class="field-label" for="remote-form-name" data-i18n="remoteName">Name</label>
+                    <input id="remote-form-name" class="input" placeholder="prod-db">
+                  </div>
+                  <div class="settings-row">
+                    <label class="field-label" for="remote-form-host" data-i18n="remoteHost">Host / IP</label>
+                    <input id="remote-form-host" class="input" placeholder="10.0.0.5">
+                  </div>
+                  <div class="settings-row">
+                    <label class="field-label" for="remote-form-user" data-i18n="remoteUser">SSH User</label>
+                    <input id="remote-form-user" class="input" placeholder="ubuntu">
+                  </div>
+                  <div class="settings-row">
+                    <label class="field-label" for="remote-form-port" data-i18n="remotePort">Port</label>
+                    <input id="remote-form-port" class="input" type="number" value="22" min="1" max="65535">
+                  </div>
+                  <div class="settings-row">
+                    <label class="field-label" for="remote-form-auth" data-i18n="remoteAuth">Auth Method</label>
+                    <select id="remote-form-auth" class="select">
+                      <option value="key" data-i18n="remoteAuthKey">SSH Key</option>
+                      <option value="password" data-i18n="remoteAuthPassword">Password</option>
+                    </select>
+                  </div>
+                  <div id="remote-auth-key">
+                    <div class="settings-row">
+                      <label class="field-label" for="remote-form-key" data-i18n="remoteKeyPath">Key Path</label>
+                      <input id="remote-form-key" class="input" placeholder="~/.ssh/id_ed25519">
+                    </div>
+                    <div class="settings-row align-top">
+                      <label class="field-label" for="remote-form-key-text" data-i18n="remoteKeyText">Paste Key</label>
+                      <div class="remote-key-field">
+                        <textarea id="remote-form-key-text" class="input remote-key-text" rows="5" spellcheck="false" placeholder="-----BEGIN OPENSSH PRIVATE KEY-----"></textarea>
+                        <span class="remote-key-hint" id="remote-key-hint" data-i18n="remoteKeyHint">Fill the key path above, or paste the private key here.</span>
+                      </div>
+                    </div>
+                  </div>
+                  <div id="remote-auth-password" style="display:none">
+                    <div class="settings-row align-top">
+                      <label class="field-label" for="remote-form-password" data-i18n="remotePassword">Password</label>
+                      <div class="remote-key-field">
+                        <input id="remote-form-password" class="input" type="password" autocomplete="off" autocapitalize="off">
+                        <span class="remote-key-hint" id="remote-pass-hint" data-i18n="remotePasswordHint">The SSH user's login password. Uses the system ssh client — no extra dependency.</span>
+                      </div>
+                    </div>
+                  </div>
+                  <div class="settings-row">
+                    <label class="field-label" for="remote-form-desc" data-i18n="remoteDesc">Notes</label>
+                    <input id="remote-form-desc" class="input">
+                  </div>
+                  <div class="remote-form-actions">
+                    <button id="btn-remote-test" class="btn-save" type="button"><span data-i18n="remoteTest">Test Connection</span></button>
+                    <button id="btn-remote-save" class="btn btn-primary" type="button" style="width:auto; padding:8px 20px;">
+                      <span class="btn-prefix">&gt;</span> <span data-i18n="save">Save</span>
+                    </button>
+                    <button id="btn-remote-cancel" class="btn-save" type="button"><span data-i18n="cancel">Cancel</span></button>
+                  </div>
+                  <div id="remote-form-status" class="remote-form-status" style="display:none"></div>
+                </div>
+              </section>
+
+              <section class="config-section">
+                <h3 class="config-title" data-i18n="remoteSecurity">Security &amp; Usage</h3>
+                <div class="config-card remote-notes">
+                  <p data-i18n="remoteNoteUsage">Pick a target under runtime settings before starting a session. The agent will inspect that host through SSH tools instead of the local machine.</p>
+                  <p data-i18n="remoteNoteReadonly">Default is read-only mode (logs, status, sysinfo). Enable "Read-write mode" to let the agent run changing commands; every remote command is written to ~/.ccb/remote_audit.log.</p>
+                  <p data-i18n="remoteNotePrereq">The target only needs an SSH server. Use key-based auth and a least-privilege account; restrict its sshd to this machine.</p>
+                </div>
+              </section>
+            </div>
+
+            <!-- 集成 -->
+            <div class="config-tab-panel" data-tab="integrations">
+              <section class="config-section">
+                <h3 class="config-title" data-i18n="mcpServers">MCP Servers</h3>
+                <div class="config-card">
+                  <div id="mcp-list" class="mcp-list">
+                    <p class="empty-state" data-i18n="loading">Loading...</p>
+                  </div>
+                  <button id="btn-mcp-add" class="btn-save" type="button">
+                    <span class="btn-prefix">&gt;</span> <span data-i18n="mcpAddServer">Add MCP</span>
+                  </button>
+                </div>
+              </section>
+              <section class="config-section" id="mcp-form-section" style="display:none">
+                <h3 class="config-title" data-i18n="mcpNewServer">New MCP Server</h3>
+                <div class="config-card ui-settings-card">
+                  <div class="settings-row">
+                    <label class="field-label" for="mcp-form-name" data-i18n="mcpName">Name</label>
+                    <input id="mcp-form-name" class="input" placeholder="github">
+                  </div>
+                  <div class="settings-row">
+                    <label class="field-label" for="mcp-form-scope" data-i18n="mcpScope">Scope</label>
+                    <select id="mcp-form-scope" class="select">
+                      <option value="global" data-i18n="mcpScopeGlobal">Global settings.json</option>
+                      <option value="project" data-i18n="mcpScopeProject">Project .mcp.json</option>
+                    </select>
+                  </div>
+                  <div class="settings-row">
+                    <label class="field-label" for="mcp-form-type" data-i18n="mcpType">Type</label>
+                    <select id="mcp-form-type" class="select">
+                      <option value="stdio">stdio</option>
+                      <option value="sse">SSE / URL</option>
+                      <option value="http">HTTP / URL</option>
+                    </select>
+                  </div>
+                  <div id="mcp-stdio-fields">
+                    <div class="settings-row">
+                      <label class="field-label" for="mcp-form-command" data-i18n="mcpCommand">Command</label>
+                      <input id="mcp-form-command" class="input" placeholder="npx">
+                    </div>
+                    <div class="settings-row">
+                      <label class="field-label" for="mcp-form-args" data-i18n="mcpArgs">Args</label>
+                      <input id="mcp-form-args" class="input" placeholder="-y @modelcontextprotocol/server-filesystem C:/project">
+                    </div>
+                  </div>
+                  <div id="mcp-url-fields" style="display:none">
+                    <div class="settings-row">
+                      <label class="field-label" for="mcp-form-url" data-i18n="mcpUrl">URL</label>
+                      <input id="mcp-form-url" class="input" placeholder="https://example.com/mcp">
+                    </div>
+                  </div>
+                  <div class="settings-row align-top">
+                    <label class="field-label" for="mcp-form-env" data-i18n="mcpEnv">Env JSON</label>
+                    <textarea id="mcp-form-env" class="input mcp-env-text" rows="4" spellcheck="false" placeholder='{"TOKEN":"..."}'></textarea>
+                  </div>
+                  <div class="remote-form-actions">
+                    <button id="btn-mcp-save" class="btn btn-primary" type="button" style="width:auto; padding:8px 20px;">
+                      <span class="btn-prefix">&gt;</span> <span data-i18n="save">Save</span>
+                    </button>
+                    <button id="btn-mcp-cancel" class="btn-save" type="button"><span data-i18n="cancel">Cancel</span></button>
+                  </div>
+                  <div id="mcp-form-status" class="remote-form-status" style="display:none"></div>
+                </div>
+              </section>
+              <section class="config-section">
+                <h3 class="config-title" data-i18n="skills">Skills</h3>
+                <div id="skills-list" class="config-card">
+                  <p class="empty-state" data-i18n="loading">Loading...</p>
+                </div>
+              </section>
+              <section class="config-section">
+                <h3 class="config-title" data-i18n="agents">Agents</h3>
+                <div class="config-card">
+                  <div id="agents-list">
+                    <p class="empty-state" data-i18n="loading">Loading...</p>
+                  </div>
+                  <button id="btn-agent-add" class="btn-save" type="button">
+                    <span class="btn-prefix">&gt;</span> <span data-i18n="addAgent">Add Agent</span>
+                  </button>
+                </div>
+              </section>
+            </div>
+
+            <!-- 记忆 -->
+            <div class="config-tab-panel" data-tab="memory">
+              <section class="config-section">
+                <h3 class="config-title" data-i18n="memory">Memory</h3>
+                <div class="config-card">
+                  <div class="memory-search-row">
+                    <input id="memory-search-input" type="search" class="input" placeholder="Search memory..." data-i18n-placeholder="searchMemory">
+                    <button id="btn-memory-index" class="btn-mini" type="button" data-i18n="indexMemory">Index</button>
+                  </div>
+                  <div id="memory-list">
+                    <p class="empty-state" data-i18n="loading">Loading...</p>
+                  </div>
+                  <div class="memory-actions">
+                    <button id="btn-memory-new" class="btn-mini" type="button">&plus; <span data-i18n="newMemory">New</span></button>
+                    <button id="btn-dream" class="btn-save" type="button"><span class="btn-prefix">&#9733;</span> <span data-i18n="dream">/dream</span></button>
+                  </div>
+                </div>
+              </section>
+            </div>
+          </div>
 
           <!-- Memory 查看模态框 -->
           <div id="memory-modal-overlay" class="modal-overlay" style="display:none">
