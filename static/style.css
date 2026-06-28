@@ -1596,33 +1596,35 @@ body.pane-right-open .chat-sidebar {
 .tool-header {
   background: var(--bg-raised);
   padding: 5px 10px;
-  display: flex; align-items: center; gap: 6px;
+  display: flex !important; flex-direction: row; flex-wrap: nowrap;
+  align-items: center; gap: 6px;
   font-size: 11px; font-weight: 600;
   font-family: var(--font-mono);
   color: var(--green-dim);
   text-transform: uppercase; letter-spacing: 0.06em;
   border-bottom: 1px solid var(--border-dim);
   width: 100%;
+  overflow: hidden;
+  overflow-wrap: normal; word-break: normal;
 }
 
 .tool-toggle {
   cursor: pointer;
   user-select: none;
-  text-align: left;
   border: none;
   outline: none;
-  font: inherit;
-  color: inherit;
+  background: none;
   transition: background var(--t-fast);
 }
 .tool-toggle:hover { background: var(--bg-hover); }
 
 .tool-arrow {
-  display: inline-block; font-size: 9px; width: 11px;
+  display: inline-block; font-size: 9px; min-width: 11px;
   transition: transform var(--t-fast); flex-shrink: 0;
+  text-align: center;
 }
-.tool-icon { width: 13px; height: 13px; flex-shrink: 0; font-size: 12px; line-height: 1; }
-.tool-label { flex-shrink: 0; }
+.tool-icon { min-width: 14px; flex-shrink: 0; font-size: 12px; line-height: 1; text-align: center; }
+.tool-label { flex-shrink: 0; white-space: nowrap; }
 .tool-summary {
   flex: 1; min-width: 0;
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
