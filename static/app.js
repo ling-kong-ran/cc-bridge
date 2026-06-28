@@ -1712,11 +1712,114 @@ function formatToolSummary(block) {
   }
 }
 
+function formatToolBody(block) {
+  let input = {};
+  try {
+    input = typeof block.input === 'string' ? JSON.parse(block.input) : (block.input || {});
+  } catch (e) {}
+
+  const name = block.name || '';
+  const rows = [];
+
+  function row(label, value) {
+    if (value === undefined || value === null || value === '') return;
+    rows.push(`<div class="tb-row"><span class="tb-label">${esc(label)}</span><span class="tb-value">${esc(String(value))}</span></div>`);
+  }
+  function codeBlock(value) {
+    if (!value) return;
+    rows.push(`<pre class="tb-code">${esc(String(value))}</pre>`);
+  }
+
+  switch (name) {
+    case 'Read':
+      row('File', input.file_path);
+      if (input.offset != null) {
+        const end = input.limit ? input.offset + input.limit : input.offset;
+        row('Lines', `${input.offset} — ${end}${input.limit ? ` (${input.limit} lines)` : ''}`);
+      } else if (input.limit) {
+        row('Lines', `${input.limit} lines`);
+      }
+      break;
+    case 'Write':
+      row('File', input.file_path);
+      codeBlock(input.content);
+      break;
+    case 'Edit':
+      row('File', input.file_path);
+      if (input.old_string) {
+        rows.push(`<div class="tb-label">Replace</div>`);
+        codeBlock(input.old_string);
+      }
+      if (input.new_string) {
+        rows.push(`<div class="tb-label">With</div>`);
+        codeBlock(input.new_string);
+      }
+      break;
+    case 'Bash':
+      row('Description', input.description);
+      codeBlock(input.command);
+      break;
+    case 'Grep':
+      row('Pattern', input.pattern);
+      row('Path', input.path);
+      row('Glob', input.glob);
+      if (input.type) row('Type', input.type);
+      if (input.output_mode) row('Output', input.output_mode);
+      break;
+    case 'Glob':
+      row('Pattern', input.pattern);
+      row('Path', input.path);
+      break;
+    case 'Task':
+      row('Subagent', input.subagent_type);
+      row('Description', input.description);
+      if (input.prompt) {
+        rows.push(`<div class="tb-label">Prompt</div>`);
+        codeBlock(input.prompt);
+      }
+      break;
+    case 'TodoWrite': {
+      const todos = input.todos || input.newTodos || [];
+      if (todos.length > 0) {
+        rows.push(`<div class="tb-label">Todos (${todos.length})</div>`);
+        for (const t of todos) {
+          const isDone = t.status === 'completed' || t.completed === true;
+          const status = isDone ? '✓' : '○';
+          const cls = isDone ? 'tb-todo-done' : 'tb-todo-pending';
+          rows.push(`<div class="tb-row ${cls}"><span class="tb-todo-mark">${status}</span><span class="tb-value">${esc(String(t.content || t.name || t.task || ''))}</span></div>`);
+        }
+      }
+      break;
+    }
+    case 'Agent':
+    case 'Skill':
+    case 'ToolSearch':
+    default: {
+      const keys = Object.keys(input);
+      if (keys.length > 0) {
+        for (const k of keys) {
+          const v = input[k];
+          if (typeof v === 'string' && v.length > 200) {
+            row(k, v.substring(0, 200) + '…');
+          } else if (typeof v === 'object') {
+            row(k, JSON.stringify(v));
+          } else {
+            row(k, v);
+          }
+        }
+      } else {
+        rows.push(`<div class="tb-row tb-empty">(no input)</div>`);
+      }
+    }
+  }
+
+  return rows.length > 0 ? rows.join('') : `<div class="tb-row tb-empty">(no input)</div>`;
+}
+
 function renderToolCard(block, opts = {}) {
   const info = formatToolSummary(block);
-  const input = typeof block.input === 'string' ? block.input : JSON.stringify(block.input, null, 2);
+  const bodyHtml = formatToolBody(block);
   const isRunning = opts.isRunning || false;
-  // 记录开始时间
   if (block.id && !toolStartTimes.has(block.id) && !toolResults.has(block.id)) {
     toolStartTimes.set(block.id, Date.now());
   }
@@ -1743,7 +1846,7 @@ function renderToolCard(block, opts = {}) {
       <span class="tool-summary">${esc(info.summary)}</span>
       ${runningBadge}${resultBadge}
     </button>
-    <div class="tool-body">${esc(input)}</div>
+    <div class="tool-body">${bodyHtml}</div>
     ${resultHtml}
   </div>`;
 }

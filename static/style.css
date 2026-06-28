@@ -1631,12 +1631,40 @@ body.pane-right-open .chat-sidebar {
 }
 
 .tool-body {
-  padding: 10px 12px;
+  padding: 6px 0;
   font-family: var(--font-mono); font-size: 12px;
-  max-height: 280px; overflow-y: auto;
-  white-space: pre-wrap; word-break: break-all;
+  max-height: 300px; overflow-y: auto;
   color: var(--text-base); line-height: 1.6;
 }
+.tb-row {
+  display: flex; align-items: flex-start; gap: 12px;
+  padding: 3px 12px;
+}
+.tb-label {
+  flex-shrink: 0; width: 70px;
+  font-size: 10px; font-weight: 600; color: var(--text-dim);
+  text-transform: uppercase; letter-spacing: 0.04em;
+  padding-top: 1px;
+}
+.tb-value {
+  flex: 1; min-width: 0;
+  white-space: pre-wrap; word-break: break-all;
+}
+.tb-code {
+  margin: 0; padding: 6px 12px;
+  font-family: var(--font-mono); font-size: 12px;
+  white-space: pre-wrap; word-break: break-all;
+  background: var(--bg-input); color: var(--green-dim);
+  border-top: 1px solid var(--border-dim);
+  border-bottom: 1px solid var(--border-dim);
+  max-height: 200px; overflow-y: auto; line-height: 1.5;
+}
+.tb-empty { color: var(--text-ghost); font-style: italic; }
+.tb-todo-mark { width: 16px; flex-shrink: 0; font-size: 12px; }
+.tb-todo-done .tb-todo-mark { color: var(--green); }
+.tb-todo-done .tb-value { color: var(--text-dim); }
+.tb-todo-pending .tb-todo-mark { color: var(--text-ghost); }
+.tb-todo-pending .tb-value { color: var(--amber-dim); }
 
 /* ─── Tool Result / Status ──────────────────────────────────── */
 .tool-status {
