@@ -1424,7 +1424,14 @@ function bindSSEEvents() {
 
   eventSource.addEventListener('tool_result', (e) => {
     const data = JSON.parse(e.data);
-    finishTasks(data.tool_use_ids);
+    // 存结果，更新工具卡片
+    if (data.results) {
+      for (const r of data.results) {
+        toolResults.set(r.tool_use_id, r);
+        updateToolResult(r.tool_use_id, r.content, r.is_error);
+      }
+    }
+    finishTasks(data.results ? data.results.map(r => r.tool_use_id) : []);
   });
 
   eventSource.addEventListener('process_ended', (e) => {
@@ -1697,6 +1704,14 @@ function renderToolCard(block, opts = {}) {
   const runningBadge = isRunning
     ? `<span class="tool-running-badge"><span class="agent-spinner"></span>${esc(t('running'))}</span>`
     : '';
+  const hasResult = block.id && toolResults.has(block.id);
+  const result = hasResult ? toolResults.get(block.id) : null;
+  const resultBadge = hasResult
+    ? `<span class="tool-status ${result.is_error ? 'tool-error' : 'tool-ok'}">${result.is_error ? '✗' : '✓'}</span>`
+    : '';
+  const resultHtml = hasResult
+    ? `<div class="tool-result${result.is_error ? ' tool-result-error' : ''}">${esc(result.content)}</div>`
+    : '';
   const cls = ['tool-card'];
   if (isRunning) cls.push('tool-card-running');
   cls.push('collapsed');
@@ -1707,10 +1722,36 @@ function renderToolCard(block, opts = {}) {
       <span class="tool-icon">${info.icon}</span>
       <span class="tool-label">${esc(info.label)}</span>
       <span class="tool-summary">${esc(info.summary)}</span>
-      ${runningBadge}
+      ${runningBadge}${resultBadge}
     </button>
     <div class="tool-body">${esc(input)}</div>
+    ${resultHtml}
   </div>`;
+}
+
+function updateToolResult(toolId, content, isError) {
+  const card = document.querySelector(`.tool-card[data-tool-id="${toolId}"]`);
+  if (!card) return;
+  card.classList.remove('tool-card-running');
+  // 添加状态标记
+  const header = card.querySelector('.tool-header');
+  if (header) {
+    const existing = header.querySelector('.tool-status');
+    if (!existing) {
+      const badge = document.createElement('span');
+      badge.className = `tool-status ${isError ? 'tool-error' : 'tool-ok'}`;
+      badge.textContent = isError ? '✗' : '✓';
+      header.appendChild(badge);
+    }
+  }
+  // 添加结果内容
+  const existingResult = card.querySelector('.tool-result');
+  if (!existingResult) {
+    const resultDiv = document.createElement('div');
+    resultDiv.className = `tool-result${isError ? ' tool-result-error' : ''}`;
+    resultDiv.textContent = content;
+    card.appendChild(resultDiv);
+  }
 }
 
 function renderStreamingText(text) {
@@ -1778,6 +1819,7 @@ function handleAssistantFinal(data) {
 // ─── Subagent 运行状态跟踪 ───────────────────────────────────
 // tool_use_id -> {type, desc, last}
 const runningTasks = new Map();
+const toolResults = new Map();
 // 已结束的 Task id（partial assistant 事件会重复携带同一 tool_use 块，避免重新标记为运行中）
 const finishedTaskIds = new Set();
 

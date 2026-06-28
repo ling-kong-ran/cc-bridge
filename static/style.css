@@ -1638,6 +1638,28 @@ body.pane-right-open .chat-sidebar {
   color: var(--text-base); line-height: 1.6;
 }
 
+/* ─── Tool Result / Status ──────────────────────────────────── */
+.tool-status {
+  font-size: 10px; line-height: 1;
+  flex-shrink: 0; margin-left: auto;
+}
+.tool-status.tool-ok  { color: var(--green); }
+.tool-status.tool-error { color: var(--red); }
+
+.tool-result {
+  padding: 8px 12px;
+  font-family: var(--font-mono); font-size: 12px;
+  max-height: 300px; overflow-y: auto;
+  white-space: pre-wrap; word-break: break-all;
+  color: var(--text-dim); line-height: 1.5;
+  border-top: 1px solid var(--border-dim);
+  background: var(--bg-input);
+}
+.tool-result-error {
+  color: var(--red-dim);
+  border-top-color: rgba(240,80,80,0.18);
+}
+
 /* ─── Typing Cursor ─────────────────────────────────────────── */
 .typing-cursor::after {
   content: '\2588';

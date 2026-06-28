@@ -251,16 +251,35 @@ def persist_result_usage(client_id: str, event: dict) -> dict:
     return updated
 
 
-def extract_tool_result_ids(event: dict) -> list[str]:
-    """从 user 事件中提取 tool_result 块的 tool_use_id（用于判断 subagent/工具是否结束）。"""
+def extract_tool_results(event: dict) -> list[dict]:
+    """从 user 事件中提取 tool_result 块，返回 {tool_use_id, content, is_error} 列表。"""
     msg = event.get("message") or {}
     content = msg.get("content")
-    ids = []
+    results = []
     if isinstance(content, list):
         for block in content:
             if isinstance(block, dict) and block.get("type") == "tool_result" and block.get("tool_use_id"):
-                ids.append(block["tool_use_id"])
-    return ids
+                result_content = block.get("content", "")
+                # 截断过长内容
+                if isinstance(result_content, str) and len(result_content) > 8000:
+                    result_content = result_content[:8000] + "\n... (truncated)"
+                elif isinstance(result_content, list) and len(result_content) > 0:
+                    # content 可能是 [{type:"text", text:"..."}] 格式
+                    texts = []
+                    for item in result_content:
+                        if isinstance(item, dict) and item.get("type") == "text":
+                            texts.append(item.get("text", ""))
+                    result_content = "\n".join(texts)
+                    if len(result_content) > 8000:
+                        result_content = result_content[:8000] + "\n... (truncated)"
+                elif not isinstance(result_content, str):
+                    result_content = json.dumps(result_content, ensure_ascii=False)[:8000]
+                results.append({
+                    "tool_use_id": block["tool_use_id"],
+                    "content": result_content,
+                    "is_error": bool(block.get("is_error")),
+                })
+    return results
 
 
 def get_default_model() -> str:
@@ -1221,11 +1240,11 @@ async def handle_action(body: bytes, writer: asyncio.StreamWriter):
             elif evt_type == "result":
                 await push_event(client_id, evt_type, persist_result_usage(client_id, event))
             elif evt_type == "user":
-                # tool_result 表示某个工具调用（含 Task subagent）已结束，只转发 ID，省去大体积内容
-                ids = extract_tool_result_ids(event)
-                if ids:
+                # tool_result: 转发工具调用结果详情（内容截断至 8K）
+                results = extract_tool_results(event)
+                if results:
                     await push_event(client_id, "tool_result", {
-                        "tool_use_ids": ids,
+                        "results": results,
                         "parent_tool_use_id": event.get("parent_tool_use_id"),
                     })
             elif evt_type in ("assistant", "stream_event", "system", "error", "process_ended", "model_changed"):
@@ -1369,10 +1388,10 @@ async def handle_action(body: bytes, writer: asyncio.StreamWriter):
             elif evt_type == "result":
                 await push_event(client_id, evt_type, persist_result_usage(client_id, event))
             elif evt_type == "user":
-                ids = extract_tool_result_ids(event)
-                if ids:
+                results = extract_tool_results(event)
+                if results:
                     await push_event(client_id, "tool_result", {
-                        "tool_use_ids": ids,
+                        "results": results,
                         "parent_tool_use_id": event.get("parent_tool_use_id"),
                     })
             elif evt_type in ("assistant", "stream_event", "system", "error", "process_ended", "model_changed"):
