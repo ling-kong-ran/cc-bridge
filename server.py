@@ -15,6 +15,7 @@ import base64
 import subprocess
 import time
 from pathlib import Path
+from urllib.request import Request, urlopen
 from urllib.parse import urlparse, parse_qs, quote
 
 sys.path.insert(0, str(Path(__file__).parent))
@@ -54,6 +55,8 @@ DEFAULT_PORT = 17878
 MAX_REQUEST_BODY_BYTES = 100 * 1024 * 1024
 APP_ROOT = Path(__file__).parent.resolve()
 SERVER_FILE = Path(__file__).resolve()
+APP_PORT_SCAN_LIMIT = 50
+APP_HTTP_MARKERS = ("CC Bridge", "Claude Code Bridge", "/static/style.css", "ccb-theme")
 
 
 def _get_listening_pids(port: int) -> set[int]:
@@ -127,9 +130,9 @@ def _wait_process_exit(pid: int, timeout: float = 3.0) -> bool:
 def _get_process_command_line(pid: int) -> str:
     if os.name == "nt":
         ps_script = (
-            "$p = Get-CimInstance Win32_Process -Filter \"ProcessId={pid}\"; "
+            f"$p = Get-CimInstance Win32_Process -Filter \"ProcessId={pid}\"; "
             "if ($p) { [Console]::Out.Write(($p.CommandLine + [char]31 + $p.ExecutablePath + [char]31 + $p.CurrentDirectory)) }"
-        ).format(pid=pid)
+        )
         try:
             output = subprocess.check_output(
                 ["powershell", "-NoProfile", "-Command", ps_script],
@@ -142,26 +145,48 @@ def _get_process_command_line(pid: int) -> str:
         except (OSError, subprocess.SubprocessError):
             return ""
     try:
-        return Path(f"/proc/{pid}/cmdline").read_text(encoding="utf-8", errors="replace").replace("\0", " ").strip()
+        cmdline = Path(f"/proc/{pid}/cmdline").read_text(encoding="utf-8", errors="replace").replace("\0", " ").strip()
+        cwd = ""
+        try:
+            cwd = str(Path(f"/proc/{pid}/cwd").resolve())
+        except OSError:
+            pass
+        return f"{cmdline}\x1f{cwd}"
     except OSError:
         return ""
 
 
-def _is_current_app_process(pid: int) -> bool:
+def _is_current_app_http(port: int) -> bool:
+    """当 Windows 拿不到 CurrentDirectory 时，用 HTTP 首页指纹兜底识别旧 GUI。"""
+    try:
+        req = Request(f"http://127.0.0.1:{port}/", headers={"User-Agent": "CCB-cleanup"})
+        with urlopen(req, timeout=0.5) as resp:
+            body = resp.read(4096).decode("utf-8", errors="replace")
+    except Exception:
+        return False
+    return any(marker in body for marker in APP_HTTP_MARKERS)
+
+
+def _is_current_app_process(pid: int, port: int | None = None) -> bool:
     """只识别当前项目启动的 server.py，避免误杀其他占用端口的服务。"""
     if pid == os.getpid():
         return False
     proc_info = _get_process_command_line(pid)
-    if not proc_info:
-        return False
     normalized = proc_info.replace("\\", "/").lower()
     server_path = str(SERVER_FILE).replace("\\", "/").lower()
     app_root = str(APP_ROOT).replace("\\", "/").lower().rstrip("/")
-    return (
+    if normalized and (
         server_path in normalized
         or f"{app_root}/server.py" in normalized
         or ("server.py" in normalized and app_root in normalized)
-    )
+    ):
+        return True
+    # start.bat 启动的 Python 进程在某些 Windows 环境里拿不到 CurrentDirectory，
+    # 命令行只剩 python -u server.py；这种情况下只在默认端口扫描范围内用首页指纹兜底。
+    if port is not None and DEFAULT_PORT <= port < DEFAULT_PORT + APP_PORT_SCAN_LIMIT:
+        if "server.py" in normalized and _is_current_app_http(port):
+            return True
+    return False
 
 
 def _kill_process_tree(pid: int) -> bool:
@@ -180,12 +205,12 @@ def _kill_process_tree(pid: int) -> bool:
         return False
 
 
-def cleanup_existing_app_servers(start_port: int = DEFAULT_PORT, max_ports: int = 50):
+def cleanup_existing_app_servers(start_port: int = DEFAULT_PORT, max_ports: int = APP_PORT_SCAN_LIMIT):
     """启动前清理当前应用遗留的旧服务；非本应用占用端口时保留并继续自增。"""
     killed = set()
     for port in range(start_port, min(65536, start_port + max_ports)):
         for pid in _get_listening_pids(port):
-            if pid in killed or not _is_current_app_process(pid):
+            if pid in killed or not _is_current_app_process(pid, port):
                 continue
             if _kill_process_tree(pid):
                 killed.add(pid)
