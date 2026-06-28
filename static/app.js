@@ -2868,11 +2868,12 @@ function getAttachmentTitle(file) {
   return file.originalPath || file.path || file.name;
 }
 
-function sendMessage() {
+async function sendMessage() {
   let content = inputEl.value.trim();
   const quotesForThisTurn = quotedMessages.slice();
-  if ((!content && attachedFiles.length === 0 && quotesForThisTurn.length === 0) || !sessionActive || isResponding) return;
-  if (isViewer) {
+  const isLiveFollowup = isResponding;
+  if ((!content && attachedFiles.length === 0 && quotesForThisTurn.length === 0) || !sessionActive) return;
+  if (isViewer && !isLiveFollowup) {
     isViewer = false;
     updateUI();
   }
@@ -2899,30 +2900,53 @@ function sendMessage() {
   }
 
   addUserMessage(originalContent, quotesForThisTurn);
-  currentTurnContent = originalContent || (attachmentCount ? t('notifyAttachmentPrompt', { count: attachmentCount }) : (quotesForThisTurn.length ? t('quotedMessage') : ''));
-  currentTurnAttachmentCount = attachmentCount;
-  currentTurnStartedAt = Date.now();
-  currentTurnHasAssistantOutput = false;
-  isResponding = true;
-  currentAssistantEl = createAssistantBubble();
-  currentContent = [];
-  streamBlocks = {};
-  startTurnTimer();
-  renderCurrentState();
+  inputEl.value = '';
+  inputEl.style.height = 'auto';
+
+  if (!isLiveFollowup) {
+    currentTurnContent = originalContent || (attachmentCount ? t('notifyAttachmentPrompt', { count: attachmentCount }) : (quotesForThisTurn.length ? t('quotedMessage') : ''));
+    currentTurnAttachmentCount = attachmentCount;
+    currentTurnStartedAt = Date.now();
+    currentTurnHasAssistantOutput = false;
+    isResponding = true;
+    currentAssistantEl = createAssistantBubble();
+    currentContent = [];
+    streamBlocks = {};
+    startTurnTimer();
+    renderCurrentState();
+    if (isSlashCommand(originalContent)) {
+      addSystemMsg(t('commandRunning', { command: getSlashCommandName(originalContent) }));
+    }
+  }
+
   scrollToBottom();
   updateUI();
-  if (isSlashCommand(originalContent)) {
-    addSystemMsg(t('commandRunning', { command: getSlashCommandName(originalContent) }));
-  }
-  sendAction('send_message', {
+
+  const result = await sendAction('send_message', {
     content,
     model: modelSelect.value,
     cli: document.getElementById('cli-select')?.value || '',
     remote_target_id: remoteTargetSelect?.value || '',
     allow_remote_mutate: !!remoteAllowMutate?.checked,
   });
-  inputEl.value = '';
-  inputEl.style.height = 'auto';
+
+  if (!result?.ok) {
+    if (!isLiveFollowup) {
+      stopTurnTimer();
+      removePendingAssistantBubble(false);
+      isResponding = false;
+      currentAssistantEl = null;
+      currentContent = [];
+      streamBlocks = {};
+      currentTurnContent = '';
+      currentTurnHasAssistantOutput = false;
+      currentTurnStartedAt = 0;
+      currentTurnAttachmentCount = 0;
+      updateUI();
+    }
+    addSystemMsg(result?.error || t('requestFailed', { message: 'send_message' }), true);
+    return;
+  }
 }
 
 function isSlashCommand(content) {
@@ -3005,8 +3029,8 @@ async function startNewSessionFromCwd(cwd) {
 }
 
 function updateUI() {
-  btnSend.disabled = !sessionActive || isResponding;
-  // viewer 模式下 Stop 按钮可见但禁用
+  btnSend.disabled = !sessionActive;
+  // viewer 模式下 Stop 按钮可见但禁用，补充发送仍可用。
   btnStop.classList.toggle('visible', isResponding);
   btnStop.disabled = isViewer;
   btnNewSession.innerHTML = `<span class="btn-prefix">&gt;</span> ${sessionActive ? t('restartSession') : t('newSession')}`;
@@ -3020,11 +3044,10 @@ function updateUI() {
   if (skipPermissions) skipPermissions.disabled = sessionActive;
   // 远程目标和写入开关可随时切换，下一条消息生效
   if (remoteTargetSelect) remoteTargetSelect.disabled = false;
-  // 只在后端广播会话锁定时禁用输入；锁释放后观察者也可以直接接管发送。
-  inputEl.disabled = isResponding;
-  inputEl.style.opacity = isResponding ? '0.5' : '1';
+  inputEl.disabled = !sessionActive;
+  inputEl.style.opacity = sessionActive ? '1' : '0.5';
   if (isResponding) {
-    inputEl.placeholder = isViewer ? (t('viewingPlaceholder') || 'Viewing live session...') : (t('respondingPlaceholder') || 'Waiting for response...');
+    inputEl.placeholder = t('respondingPlaceholder') || 'Waiting for response...';
   } else {
     inputEl.placeholder = t('messagePlaceholder') || 'Type a message...';
   }

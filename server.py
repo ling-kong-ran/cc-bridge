@@ -446,6 +446,13 @@ async def push_generation_started(client_id: str, session):
         await push_event(client_id, "generation_started", state)
 
 
+async def broadcast_user_message(session_id: str, content: str, sender_id: str = ""):
+    """把手动发送/补充发送的用户消息同步给同一会话的其他端。"""
+    for target_id in get_session_subscribers(session_id):
+        if target_id != sender_id:
+            await push_event(target_id, "user_message", {"content": content})
+
+
 async def forward_viewer_event(viewer_id: str, event: dict, fallback_session_id: str = ""):
     """把 owner 会话事件转发给观察者，并保持与 owner 前端事件形态一致。"""
     evt_type = event.get("type", "unknown")
@@ -1704,13 +1711,25 @@ async def handle_action(body: bytes, writer: asyncio.StreamWriter):
     elif action == "send_message":
         content = data.get("content", "")
         requested_model = data.get("model") or ""
-        # viewer 在 owner 正在生成时只读；生成结束后允许接管并发送，避免原 owner 长时间占线
+        # viewer 在 owner 正在生成时优先走持久进程 stdin 补充发送；不接管、不改锁 holder。
         viewing_owner = client_viewing.get(client_id)
         if viewing_owner:
             owner_session = session_manager.get_session(viewing_owner)
+            active_sid = client_session_ids.get(viewing_owner) or client_session_ids.get(client_id, "")
             if owner_session and owner_session._message_owner_id:
-                await push_event(client_id, "error", {"message": "Viewer cannot send message while generation is running"})
-                await send_response(writer, 200, "application/json", b'{"ok":false,"error":"viewer cannot send while generation is running"}')
+                if content and owner_session.can_accept_live_input():
+                    try:
+                        await owner_session.send_live_message(content)
+                    except Exception as exc:
+                        await push_event(client_id, "error", {"message": str(exc)})
+                        err = json.dumps({"ok": False, "error": str(exc)}, ensure_ascii=False).encode("utf-8")
+                        await send_response(writer, 500, "application/json; charset=utf-8", err)
+                        return
+                    await broadcast_user_message(active_sid, content, client_id)
+                    await send_response(writer, 200, "application/json", b'{"ok":true,"live":true}')
+                    return
+                await push_event(client_id, "error", {"message": "当前会话暂不支持活跃中补充发送"})
+                await send_response(writer, 200, "application/json", b'{"ok":false,"error":"live input unavailable"}')
                 return
 
             resume_id = client_session_ids.get(client_id) or client_session_ids.get(viewing_owner, "")
@@ -1856,17 +1875,28 @@ async def handle_action(body: bytes, writer: asyncio.StreamWriter):
                         merged.update(new_configs)
                         session.agent_configs = merged
             sid = client_session_ids.get(client_id)
-            if sid and is_session_locked_by_other(sid, client_id):
-                await push_event(client_id, "error", {"message": "Session is locked by another client"})
-                await send_response(writer, 200, "application/json", b'{"ok":false,"error":"session locked"}')
+            is_live_followup = bool(sid and session_locks.get(sid, {}).get("locked"))
+            if is_live_followup:
+                if not content or not session.can_accept_live_input():
+                    await push_event(client_id, "error", {"message": "当前会话暂不支持活跃中补充发送"})
+                    await send_response(writer, 200, "application/json", b'{"ok":false,"error":"live input unavailable"}')
+                    return
+                try:
+                    await session.send_live_message(content)
+                except Exception as exc:
+                    await push_event(client_id, "error", {"message": str(exc)})
+                    err = json.dumps({"ok": False, "error": str(exc)}, ensure_ascii=False).encode("utf-8")
+                    await send_response(writer, 500, "application/json; charset=utf-8", err)
+                    return
+                await broadcast_user_message(sid, content, client_id)
+                await send_response(writer, 200, "application/json", b'{"ok":true,"live":true}')
                 return
             if sid:
                 await broadcast_session_lock(sid, True, client_id)
 
             # 推送用户消息给所有 viewer（CLI 不会回显用户输入，viewer 看不到"问"）
-            viewer_ids = [vid for vid, oid in client_viewing.items() if oid == client_id]
-            for vid in viewer_ids:
-                await push_event(vid, "user_message", {"content": content})
+            if sid:
+                await broadcast_user_message(sid, content, client_id)
 
             try:
                 await session.send_message(content, owner_id=client_id)
@@ -1876,7 +1906,7 @@ async def handle_action(body: bytes, writer: asyncio.StreamWriter):
                 err = json.dumps({"ok": False, "error": str(exc)}, ensure_ascii=False).encode("utf-8")
                 await send_response(writer, 500, "application/json; charset=utf-8", err)
                 return
-            for vid in viewer_ids:
+            for vid in [target_id for target_id in get_session_subscribers(sid) if target_id != client_id]:
                 await push_generation_started(vid, session)
             await send_response(writer, 200, "application/json", b'{"ok":true}')
         else:

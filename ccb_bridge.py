@@ -368,7 +368,7 @@ class CCBSession:
         }
 
     async def send_message(self, content: str, owner_id: str = ""):
-        """发送一条消息：普通本地会话复用持久 CLI，动态 MCP 会话使用一次性子进程。"""
+        """发送一条消息：优先复用持久 CLI，必要时回退到一次性进程。"""
         if not self.is_running:
             return
         if owner_id:
@@ -390,6 +390,23 @@ class CCBSession:
                     await self._emit_event({"type": "system", "subtype": "persistent_cli_fallback", "message": str(exc)})
 
             await self._send_one_shot_message(content)
+
+    def can_accept_live_input(self) -> bool:
+        """当前生成中是否还能继续向持久 CLI stdin 写入补充消息。"""
+        if not self.is_running or not self._message_owner_id or self._persistent_failed:
+            return False
+        if not self._persistent or not self._proc or self._proc.returncode is not None or not self._proc.stdin:
+            return False
+        return self._proc_key == self._persistent_proc_key()
+
+    async def send_live_message(self, content: str):
+        """向当前持久进程补充输入，不改变本轮 owner / 锁状态。"""
+        if not self.can_accept_live_input():
+            raise RuntimeError("当前会话暂不支持活跃中补充发送")
+        async with self._message_lock:
+            if not self.can_accept_live_input():
+                raise RuntimeError("当前会话暂不支持活跃中补充发送")
+            await self._write_persistent_payload(content)
 
     def _can_use_persistent_cli(self) -> bool:
         """可复用配置固定的持久 CLI；远程目标/权限变化时通过 proc_key 触发重启。"""
@@ -414,6 +431,11 @@ class CCBSession:
 
         self._pending_persistent_content = content
         self._pending_persistent_started = False
+        await self._write_persistent_payload(content)
+
+    async def _write_persistent_payload(self, content: str):
+        if not self._proc or not self._proc.stdin:
+            raise RuntimeError("持久 CLI 进程不可用")
         payload = {
             "type": "user",
             "message": {
