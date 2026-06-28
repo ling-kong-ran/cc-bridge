@@ -273,6 +273,9 @@ class CCBSession:
         self._on_event: Optional[Callable[[dict], Any]] = None
         self._viewer_callbacks: dict[str, Callable[[dict], Any]] = {}  # viewer_id → callback
         self._message_owner_id: Optional[str] = None  # 发起当前消息的 subscriber id
+        self._message_started_at: Optional[float] = None  # 当前消息开始时间（server 端，用于刷新后恢复耗时）
+        self._message_prompt: str = ""  # 当前消息摘要（用于恢复状态/通知）
+        self._message_has_output = False
         self._read_task: Optional[asyncio.Task] = None
         self._mcp_config_path: Optional[Path] = None
         self._persistent = False
@@ -350,12 +353,29 @@ class CCBSession:
         )
         return str(self._mcp_config_path), prompt
 
+    def current_generation_state(self) -> dict:
+        """返回当前消息生成状态，供 SSE 重连/刷新恢复 UI。"""
+        running = bool(self._message_owner_id)
+        started_at = self._message_started_at if running else None
+        elapsed_ms = int(max(0, (time.time() - started_at) * 1000)) if started_at else 0
+        return {
+            "running": running,
+            "started_at": started_at,
+            "elapsed_ms": elapsed_ms,
+            "owner_id": self._message_owner_id or "",
+            "prompt": self._message_prompt if running else "",
+            "has_output": bool(self._message_has_output) if running else False,
+        }
+
     async def send_message(self, content: str, owner_id: str = ""):
         """发送一条消息：普通本地会话复用持久 CLI，动态 MCP 会话使用一次性子进程。"""
         if not self.is_running:
             return
         if owner_id:
             self._message_owner_id = owner_id
+            self._message_started_at = time.time()
+            self._message_prompt = content
+            self._message_has_output = False
 
         async with self._message_lock:
             if not self.is_running:
@@ -516,6 +536,9 @@ class CCBSession:
             return
         self.is_running = False
         self._message_owner_id = None
+        self._message_started_at = None
+        self._message_prompt = ""
+        self._message_has_output = False
         await self._kill_proc()
         # 通知所有 viewer 会话已结束
         for cb in list(self._viewer_callbacks.values()):
@@ -544,6 +567,9 @@ class CCBSession:
         if requester_id and self._message_owner_id and requester_id != self._message_owner_id:
             return
         self._message_owner_id = None
+        self._message_started_at = None
+        self._message_prompt = ""
+        self._message_has_output = False
         await self._kill_proc()
 
     async def _kill_proc(self):
@@ -642,10 +668,15 @@ class CCBSession:
                 subtype = event.get("subtype")
                 if self._persistent and evt_type not in ("system", "user"):
                     self._pending_persistent_started = True
+                if evt_type in ("assistant", "stream_event"):
+                    self._message_has_output = True
                 if evt_type == "result":
                     self._pending_persistent_content = None
                     self._pending_persistent_started = False
                     self._message_owner_id = None  # 本轮回复结束，清除消息归属
+                    self._message_started_at = None
+                    self._message_prompt = ""
+                    self._message_has_output = False
 
                 # 从 init 或 result 事件中捕获 session_id
                 sid = event.get("session_id")
@@ -692,6 +723,9 @@ class CCBSession:
                     if self.is_running:
                         await self._emit_event({"type": "error", "message": "持久 CLI 进程已退出，下一条消息将自动回退为普通模式"})
                 self._message_owner_id = None
+                self._message_started_at = None
+                self._message_prompt = ""
+                self._message_has_output = False
                 await self._emit_event({"type": "process_ended", "exit_code": exit_code})
 
         except asyncio.CancelledError:

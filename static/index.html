@@ -61,7 +61,27 @@
   <div class="app">
     <!-- 侧边栏 -->
     <aside class="sidebar">
-      <div class="sidebar-header">
+      <!-- Hermes-style vertical navigation -->
+      <nav class="nav" aria-label="Primary navigation">
+        <div class="nav-brand" aria-hidden="true">CCB</div>
+        <div class="nav-stack">
+          <button class="nav-btn active" data-page="chat" title="Chat" data-i18n-title="chat">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>
+            <span data-i18n="chat">Chat</span>
+          </button>
+          <button class="nav-btn" data-page="artifacts" title="Artifacts" data-i18n-title="artifacts">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path><path d="M3.27 6.96 12 12.01l8.73-5.05"></path><path d="M12 22.08V12"></path></svg>
+            <span data-i18n="artifacts">Artifacts</span>
+          </button>
+        </div>
+        <button class="nav-btn nav-settings" data-page="config" title="Settings" data-i18n-title="settings">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06A1.65 1.65 0 0 0 15 19.4a1.65 1.65 0 0 0-1 .6 1.65 1.65 0 0 0-.4 1.1V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82-.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.6 15a1.65 1.65 0 0 0-.6-1 1.65 1.65 0 0 0-1.1-.4H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.6a1.65 1.65 0 0 0 1-.6 1.65 1.65 0 0 0 .4-1.1V3a2 2 0 0 1 4 0v.09A1.65 1.65 0 0 0 15 4.6a1.65 1.65 0 0 0 1.82.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9c.14.31.36.58.6.8.31.28.7.4 1.1.4H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
+          <span data-i18n="settings">Settings</span>
+        </button>
+      </nav>
+
+      <div class="sidebar-content">
+        <div class="sidebar-header">
         <div class="sidebar-title-row">
           <span class="sidebar-title-label" data-i18n="history">History</span>
         </div>
@@ -113,18 +133,6 @@
         <div id="session-list" class="session-list"></div>
       </div>
 
-      <!-- 导航 -->
-      <nav class="nav">
-        <button class="nav-btn active" data-page="chat">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>
-          <span data-i18n="chat">Chat</span>
-        </button>
-        <button class="nav-btn" data-page="artifacts">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path><path d="M3.27 6.96 12 12.01l8.73-5.05"></path><path d="M12 22.08V12"></path></svg>
-          <span data-i18n="artifacts">Artifacts</span>
-        </button>
-      </nav>
-
       <!-- 状态栏 -->
       <div class="status-bar">
         <div id="connection-status" class="conn-status">
@@ -139,6 +147,7 @@
           <span class="cost-label" data-i18n="tokenUsage">Tokens</span>
           <span class="cost-value" id="token-value">0</span>
         </div>
+      </div>
       </div>
     </aside>
 

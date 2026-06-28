@@ -567,6 +567,36 @@ def _clean_user_text(text: str) -> str:
     return text
 
 
+def _extract_tool_results(obj: dict) -> dict[str, dict]:
+    """从 user 事件中提取 tool_result，按 tool_use_id 返回。"""
+    content = obj.get("message", {}).get("content", "")
+    results = {}
+    if not isinstance(content, list):
+        return results
+    for block in content:
+        if not isinstance(block, dict) or block.get("type") != "tool_result":
+            continue
+        tool_use_id = block.get("tool_use_id")
+        if not tool_use_id:
+            continue
+        result_content = block.get("content", "")
+        if isinstance(result_content, list):
+            texts = []
+            for item in result_content:
+                if isinstance(item, dict) and item.get("type") == "text":
+                    texts.append(item.get("text", ""))
+            result_content = "\n".join(texts)
+        elif not isinstance(result_content, str):
+            result_content = json.dumps(result_content, ensure_ascii=False)
+        if len(result_content) > 8000:
+            result_content = result_content[:8000] + "\n... (truncated)"
+        results[str(tool_use_id)] = {
+            "content": result_content,
+            "is_error": bool(block.get("is_error")),
+        }
+    return results
+
+
 def get_last_user_message(session_id: str, cwd: str) -> str:
     """读取会话文件中的最后一条用户消息。"""
     if not session_id:
@@ -610,6 +640,8 @@ def load_session_history(session_id: str, cwd: str, max_messages: int = 50) -> l
         return []
 
     messages = []
+    tool_blocks_by_id: dict[str, dict] = {}
+    pending_results: dict[str, dict] = {}
     try:
         with jsonl_path.open("r", encoding="utf-8") as f:
             for line in f:
@@ -624,6 +656,13 @@ def load_session_history(session_id: str, cwd: str, max_messages: int = 50) -> l
                 msg_type = obj.get("type", "")
 
                 if msg_type == "user":
+                    results = _extract_tool_results(obj)
+                    for tool_id, result in results.items():
+                        block = tool_blocks_by_id.get(tool_id)
+                        if block is not None:
+                            block["result"] = result
+                        else:
+                            pending_results[tool_id] = result
                     text = _extract_user_text(obj)
                     if text:
                         messages.append({"role": "user", "text": text})
@@ -636,11 +675,18 @@ def load_session_history(session_id: str, cwd: str, max_messages: int = 50) -> l
                             if block.get("type") == "text" and block.get("text"):
                                 blocks.append({"type": "text", "text": block["text"]})
                             elif block.get("type") == "tool_use":
-                                blocks.append({
+                                tool_id = block.get("id", "")
+                                item = {
                                     "type": "tool_use",
+                                    "id": tool_id,
                                     "name": block.get("name", ""),
                                     "input": block.get("input", {}),
-                                })
+                                }
+                                if tool_id:
+                                    tool_blocks_by_id[tool_id] = item
+                                    if tool_id in pending_results:
+                                        item["result"] = pending_results.pop(tool_id)
+                                blocks.append(item)
                     if blocks:
                         messages.append({"role": "assistant", "blocks": blocks})
 

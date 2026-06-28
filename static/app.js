@@ -368,7 +368,8 @@ function updateAssistantMeta(state = 'running', durationMs = Date.now() - curren
   if (!currentAssistantEl) return;
   const meta = currentAssistantEl.querySelector('.msg-meta');
   if (!meta) return;
-  const duration = formatCompactDuration(durationMs);
+  const elapsed = Number(durationMs || 0);
+  const duration = state === 'running' ? formatCompactDuration(Math.max(1000, elapsed)) : formatCompactDuration(elapsed);
   meta.textContent = duration ? t(state === 'done' ? 'responseDuration' : 'responseRunning', { duration }) : '';
 }
 
@@ -1386,15 +1387,27 @@ function bindSSEEvents() {
   });
 
   eventSource.addEventListener('generation_started', (e) => {
-    // 刷新后重连到正在回复的会话，恢复响应状态
+    // 刷新后重连到正在回复的会话，恢复响应状态和 server 端真实耗时。
+    // 未收到实际 assistant 输出前不创建空回复气泡，避免历史加载/进程结束竞态造成短暂流式闪烁。
+    const data = JSON.parse(e.data || '{}');
+    if (data.running === false) return;
     isResponding = true;
-    currentTurnStartedAt = Date.now();  // 重置计时起点，避免 viewer 看到巨量耗时
-    currentAssistantEl = createAssistantBubble();
-    currentContent = [];
-    streamBlocks = {};
+    currentTurnStartedAt = data.started_at ? data.started_at * 1000 : Date.now() - Number(data.elapsed_ms || 0);
+    currentTurnContent = data.prompt || currentTurnContent || '';
+    currentTurnHasAssistantOutput = !!data.has_output;
+    if (currentTurnHasAssistantOutput) {
+      if (!currentAssistantEl) {
+        currentAssistantEl = createAssistantBubble();
+        currentContent = [];
+        streamBlocks = {};
+        renderCurrentState();
+      } else {
+        currentAssistantEl.classList.add('streaming');
+      }
+      scrollToBottom();
+    }
     startTurnTimer();
     updateUI();
-    scrollToBottom();
   });
 
   eventSource.addEventListener('system', (e) => {
@@ -1464,10 +1477,21 @@ function bindSSEEvents() {
     finishTasks(data.results ? data.results.map(r => r.tool_use_id) : []);
   });
 
+  eventSource.addEventListener('session_lock_changed', (e) => {
+    const data = JSON.parse(e.data || '{}');
+    if (data.session_id && currentSessionId && data.session_id !== currentSessionId) return;
+    isResponding = !!data.locked;
+    if (!isResponding) {
+      if (currentAssistantEl) currentAssistantEl.classList.remove('streaming');
+      currentAssistantEl = null;
+    }
+    updateUI();
+  });
+
   eventSource.addEventListener('process_ended', (e) => {
     // ccb 进程结束 —— 确保前端退出 responding 状态
     const data = JSON.parse(e.data || '{}');
-    clearRunningTasks();
+    clearRunningTasks({ keepFinished: true });
     clearSubagentBubbles();
     if (isResponding) {
       const finishedTurn = currentTurnContent;
@@ -1478,7 +1502,6 @@ function bindSSEEvents() {
       isResponding = false;
       const assistantEl = currentAssistantEl;
       if (assistantEl) assistantEl.classList.remove('streaming');
-      if (isViewer) isViewer = false;
       currentTurnContent = '';
       currentTurnHasAssistantOutput = false;
       currentTurnStartedAt = 0;
@@ -1512,7 +1535,7 @@ function bindSSEEvents() {
     stopTurnTimer();
     removePendingAssistantBubble(hadAssistantOutput);
     currentAssistantEl = null;
-    clearRunningTasks();
+    clearRunningTasks({ keepFinished: true });
     clearSubagentBubbles();
     updateUI();
     addSystemMsg(t('interrupted'));
@@ -1541,18 +1564,8 @@ function bindSSEEvents() {
 
   eventSource.onerror = () => {
     setConnectionStatus(false);
-    // SSE 断开时清除 responding 状态，避免 UI 卡在"运行中"
     if (isResponding) {
-      isResponding = false;
-      if (currentAssistantEl) currentAssistantEl.classList.remove('streaming');
-      currentTurnContent = '';
-      currentTurnHasAssistantOutput = false;
       stopTurnTimer();
-      removePendingAssistantBubble(false);
-      currentAssistantEl = null;
-      clearRunningTasks();
-      clearSubagentBubbles();
-      updateUI();
       addSystemMsg(t('connectionLost'), true);
     }
   };
@@ -2037,12 +2050,12 @@ function finishTasks(ids) {
   }
 }
 
-function clearRunningTasks() {
+function clearRunningTasks({ keepFinished = false } = {}) {
   if (runningTasks.size) {
     runningTasks.clear();
     renderAgentStatus();
   }
-  finishedTaskIds.clear();
+  if (!keepFinished) finishedTaskIds.clear();
 }
 
 function renderAgentStatus() {
@@ -2146,7 +2159,6 @@ function handleResult(data) {
   removePendingAssistantBubble(hadAssistantOutput);
   const assistantEl = currentAssistantEl;
   isResponding = false;
-  if (isViewer) isViewer = false;
   currentAssistantEl = null;
   currentContent = [];
   streamBlocks = {};
@@ -2978,11 +2990,11 @@ function updateUI() {
   if (skipPermissions) skipPermissions.disabled = sessionActive;
   // 远程目标和写入开关可随时切换，下一条消息生效
   if (remoteTargetSelect) remoteTargetSelect.disabled = false;
-  // viewer 时禁用输入
-  inputEl.disabled = isViewer && isResponding;
-  inputEl.style.opacity = (isViewer && isResponding) ? '0.5' : '1';
-  if (isViewer && isResponding) {
-    inputEl.placeholder = t('viewingPlaceholder') || 'Viewing live session...';
+  // 只在后端广播会话锁定时禁用输入；锁释放后观察者也可以直接接管发送。
+  inputEl.disabled = isResponding;
+  inputEl.style.opacity = isResponding ? '0.5' : '1';
+  if (isResponding) {
+    inputEl.placeholder = isViewer ? (t('viewingPlaceholder') || 'Viewing live session...') : (t('respondingPlaceholder') || 'Waiting for response...');
   } else {
     inputEl.placeholder = t('messagePlaceholder') || 'Type a message...';
   }
@@ -3080,10 +3092,11 @@ function renderEnvProfilesBar(profiles) {
   const bar = document.getElementById('env-profiles-bar');
   if (!bar) return;
   const names = Object.keys(profiles);
+  const options = names.map(n => `<option value="${esc(n)}">${esc(n)}</option>`).join('');
   bar.innerHTML = `
     <select id="profile-select">
       <option value="">${esc(t('profileSelect'))}</option>
-      ${names.map(n => `<option value="${esc(n)}">${esc(n)}</option>`).join('')}
+      ${options}
     </select>
     <button class="profile-btn" id="profile-load-btn">${esc(t('profileLoad'))}</button>
     <button class="profile-btn" id="profile-save-btn">${esc(t('profileSaveAs'))}</button>
@@ -3104,15 +3117,75 @@ function loadSelectedProfile() {
 }
 
 async function saveAsEnvProfile() {
-  const sel = document.getElementById('profile-select');
-  const currentName = sel ? sel.value : '';
-  const name = prompt(t('profileNamePrompt'), currentName);
-  if (!name || !name.trim()) {
-    if (name !== null) addSystemMsg(t('profileNameEmpty'));
+  showEnvProfileSavePicker();
+}
+
+function showEnvProfileSavePicker() {
+  let overlay = document.getElementById('env-profile-save-overlay');
+  if (!overlay) {
+    overlay = document.createElement('div');
+    overlay.id = 'env-profile-save-overlay';
+    overlay.className = 'profile-save-overlay';
+    document.body.appendChild(overlay);
+  }
+
+  const names = Object.keys(_envProfilesCache || {}).sort((a, b) => a.localeCompare(b));
+  overlay.innerHTML = `
+    <div class="profile-save-modal" role="dialog" aria-modal="true">
+      <div class="profile-save-head">
+        <div>
+          <div class="profile-save-title">${esc(t('profileSaveTitle'))}</div>
+          <div class="profile-save-hint">${esc(t('profileSaveHint'))}</div>
+        </div>
+        <button type="button" class="profile-save-close" title="${esc(t('close'))}">&times;</button>
+      </div>
+      <div class="profile-save-new">
+        <input id="profile-save-name" class="profile-save-input" type="text" placeholder="${esc(t('profileNamePlaceholder'))}">
+        <button type="button" id="profile-save-new-btn" class="profile-save-primary">${esc(t('profileSaveNew'))}</button>
+      </div>
+      <div class="profile-save-section-title">${esc(t('profileOverwriteExisting'))}</div>
+      <div class="profile-save-list">
+        ${names.length ? names.map(name => `
+          <button type="button" class="profile-save-item" data-name="${esc(name)}">
+            <span>${esc(name)}</span>
+            <span>${esc(t('profileOverwrite'))}</span>
+          </button>
+        `).join('') : `<div class="profile-save-empty">${esc(t('profileNoExisting'))}</div>`}
+      </div>
+    </div>
+  `;
+
+  const close = () => hideEnvProfileSavePicker();
+  overlay.querySelector('.profile-save-close')?.addEventListener('click', close);
+  overlay.addEventListener('click', (e) => { if (e.target === overlay) close(); }, { once: true });
+  overlay.querySelector('#profile-save-new-btn')?.addEventListener('click', () => {
+    const input = overlay.querySelector('#profile-save-name');
+    saveEnvProfileFromEditor(input?.value || '');
+  });
+  overlay.querySelector('#profile-save-name')?.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') saveEnvProfileFromEditor(e.currentTarget.value || '');
+    if (e.key === 'Escape') close();
+  });
+  overlay.querySelectorAll('.profile-save-item').forEach(btn => {
+    btn.addEventListener('click', () => saveEnvProfileFromEditor(btn.dataset.name || '', true));
+  });
+
+  overlay.style.display = 'flex';
+  overlay.querySelector('#profile-save-name')?.focus();
+}
+
+function hideEnvProfileSavePicker() {
+  const overlay = document.getElementById('env-profile-save-overlay');
+  if (overlay) overlay.style.display = 'none';
+}
+
+async function saveEnvProfileFromEditor(name, overwriting = false) {
+  const trimmedName = (name || '').trim();
+  if (!trimmedName) {
+    addSystemMsg(t('profileNameEmpty'));
     return;
   }
-  const trimmedName = name.trim();
-  if (_envProfilesCache[trimmedName] && !confirm(t('profileConfirmOverwrite', { name: trimmedName }))) return;
+  if (overwriting && !confirm(t('profileConfirmOverwrite', { name: trimmedName }))) return;
 
   const env = collectEditorEnv();
   await fetch('/api/env-profiles', {
@@ -3121,6 +3194,7 @@ async function saveAsEnvProfile() {
     body: JSON.stringify({ name: trimmedName, env }),
   });
   addSystemMsg(t('profileSaved', { name: trimmedName }));
+  hideEnvProfileSavePicker();
   await loadEnvProfiles();
   const nextSel = document.getElementById('profile-select');
   if (nextSel) nextSel.value = trimmedName;
@@ -4607,6 +4681,13 @@ function renderHistory(history) {
 }
 
 function renderHistoryToolCard(block) {
+  if (block.id && block.result) {
+    toolResults.set(block.id, {
+      tool_use_id: block.id,
+      content: block.result.content || '',
+      is_error: !!block.result.is_error,
+    });
+  }
   return renderToolCard(block);
 }
 
