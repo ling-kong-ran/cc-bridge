@@ -212,6 +212,12 @@
           </div>
           <div class="chat-sidebar-body">
             <div id="file-tree-panel" class="file-tree-panel">
+              <div class="workspace-panel-head">
+                <div>
+                  <div class="workspace-panel-label" data-i18n="workspaceFilesTitle">Files</div>
+                  <div class="workspace-panel-hint" data-i18n="workspaceFilesHint">Browse workspace files and attach them to the message</div>
+                </div>
+              </div>
               <div class="file-tree-toolbar">
                 <div class="file-tree-context">
                   <div class="file-tree-label" data-i18n="cwd">Working Directory</div>
@@ -227,10 +233,10 @@
             </div>
             <div id="review-panel" class="review-panel" style="display:none"></div>
             <div id="group-member-panel" class="group-member-panel" style="display:none">
-              <div class="member-panel-head">
+              <div class="workspace-panel-head member-panel-head">
                 <div>
-                  <div class="member-panel-label" data-i18n="sessionMembers">Members</div>
-                  <div class="member-panel-hint" data-i18n="mentionHint">Type @ to mention session members</div>
+                  <div class="workspace-panel-label" data-i18n="workspaceMembersTitle">Members</div>
+                  <div class="workspace-panel-hint" data-i18n="workspaceMembersHint">Type @ to mention session members</div>
                 </div>
                 <button id="btn-session-agent-add" class="btn-mini" title="拉入成员" data-i18n-title="pullMember" type="button">+ <span data-i18n="pullMember">Add member</span></button>
               </div>

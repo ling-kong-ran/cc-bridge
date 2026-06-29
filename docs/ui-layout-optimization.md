@@ -91,18 +91,26 @@
 
 目标效果：最新回复完成后无需刷新页面即可显示 Markdown。
 
+### 6. Workspace tab 内部标题与描述
+
+问题：右侧 Workspace 虽然已有 Files / Review / Members tab，但 tab 内容区缺少各自的小标题和说明，切换后信息层级不够明确。
+
+已调整：
+
+- Files tab 增加 `文件` 标题和“浏览工作目录文件，并可作为附件加入输入框”说明。
+- Review tab 增加 `变动` 标题和 Git 分支/文件变更说明。
+- Members tab 统一使用 Workspace 面板标题样式，并保留内容区顶部的“拉入成员”按钮。
+- 新增统一的 `workspace-panel-head / label / hint` 样式，避免每个 tab 自行维护标题样式。
+
+目标效果：每个 Workspace tab 的用途在内容区内更清晰，右侧面板的信息层级更稳定。
+
 ## 后续可继续优化的方向
 
 ### 1. 右侧 Workspace 面板继续完善
 
 当前右侧面板已经比之前清晰，但仍有进一步优化空间：
 
-- Files / Changes / Members 每个 tab 内部增加自己的小标题和描述。
-- Files tab 增加文件搜索或过滤。
-- 文件树支持展示当前选中文件数量。
 - Review tab 可以增加 staged / unstaged 的视觉分组。
-- Members tab 可以把“添加成员”按钮移动到内容区顶部，而不是 header。
-- 右侧面板展开/折叠状态持久化到 GUI 设置。
 - 支持拖拽调整右侧面板宽度。
 
 ### 2. 左侧 Sidebar 信息密度优化

@@ -4194,20 +4194,26 @@ let fileTreePath = '';
 async function loadReview(cwd) {
   const panel = document.getElementById('review-panel');
   if (!panel) return;
-  panel.innerHTML = `<div class="review-loading">${esc(t('reviewLoading'))}</div>`;
+  const panelHead = () => `<div class="workspace-panel-head">
+    <div>
+      <div class="workspace-panel-label">${esc(t('workspaceReviewTitle'))}</div>
+      <div class="workspace-panel-hint">${esc(t('workspaceReviewHint'))}</div>
+    </div>
+  </div>`;
+  panel.innerHTML = panelHead() + `<div class="review-loading">${esc(t('reviewLoading'))}</div>`;
   try {
     const resp = await fetch(`/api/review?cwd=${encodeURIComponent(cwd)}`);
     const data = await resp.json();
     if (data.error) {
-      panel.innerHTML = `<div class="review-empty">${esc(data.error)}</div>`;
+      panel.innerHTML = panelHead() + `<div class="review-empty">${esc(data.error)}</div>`;
       return;
     }
     if (!data.git) {
-      panel.innerHTML = `<div class="review-empty">${esc(data.message || t('reviewNoGit'))}</div>`;
+      panel.innerHTML = panelHead() + `<div class="review-empty">${esc(data.message || t('reviewNoGit'))}</div>`;
       return;
     }
     const files = data.files || [];
-    let html = '';
+    let html = panelHead();
     // 分支名
     html += `<div class="review-branch"><span data-i18n="reviewBranch">${esc(t('reviewBranch'))}</span><span class="review-branch-name">${esc(data.branch)}</span><span class="review-branch-count">${esc(t('itemCount', { count: files.length }))}</span></div>`;
     // 文件列表
@@ -4239,7 +4245,7 @@ async function loadReview(cwd) {
     }
     panel.innerHTML = html;
   } catch (e) {
-    panel.innerHTML = `<div class="review-empty">${esc(t('unknownError'))}</div>`;
+    panel.innerHTML = panelHead() + `<div class="review-empty">${esc(t('unknownError'))}</div>`;
   }
 }
 

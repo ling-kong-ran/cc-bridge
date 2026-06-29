@@ -1230,6 +1230,30 @@ body.pane-right-collapsed .chat-sidebar {
   padding: 10px 10px 16px; flex: 1; overflow-y: auto;
   position: relative;
 }
+.workspace-panel-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+  padding-bottom: 9px;
+  margin-bottom: 10px;
+  border-bottom: 1px solid var(--border-dim);
+}
+.workspace-panel-label {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  font-weight: 700;
+  color: var(--text-ghost);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  margin-bottom: 3px;
+}
+.workspace-panel-hint {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  color: var(--text-muted);
+  line-height: 1.45;
+}
 /* 文件树 */
 .file-tree-toolbar {
   display: flex;
@@ -1388,17 +1412,7 @@ body.pane-right-collapsed .chat-sidebar {
   display: flex; flex-direction: column; gap: 10px;
 }
 .member-panel-head {
-  display: flex; align-items: flex-start; justify-content: space-between;
-  gap: 10px; padding-bottom: 9px; border-bottom: 1px solid var(--border-dim);
-}
-.member-panel-label {
-  font-family: var(--font-mono); font-size: 9px; font-weight: 700;
-  color: var(--text-ghost); letter-spacing: 0.12em; text-transform: uppercase;
-  margin-bottom: 3px;
-}
-.member-panel-hint {
-  font-family: var(--font-mono); font-size: 10.5px; color: var(--text-muted);
-  line-height: 1.45;
+  margin-bottom: 0;
 }
 .member-panel-head .btn-mini {
   margin: 0; padding: 5px 8px; font-size: 10px;
