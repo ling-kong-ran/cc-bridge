@@ -2387,6 +2387,29 @@ function clearSubagentBubbles() {
   subagentBubbles.clear();
 }
 
+function finalizeCurrentAssistantMarkdown() {
+  if (!currentAssistantEl) return;
+  const finishedToolBlocks = [];
+  for (const idx of Object.keys(streamBlocks).sort((a,b) => a-b)) {
+    const block = streamBlocks[idx];
+    if (!block) continue;
+    if (block.type === 'thinking' && block.thinking) {
+      currentContent.push({ type: 'thinking', thinking: block.thinking });
+    } else if (block.type === 'text' && block.text) {
+      currentContent.push({ type: 'text', text: block.text });
+    } else if (block.type === 'tool_use') {
+      let input = block.input;
+      try { input = JSON.parse(input); } catch(e) {}
+      const toolBlock = { type: 'tool_use', name: block.name, id: block.id, input };
+      currentContent.push(toolBlock);
+      finishedToolBlocks.push(toolBlock);
+    }
+  }
+  if (finishedToolBlocks.length) registerTaskBlocks(finishedToolBlocks);
+  streamBlocks = {};
+  renderCurrentState(true);
+}
+
 function finishCurrentTurnFromProcess() {
   const finishedTurn = currentTurnContent;
   const hadAssistantOutput = currentTurnHasAssistantOutput;
@@ -2396,6 +2419,7 @@ function finishCurrentTurnFromProcess() {
   clearSubagentBubbles();
   stopTurnTimer();
   if (assistantEl) {
+    finalizeCurrentAssistantMarkdown();
     updateAssistantMeta('done', durationMs);
     assistantEl.classList.remove('streaming');
   }
@@ -2447,6 +2471,7 @@ function handleResult(data) {
   const turnTokens = normalizeTokenUsage(data.turn_tokens || data.usage || data);
   const persistedTokens = normalizeTokenUsage(data.session_total_tokens);
   stopTurnTimer();
+  if (currentAssistantEl) finalizeCurrentAssistantMarkdown();
   updateAssistantMeta('done', durationMs);
   removePendingAssistantBubble(hadAssistantOutput);
   const assistantEl = currentAssistantEl;
