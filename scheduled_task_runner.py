@@ -19,6 +19,7 @@ class ScheduledTaskRunner:
         self._stop_event = asyncio.Event()
 
     async def start(self):
+        store.reset_running_tasks()
         while not self._stop_event.is_set():
             try:
                 await self.tick()
@@ -55,8 +56,12 @@ class ScheduledTaskRunner:
             started = store.mark_task_started(task_id) or task
             await self._emit("scheduled_task_started", {"task": started, "manual": manual})
 
+            done_event = asyncio.Event()
+            run_error = ""
+            saw_result = False
+
             async def on_event(event: dict):
-                nonlocal captured_session_id
+                nonlocal captured_session_id, run_error, saw_result
                 evt_type = event.get("type")
                 if evt_type == "session_id_captured":
                     captured_session_id = event.get("session_id") or captured_session_id
@@ -69,6 +74,7 @@ class ScheduledTaskRunner:
                         cli=task.get("cli", ""),
                     )
                 elif evt_type == "result":
+                    saw_result = True
                     sid = captured_session_id or session.session_id or task.get("last_session_id", "")
                     if sid:
                         add_session_usage(
@@ -76,11 +82,19 @@ class ScheduledTaskRunner:
                             cost_usd=event.get("total_cost_usd") or 0,
                             tokens=event.get("usage") or {},
                         )
+                    done_event.set()
+                elif evt_type == "process_ended":
+                    exit_code = event.get("exit_code")
+                    if not saw_result and exit_code not in (0, None):
+                        run_error = f"Claude Code 进程退出，状态码 {exit_code}"
+                    done_event.set()
                 elif evt_type == "error":
+                    run_error = event.get("message") or "定时任务执行失败"
                     await self._emit("scheduled_task_error", {
                         "task_id": task_id,
-                        "message": event.get("message") or "定时任务执行失败",
+                        "message": run_error,
                     })
+                    done_event.set()
 
             remote_target = None
             remote_target_id = task.get("remote_target_id") or ""
@@ -102,14 +116,21 @@ class ScheduledTaskRunner:
                 owner_id=f"scheduled_{task_id}_{uuid.uuid4().hex[:8]}",
                 prefer_persistent=False,
             )
+            try:
+                await asyncio.wait_for(done_event.wait(), timeout=60 * 60)
+            except asyncio.TimeoutError:
+                run_error = "定时任务执行超时"
             if session._read_task:
                 try:
-                    await session._read_task
-                except asyncio.CancelledError:
+                    await asyncio.wait_for(asyncio.shield(session._read_task), timeout=5.0)
+                except (asyncio.TimeoutError, asyncio.CancelledError):
                     pass
             sid = captured_session_id or session.session_id or ""
-            finished = store.mark_task_finished(task_id, session_id=sid) or store.get_task(task_id)
-            await self._emit("scheduled_task_finished", {"task": finished, "session_id": sid, "manual": manual})
+            finished = store.mark_task_finished(task_id, session_id=sid, error=run_error) or store.get_task(task_id)
+            if run_error:
+                await self._emit("scheduled_task_error", {"task": finished, "task_id": task_id, "message": run_error, "manual": manual})
+            else:
+                await self._emit("scheduled_task_finished", {"task": finished, "session_id": sid, "manual": manual})
             return finished
         except Exception as exc:
             finished = store.mark_task_finished(task_id, session_id=captured_session_id or session.session_id or "", error=str(exc))
