@@ -279,6 +279,7 @@ class CCBSession:
         self._read_task: Optional[asyncio.Task] = None
         self._mcp_config_path: Optional[Path] = None
         self._persistent = False
+        self._prefer_persistent = True
         self._persistent_failed = False
         self._message_lock = asyncio.Lock()
         self._proc_key: Optional[tuple] = None
@@ -305,6 +306,7 @@ class CCBSession:
         self.remote_target = remote_target or None
         self.allow_mutate = bool(allow_mutate)
         self.cli = cli or None
+        self._prefer_persistent = True
         self.is_running = True
 
     def _build_remote_mcp(self) -> tuple[Optional[str], Optional[str]]:
@@ -367,7 +369,7 @@ class CCBSession:
             "has_output": bool(self._message_has_output) if running else False,
         }
 
-    async def send_message(self, content: str, owner_id: str = ""):
+    async def send_message(self, content: str, owner_id: str = "", prefer_persistent: bool = True):
         """发送一条消息：优先复用持久 CLI，必要时回退到一次性进程。"""
         if not self.is_running:
             return
@@ -376,6 +378,7 @@ class CCBSession:
             self._message_started_at = time.time()
             self._message_prompt = content
             self._message_has_output = False
+        self._prefer_persistent = bool(prefer_persistent)
 
         async with self._message_lock:
             if not self.is_running:
@@ -410,7 +413,7 @@ class CCBSession:
 
     def _can_use_persistent_cli(self) -> bool:
         """可复用配置固定的持久 CLI；远程目标/权限变化时通过 proc_key 触发重启。"""
-        return not self._persistent_failed
+        return self._prefer_persistent and not self._persistent_failed
 
     def _persistent_proc_key(self) -> tuple:
         remote_key = ""

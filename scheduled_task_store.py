@@ -223,7 +223,8 @@ def mark_task_finished(task_id: str, session_id: str = "", error: str = "") -> d
         task["last_session_id"] = session_id
     task["last_status"] = "error" if error else "success"
     task["last_error"] = error
-    task["run_count"] = int(task.get("run_count") or 0) + (0 if error and task.get("last_status") == "error" else 1)
+    if not error:
+        task["run_count"] = int(task.get("run_count") or 0) + 1
     if task.get("schedule", {}).get("type") == "once" and not error:
         task["enabled"] = False
     task["updated_at"] = _now()

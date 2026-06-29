@@ -97,7 +97,11 @@ class ScheduledTaskRunner:
                 allow_mutate=task.get("allow_remote_mutate", False),
                 cli=task.get("cli") or get_current_cli(),
             )
-            await session.send_message(task.get("prompt") or "", owner_id=f"scheduled_{task_id}_{uuid.uuid4().hex[:8]}")
+            await session.send_message(
+                task.get("prompt") or "",
+                owner_id=f"scheduled_{task_id}_{uuid.uuid4().hex[:8]}",
+                prefer_persistent=False,
+            )
             if session._read_task:
                 try:
                     await session._read_task
