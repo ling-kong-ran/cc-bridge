@@ -54,7 +54,8 @@
       "remote_target_id": "",
       "allow_remote_mutate": false,
       "skip_permissions": true,
-      "session_id": "",
+      "last_session_id": "",
+      "reuse_session": false,
       "created_at": 1710000000,
       "updated_at": 1710000000,
       "last_run_at": null,
@@ -81,7 +82,9 @@
 { "type": "once", "run_at": 1710003600 }
 ```
 
-`once` 任务执行完成后自动置为 disabled，保留运行记录和会话入口。
+`once` 任务执行完成后自动置为 disabled，保留运行记录和最近会话入口。
+
+默认每次运行都新建一条对话，避免上下文污染和长期 token 成本累积；如确实需要连续上下文，可通过 `reuse_session: true` 复用上次运行的会话。
 
 先不做完整 cron 表达式，避免 UI 和解析复杂化。Hermes 依赖 croniter 支持 cron 表达式，但 cc-bridge 需要保持纯标准库。
 
@@ -119,7 +122,7 @@ class ScheduledTaskRunner:
         ...
 ```
 
-不要为每个任务长期保持一个 CLI 进程。沿用项目现有原则：**一条消息一个 subprocess，通过 `--resume` 保持上下文**。
+不要为每个任务长期保持一个 CLI 进程。每次任务运行默认创建新的 Claude Code 会话，避免旧上下文影响新一轮判断；只有用户显式开启 `reuse_session` 时，才通过 `--resume` 接到上次运行会话。
 
 当前发送入口在 `server.py` 的 `send_message` 分支，建议抽一个内部 helper，避免定时任务复制整段逻辑。
 
@@ -159,13 +162,13 @@ client_id = f"scheduled:{task_id}"
 
 1. 检查 `enabled`
 2. 检查是否已有同任务运行中
-3. 如果任务还没有 `session_id`：
-   - 创建新 session
+3. 默认每次运行新建 session：
+   - 不传 `resume_id`
    - 首次 prompt 后捕获真实 `session_id`
-   - 写回任务
-4. 如果已有 `session_id`：
+   - 写回 `last_session_id`
+4. 如果 `reuse_session` 为 true 且已有 `last_session_id`：
    - 使用 `resume_id`
-   - 把结果接到原定时任务会话
+   - 把结果接到上次定时任务会话
 5. 运行结束后：
    - 更新 `last_run_at`
    - 更新 `next_run_at`
@@ -174,7 +177,7 @@ client_id = f"scheduled:{task_id}"
    - `once` 任务自动置为 disabled
    - 推送 SSE：`scheduled_task_updated`
 
-这样每个定时任务都可以形成自己的持续会话历史，用户点进去能看到历次执行上下文。
+这样每次任务运行默认都有独立的会话历史，用户可以清楚看到某次运行的输入、输出、时间和状态；需要连续上下文的任务再显式选择复用上次会话。
 
 ---
 
@@ -265,21 +268,23 @@ scheduled_task_error
   - 每隔 N 分钟 / 小时
   - 每天 HH:mm
 - 是否启用
-- 是否复用同一个会话
+- 会话模式：
+  - 每次运行新建对话（推荐）
+  - 复用上次对话
 
 建议默认：
 
 ```text
-复用同一个会话：开启
+会话模式：每次运行新建对话（推荐）
 ```
 
-因为这更像 Hermes 的 agent task 逻辑：同一个任务有连续上下文。
+这比复用同一个会话更适合 cc-bridge：每次运行对应独立上下文，历史记录更清晰，也不会因为长期 resume 导致 token 成本持续上涨。需要连续上下文的长期任务可以手动选择“复用上次对话”。
 
 ---
 
 ## 和现有会话系统的关系
 
-定时任务运行后，如果生成了 session_id，需要调用现有：
+定时任务运行后，如果生成了新的 session_id，需要调用现有：
 
 ```python
 save_session(...)
@@ -288,6 +293,12 @@ save_session(...)
 这样它会自然出现在历史会话里。
 
 建议标题格式：
+
+```text
+[定时任务] 每日代码审查 - 2026-06-29 09:00
+```
+
+如果开启“复用上次对话”，可继续使用不带时间的固定标题：
 
 ```text
 [定时任务] 每日代码审查

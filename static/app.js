@@ -158,6 +158,7 @@ async function loadDefaultCwd() {
     if (data.cwd && !cwdInput.value.trim()) {
       cwdInput.value = data.cwd;
       loadSessions();
+      refreshRightPaneFiles();
     }
   } catch (e) { /* ignore */ }
 }
@@ -1283,10 +1284,6 @@ function initMobileLayout() {
 
   const handleQueryChange = (e) => {
     if (!e.matches) closeMenu();
-    // 从 PC 切到移动端时关闭面板
-    if (e.matches) {
-      document.body.classList.remove('pane-right-open');
-    }
   };
 
   if (mobileQuery.addEventListener) {
@@ -1343,6 +1340,7 @@ function bindSSEEvents() {
       if (data.session_id) {
         currentSessionId = data.session_id;
         if (data.cwd) cwdInput.value = data.cwd;
+        refreshRightPaneFiles();
         showPage('chat');
         loadSessionHistory(data.session_id, data.cwd || '');
         if (isViewer) {
@@ -2998,6 +2996,7 @@ function createNewSession(cwd) {
   resetSessionViewState();
 
   if (cwd) cwdInput.value = cwd;
+  refreshRightPaneFiles();
   openCurrentCwdSessionGroup();
   sendAction('new_session', {
     model: modelSelect.value,
@@ -3730,6 +3729,13 @@ function hideAgentAddPopover() {
   if (popover) popover.style.display = 'none';
 }
 
+function refreshRightPaneFiles() {
+  const cwd = (cwdInput?.value || '').trim();
+  const filePanel = document.getElementById('file-tree-panel');
+  if (!cwd || !filePanel || filePanel.style.display === 'none') return;
+  loadFileTree(cwd);
+}
+
 function initRightPanel() {
   const sidebar = document.getElementById('chat-sidebar');
   const toggleBtn = document.getElementById('btn-toggle-right-panel');
@@ -3739,36 +3745,55 @@ function initRightPanel() {
 
   const isMobile = () => window.matchMedia('(max-width: 760px)').matches;
 
+  const syncDesktopState = () => {
+    if (!isMobile()) {
+      sidebar.classList.remove('open');
+      document.body.classList.remove('mobile-overlay', 'pane-right-open');
+      document.getElementById('mobile-sidebar-backdrop')?.classList.remove('visible');
+      if (toggleBtn) toggleBtn.classList.toggle('active', !document.body.classList.contains('pane-right-collapsed'));
+    }
+  };
+
+  const ensurePaneContent = (resetTab = false) => {
+    if (resetTab) switchToSidebarTab('files');
+    refreshRightPaneFiles();
+  };
+
   const openPanel = () => {
     if (isMobile()) {
       sidebar.classList.add('open');
       document.body.classList.add('mobile-overlay');
       document.getElementById('mobile-sidebar-backdrop')?.classList.add('visible');
-    } else {
-      document.body.classList.add('pane-right-open');
+      if (toggleBtn) toggleBtn.classList.add('active');
+      ensurePaneContent(true);
+      return;
     }
+    document.body.classList.remove('pane-right-collapsed');
     if (toggleBtn) toggleBtn.classList.add('active');
-    // 默认打开 Files 标签
-    switchToSidebarTab('files');
-    const cwd = (cwdInput?.value || '').trim();
-    if (cwd) loadFileTree(cwd);
+    ensurePaneContent(false);
   };
 
   const closePanel = (force = false) => {
     if (!force && !isMobile()) return;
     sidebar.classList.remove('open');
-    document.body.classList.remove('pane-right-open');
-    document.body.classList.remove('mobile-overlay');
+    document.body.classList.remove('mobile-overlay', 'pane-right-open');
     document.getElementById('mobile-sidebar-backdrop')?.classList.remove('visible');
-    if (toggleBtn) toggleBtn.classList.remove('active');
+    if (isMobile()) {
+      if (toggleBtn) toggleBtn.classList.remove('active');
+    } else {
+      document.body.classList.add('pane-right-collapsed');
+      if (toggleBtn) toggleBtn.classList.remove('active');
+    }
   };
 
-  const panelOpen = () => sidebar.classList.contains('open') || document.body.classList.contains('pane-right-open');
+  const panelOpen = () => isMobile()
+    ? sidebar.classList.contains('open')
+    : !document.body.classList.contains('pane-right-collapsed');
 
-  // Titlebar 切换按钮
+  // Titlebar 切换按钮：桌面端折叠/展开常驻 Pane，移动端打开/关闭浮层
   if (toggleBtn) {
     toggleBtn.addEventListener('click', () => {
-      if (panelOpen() && isMobile()) closePanel(); else openPanel();
+      if (panelOpen()) closePanel(true); else openPanel();
     });
   }
 
@@ -3815,9 +3840,9 @@ function initRightPanel() {
     });
   }
 
-  // 点击面板外侧关闭
+  // 点击面板外侧关闭（仅移动端浮层）
   document.addEventListener('click', (e) => {
-    if (!panelOpen()) return;
+    if (!isMobile() || !panelOpen()) return;
     if (!sidebar.contains(e.target) && e.target !== toggleBtn && !toggleBtn?.contains(e.target)) {
       closePanel();
     }
@@ -3832,12 +3857,22 @@ function initRightPanel() {
     }
   });
 
-  // Escape 关闭
+  // Escape 关闭移动端浮层；桌面端保持 Hermes 式常驻 Pane
   document.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape' && panelOpen()) {
+    if (e.key === 'Escape' && isMobile() && panelOpen()) {
       closePanel();
     }
   });
+
+  syncDesktopState();
+  ensurePaneContent(false);
+  const desktopQuery = window.matchMedia('(max-width: 760px)');
+  const handleRightPaneQueryChange = () => syncDesktopState();
+  if (desktopQuery.addEventListener) {
+    desktopQuery.addEventListener('change', handleRightPaneQueryChange);
+  } else {
+    desktopQuery.addListener(handleRightPaneQueryChange);
+  }
 
   loadSessionAgents();
 }
@@ -4615,6 +4650,7 @@ async function resumeSession(sessionId, cwd, model, savedCost = 0, remoteTargetI
 
   // 设置 UI
   if (cwd) cwdInput.value = cwd;
+  refreshRightPaneFiles();
   openCurrentCwdSessionGroup();
   if (model && hasModelOption(model)) {
     modelSelect.value = model;

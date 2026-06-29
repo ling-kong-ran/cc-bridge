@@ -73,7 +73,7 @@
 
   --pane-left:  304px;
   --nav-rail:    64px;
-  --pane-right:   0px;
+  --pane-right: 280px;
 }
 
 html.light-theme {
@@ -1108,22 +1108,36 @@ html.light-theme .select {
   min-width: 0; overflow: hidden;
 }
 
-/* 会话成员面板：统一为 fixed overlay + 浮动按钮 */
+/* Hermes 式三栏 Pane：左侧会话 / 中间对话 / 右侧资源面板 */
 .chat-sidebar {
   width: var(--pane-right);
-  min-width: 0; overflow: hidden;
+  flex: 0 0 var(--pane-right);
+  min-width: 240px;
+  max-width: 360px;
+  overflow: hidden;
   background: var(--bg-deep);
-  border-left: 1px solid transparent;
+  border-left: 1px solid var(--border);
   display: flex; flex-direction: column;
-  transition: width var(--t-base), border-color var(--t-base);
+  transition: flex-basis var(--t-base), width var(--t-base), min-width var(--t-base), border-color var(--t-base), opacity var(--t-base);
   position: relative; z-index: 1;
 }
-body.pane-right-open .chat-sidebar {
-  width: 280px;
-  border-left-color: var(--border);
+body.pane-right-collapsed .chat-sidebar {
+  width: 0;
+  flex-basis: 0;
+  min-width: 0;
+  border-left-color: transparent;
+  opacity: 0;
+  pointer-events: none;
+}
+@media (min-width: 761px) {
+  body:not(.pane-right-collapsed) #btn-toggle-right-panel {
+    color: var(--green);
+    border-color: var(--border-glow);
+    background: var(--green-faint);
+  }
 }
 .chat-sidebar.open {
-  /* mobile 兼容：PC 上 open 类不再控制 transform */
+  /* mobile 兼容：桌面端由 pane-right-collapsed 控制 */
 }
 .chat-sidebar-header {
   display: flex; align-items: center; justify-content: space-between;
@@ -3633,14 +3647,27 @@ html.light-theme .agent-status-bar {
     position: fixed;
     top: 0; right: 0; bottom: 0;
     width: min(78vw, 280px);
+    flex: none;
+    min-width: 0;
+    max-width: none;
     z-index: 100;
     border-left: 1px solid var(--border);
     box-shadow: -12px 0 48px rgba(0,0,0,0.45);
     overflow-y: auto;
+    opacity: 1;
+    pointer-events: auto;
     transform: translateX(100%);
     transition: transform var(--t-base) var(--ease-out);
   }
-  body.pane-right-open .chat-sidebar { width: min(78vw, 280px); }
+  body.pane-right-open .chat-sidebar,
+  body.pane-right-collapsed .chat-sidebar {
+    width: min(78vw, 280px);
+    flex-basis: auto;
+    min-width: 0;
+    border-left-color: var(--border);
+    opacity: 1;
+    pointer-events: auto;
+  }
   .chat-sidebar.open {
     transform: translateX(0);
   }

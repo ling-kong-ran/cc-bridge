@@ -250,10 +250,11 @@ RightSidebar
     └── 代码审查 (churn-bar + file-tree)
 ```
 
-**cc-bridge 目前没有右侧面板。** 不过有 chat-sidebar（会话成员面板），功能完全不同。如果后续需要：
-- 项目文件树 → 可以复用 cc-bridge 已有的目录浏览/搜索功能
-- Terminal → 需要额外实现
-- Review → 暂时不需要
+**cc-bridge 已有右侧面板。** 当前 `chat-sidebar` 位于对话页右侧，包含 Files / Review / Members 三个 tab；此前主要通过右上角按钮展开。布局调整后应更接近 Hermes 的三栏 Pane：桌面端右侧面板常驻显示，可通过按钮折叠；移动端仍保持 slide-in overlay。
+- Files → 已作为项目文件树放在右侧 Pane
+- Review → 已作为 Git 变更概览放在右侧 Pane
+- Members → cc-bridge 特有的会话成员面板
+- Terminal → 暂不实现，避免引入额外持久终端复杂度
 
 ---
 
