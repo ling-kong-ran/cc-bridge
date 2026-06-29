@@ -4120,6 +4120,7 @@ function initRightPanel() {
     const cwd = (cwdInput?.value || '').trim();
     if (cwd) loadFileTree(cwd);
   });
+  document.getElementById('file-tree-filter')?.addEventListener('input', applyFileTreeFilter);
 
   // 添加 agent 按钮
   if (addBtn) {
@@ -4250,6 +4251,25 @@ function updateFileTreePathLabel(path = fileTreePath || cwdInput?.value || '') {
   label.title = normalized;
 }
 
+function updateFileTreeSelectedCount() {
+  const el = document.getElementById('file-tree-selected-count');
+  if (!el) return;
+  const visibleSelected = document.querySelectorAll('#file-tree-content .file-tree-entry.selected:not([style*="display: none"])').length;
+  const totalSelected = attachedFiles.length;
+  el.textContent = visibleSelected ? `${visibleSelected}/${totalSelected}` : String(totalSelected);
+  el.title = t('selectedFiles', { count: totalSelected });
+}
+
+function applyFileTreeFilter() {
+  const input = document.getElementById('file-tree-filter');
+  const q = (input?.value || '').trim().toLowerCase();
+  document.querySelectorAll('#file-tree-content .file-tree-entry').forEach(el => {
+    const name = el.textContent.replace(/^📁|^📄|^✓/, '').trim().toLowerCase();
+    el.style.display = !q || name.includes(q) ? '' : 'none';
+  });
+  updateFileTreeSelectedCount();
+}
+
 async function loadFileTree(path) {
   const content = document.getElementById('file-tree-content');
   if (!content) return;
@@ -4277,6 +4297,7 @@ async function loadFileTree(path) {
         html += `<div class="file-tree-entry${selected ? ' selected' : ''}" data-path="${esc(fPath)}"><span class="ft-icon">${selected ? '✓' : '📄'}</span>${esc(f.name)}</div>`;
       }
       content.innerHTML = html || '<div class="file-tree-empty">' + esc(t('emptyDir')) + '</div>';
+      applyFileTreeFilter();
       content.querySelectorAll('.file-tree-entry.dir').forEach(el => {
         el.addEventListener('click', (e) => { e.stopPropagation(); loadFileTree(el.dataset.path); });
       });
@@ -4296,13 +4317,16 @@ async function loadFileTree(path) {
             if (icon) icon.textContent = '✓';
           }
           renderAttachments();
+          updateFileTreeSelectedCount();
         });
       });
     } else {
       content.innerHTML = '<div class="file-tree-empty">' + esc(t('emptyDir')) + '</div>';
+      updateFileTreeSelectedCount();
     }
   } catch (e) {
     content.innerHTML = '<div class="file-tree-empty">' + esc(t('unknownError')) + '</div>';
+    updateFileTreeSelectedCount();
   }
 }
 
