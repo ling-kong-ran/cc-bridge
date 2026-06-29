@@ -195,25 +195,19 @@
 
 目标效果：输入区的主视觉焦点回到文本输入本身，运行上下文退到辅助状态行，同时 Send / Stop / Attach 的尺寸更统一。
 
-### 5. Settings 页面长期重构
+### 5. Settings 页面布局细节统一
 
-Settings 内容越来越多，顶部 tabs 仍可用，但长期可以考虑改成双栏：
+Settings 页面短期布局统一已完成，顶部 tabs 继续保留为当前的信息架构，不切换到双栏。
 
-```text
-左侧 settings nav       右侧 settings content
-General                 Interface Settings
-Environment             Agent Defaults
-Remote
-Integrations
-Memory
-```
+已调整：
 
-短期可以先统一：
+- Settings 内容区增加统一最大宽度，避免宽屏下卡片横向拉得过散。
+- 顶部 tabs 改为轻量 pill 导航，active 状态更接近当前 Workspace / Sidebar 的弱绿色强调。
+- Settings card 圆角、边距和表单行间距统一，表单 label 列宽改为更稳定的响应式范围。
+- 普通保存按钮、Remote / MCP / Agent 表单按钮的顶部间距和右对齐方式统一。
+- Skills / MCP / Agents 列表项从纯分割线改为弱卡片项，列表密度与 Remote targets 更一致。
 
-- card 最大宽度；
-- 表单 label 对齐；
-- 按钮组位置；
-- Remote / MCP / Agents 列表密度。
+长期仍可考虑把 Settings 改成左侧 settings nav + 右侧 content 的双栏结构，但当前 tabs 结构已经可继续承载现有内容。
 
 ### 6. Artifacts / Scheduled 与整体布局统一
 

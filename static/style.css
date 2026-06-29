@@ -2724,7 +2724,11 @@ body.pane-right-collapsed .chat-sidebar {
 
 .config-inner {
   flex: 1; overflow-y: auto;
+  width: 100%;
+  max-width: 1080px;
+  margin: 0 auto;
   padding: 28px 36px;
+  box-sizing: border-box;
 }
 
 .config-title {
@@ -2748,35 +2752,38 @@ body.pane-right-collapsed .chat-sidebar {
 .settings-tabs {
   display: flex;
   flex: 0 0 auto;
-  gap: 0;
-  border-bottom: 1px solid var(--border-dim);
+  gap: 4px;
+  border: 1px solid var(--border-dim);
+  border-radius: var(--radius-sm);
   margin-bottom: 22px;
-  padding: 0 2px;
+  padding: 4px;
+  background: color-mix(in srgb, var(--bg-surface) 76%, transparent);
 }
 
 .settings-tab {
   position: relative;
-  border: none;
+  border: 1px solid transparent;
+  border-radius: var(--radius-xs);
   background: transparent;
   color: var(--text-muted);
-  padding: 9px 16px;
+  padding: 8px 14px;
   font-family: var(--font-mono);
   font-size: 11px;
   font-weight: 500;
   cursor: pointer;
-  transition: color var(--t-fast), border-color var(--t-fast);
-  border-bottom: 2px solid transparent;
-  margin-bottom: -1px;
+  transition: color var(--t-fast), border-color var(--t-fast), background var(--t-fast);
 }
 
 .settings-tab.active {
   color: var(--green);
-  border-bottom-color: var(--green);
+  border-color: rgba(var(--accent-rgb), 0.28);
+  background: rgba(var(--accent-rgb), 0.08);
 }
 
 .settings-tab:hover:not(.active) {
   color: var(--text-base);
-  border-bottom-color: var(--border-dim);
+  border-color: var(--border-dim);
+  background: rgba(255,255,255,0.025);
 }
 
 .config-tab-panels {
@@ -2787,25 +2794,27 @@ body.pane-right-collapsed .chat-sidebar {
 .config-tab-panel { display: none; }
 .config-tab-panel.active { display: block; }
 
-.config-section { margin-bottom: 28px; }
+.config-section {
+  max-width: 820px;
+  margin-bottom: 22px;
+}
 
 .config-card {
   background: var(--bg-surface);
   border: 1px solid var(--border-dim);
-  border-radius: var(--radius-lg);
-  padding: 14px;
+  border-radius: var(--radius-sm);
+  padding: 15px;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
 }
 
 .ui-settings-card {
   display: grid;
-  gap: 14px;
-  max-width: 680px;
+  gap: 13px;
 }
 
 .settings-row {
   display: grid;
-  grid-template-columns: 150px minmax(0, 1fr);
+  grid-template-columns: minmax(132px, 170px) minmax(0, 1fr);
   align-items: center;
   gap: 14px;
 }
@@ -2882,7 +2891,17 @@ body.pane-right-collapsed .chat-sidebar {
   font-size: 11px; font-weight: 600;
   font-family: var(--font-mono); letter-spacing: 0.08em;
   cursor: pointer; transition: all var(--t-fast);
-  display: inline-flex; align-items: center; gap: 5px;
+  display: inline-flex; align-items: center; justify-content: center; gap: 5px;
+}
+
+.config-card > .btn-save,
+.config-card > .btn-mini,
+.config-card > .cli-install-link,
+.remote-form-actions .btn-save,
+.remote-form-actions .btn,
+.agent-form-actions .btn-save,
+.agent-form-actions .btn {
+  margin-top: 0;
 }
 
 .btn-save:hover { background: rgba(var(--accent-rgb),0.12); border-color: var(--green-dim); }
@@ -3000,11 +3019,18 @@ body.pane-right-collapsed .chat-sidebar {
 .env-paste-apply:hover { background: rgba(var(--accent-rgb),0.12); border-color: var(--green-dim); }
 
 .skill-item, .agent-item, .mcp-item {
-  display: flex; align-items: center; gap: 9px;
-  padding: 9px 0; border-bottom: 1px solid var(--border-dim);
+  display: flex; align-items: center; gap: 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--border-dim);
+  border-radius: var(--radius-sm);
+  background: var(--bg-deep);
 }
 
-.skill-item:last-child, .agent-item:last-child, .mcp-item:last-child { border-bottom: none; }
+.skill-item + .skill-item,
+.agent-item + .agent-item,
+.mcp-item + .mcp-item { margin-top: 8px; }
+
+.skill-item:last-child, .agent-item:last-child, .mcp-item:last-child { border-bottom: 1px solid var(--border-dim); }
 
 .skill-name, .mcp-name {
   font-family: var(--font-mono); font-size: 12px;
@@ -3089,7 +3115,7 @@ body.pane-right-collapsed .chat-sidebar {
 .agent-form .settings-row { flex-direction: column; align-items: flex-start; gap: 4px; }
 .agent-form .settings-row .field-label { min-width: auto; }
 .agent-form-actions {
-  display: flex; gap: 8px; margin-top: 6px; align-items: center;
+  display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; margin-top: 6px; align-items: center;
 }
 .agent-form-actions .btn-save {
   background: var(--bg-raised); border: 1px solid var(--border-dim);
@@ -4365,7 +4391,14 @@ html.light-theme .agent-status-bar {
 .remote-target-status.ok { color: var(--green); }
 .remote-target-status.err { color: var(--red); }
 
-.remote-form-actions { display: flex; gap: 8px; align-items: center; margin-top: 6px; }
+.remote-form-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  justify-content: flex-end;
+  margin-top: 6px;
+}
 
 .remote-form-status {
   margin-top: 8px;
