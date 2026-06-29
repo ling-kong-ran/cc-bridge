@@ -178,18 +178,22 @@
 
 ### 4. 输入区进一步减重
 
-当前输入区包含：
+当前输入区轻量化已完成。model pill 已下移到输入框下方状态行，并与 CLI、cwd 摘要统一展示；主输入行聚焦附件、textarea 和 Send/Stop 操作。
 
-```text
->>  model pill  attach  textarea  send/stop
-```
+### 11. 输入区轻量化
 
-后续可考虑：
+问题：输入区原本把 model pill、附件、textarea、Send/Stop 放在同一行，model 信息挤占输入宽度，按钮纵向堆叠也让底部区域显得偏重。
 
-- 弱化或移除 `>>`。
-- 把 model / cli / cwd 变成输入框下方的小型状态行。
-- 附件、引用、slash command 的预览区域保持统一高度和视觉样式。
-- Stop / Send 按钮位置和尺寸进一步统一。
+已调整：
+
+- 输入区增加 `input-shell`，主输入行只保留附件、textarea 和 Send/Stop。
+- model pill 下移到输入框下方状态行，与 CLI、cwd 摘要放在同一层级。
+- CLI 和 cwd 使用短状态文本展示，完整值保留在 tooltip。
+- Send/Stop 改为同一行、相同高度的操作按钮，减少右侧纵向占用。
+- 附件按钮改为和 textarea 同高的轻边框按钮，弱化单独图标的悬浮感。
+- 移动端保留单行主输入，状态行缩小并自动截断，避免挤压输入框。
+
+目标效果：输入区的主视觉焦点回到文本输入本身，运行上下文退到辅助状态行，同时 Send / Stop / Attach 的尺寸更统一。
 
 ### 5. Settings 页面长期重构
 

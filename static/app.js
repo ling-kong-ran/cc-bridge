@@ -710,6 +710,20 @@ function updateRuntimeSummary() {
   const remoteActive = !!(remoteTargetSelect && remoteTargetSelect.value);
   el.textContent = remoteActive ? `${cwdName} / ${remoteName}` : cwdName;
   el.title = remoteActive ? `${cwd || ''} / ${remoteName}` : (cwd || '');
+  renderInputStatus();
+}
+
+function renderInputStatus() {
+  if (inputCliStatus) {
+    const cliLabel = getSelectedCliLabel();
+    inputCliStatus.textContent = `${t('cliTool')}: ${cliLabel}`;
+    inputCliStatus.title = document.getElementById('cli-select')?.value || cliLabel;
+  }
+  if (inputCwdStatus) {
+    const cwd = cwdInput?.value?.trim() || '';
+    inputCwdStatus.textContent = `${t('cwd')}: ${shortenPlainPath(cwd, 3) || t('unsetCwd')}`;
+    inputCwdStatus.title = cwd || t('unsetCwd');
+  }
 }
 
 function renderRemoteTargetList() {
@@ -1101,6 +1115,7 @@ async function loadClis() {
         openCliInstallModal();
       }
       renderTopbarMeta();
+      renderInputStatus();
       return;
     }
     if (guideBtn) guideBtn.style.display = 'none';
@@ -2612,6 +2627,8 @@ const fileInput = document.getElementById('file-input');
 const attachmentsBar = document.getElementById('attachments-bar');
 const modelPill = document.getElementById('model-pill');
 const modelPillPopover = document.getElementById('model-pill-popover');
+const inputCliStatus = document.getElementById('input-cli-status');
+const inputCwdStatus = document.getElementById('input-cwd-status');
 const quotePreviewBar = document.getElementById('quote-preview-bar');
 const slashCommandPanel = document.getElementById('slash-command-panel');
 const inputWrapper = document.querySelector('.input-wrapper');
@@ -3057,6 +3074,7 @@ function renderModelPill() {
   if (!modelPill) return;
   const val = modelSelect.value;
   modelPill.textContent = getDisplayModelName(val) || 'Model';
+  renderInputStatus();
   // 同步刷新弹出列表里的选项选中态
   if (modelPillPopover && modelPillPopover.style.display === 'block') {
     renderModelPillPopoverOptions();
