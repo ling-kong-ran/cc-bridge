@@ -675,21 +675,38 @@ def git_review(cwd: str) -> dict:
         except Exception:
             return ""
 
+    def _status_label(code):
+        return "modified" if code == "M" else \
+               "added" if code == "A" else \
+               "deleted" if code == "D" else \
+               "renamed" if code == "R" else \
+               "untracked" if code == "?" else "changed"
+
     # git status --porcelain
     raw = _git(["status", "--porcelain"])
     files = []
+    staged_files = []
+    unstaged_files = []
     if raw:
         for line in raw.split("\n"):
             if not line:
                 continue
-            st = line[:2].strip()
+            index_status = line[0]
+            worktree_status = line[1]
             fn = line[3:].strip()
-            status = "modified" if st in ("M", " M", "MM") else \
-                     "added" if st in ("A", " A", "AM") else \
-                     "deleted" if st in ("D", " D") else \
-                     "renamed" if st.startswith("R") else \
-                     "untracked" if st.startswith("??") else "changed"
-            files.append({"status": status, "file": fn.replace("\\", "/"), "raw": st})
+            normalized = fn.replace("\\", "/")
+            if index_status == "?" and worktree_status == "?":
+                item = {"status": "untracked", "file": normalized, "raw": "??"}
+                files.append(item)
+                unstaged_files.append(item)
+                continue
+            status = _status_label(index_status if index_status != " " else worktree_status)
+            item = {"status": status, "file": normalized, "raw": line[:2].strip()}
+            files.append(item)
+            if index_status != " ":
+                staged_files.append({"status": _status_label(index_status), "file": normalized, "raw": index_status})
+            if worktree_status != " ":
+                unstaged_files.append({"status": _status_label(worktree_status), "file": normalized, "raw": worktree_status})
 
     # git diff --stat 获取变更统计
     stat_output = _git(["diff", "--stat", "HEAD"])
@@ -704,6 +721,8 @@ def git_review(cwd: str) -> dict:
         "git": True,
         "branch": branch or "unknown",
         "files": files,
+        "stagedFiles": staged_files,
+        "unstagedFiles": unstaged_files,
         "stat": stat_output,
         "stagedStat": staged,
         "unstagedStat": unstaged,

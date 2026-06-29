@@ -104,13 +104,25 @@
 
 目标效果：每个 Workspace tab 的用途在内容区内更清晰，右侧面板的信息层级更稳定。
 
+### 7. Review tab staged / unstaged 视觉分组
+
+问题：Review tab 原本把变更文件放在一个列表里，只在下方显示 staged / unstaged stat 文本，暂存区和工作区变更的边界不够清楚。
+
+已调整：
+
+- `/api/review` 在原有 `files` 之外返回 `stagedFiles` 和 `unstagedFiles`。
+- Review tab 按 `已暂存` / `未暂存` 分组展示文件列表。
+- staged 分组使用绿色弱强调，unstaged 分组使用琥珀色弱强调。
+- 没有对应分组内容时显示紧凑 empty state。
+
+目标效果：审查变更时可以更快判断哪些文件已经暂存、哪些仍停留在工作区。
+
 ## 后续可继续优化的方向
 
 ### 1. 右侧 Workspace 面板继续完善
 
 当前右侧面板已经比之前清晰，但仍有进一步优化空间：
 
-- Review tab 可以增加 staged / unstaged 的视觉分组。
 - 支持拖拽调整右侧面板宽度。
 
 ### 2. 左侧 Sidebar 信息密度优化

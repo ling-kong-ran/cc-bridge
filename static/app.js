@@ -4216,21 +4216,26 @@ async function loadReview(cwd) {
     let html = panelHead();
     // 分支名
     html += `<div class="review-branch"><span data-i18n="reviewBranch">${esc(t('reviewBranch'))}</span><span class="review-branch-name">${esc(data.branch)}</span><span class="review-branch-count">${esc(t('itemCount', { count: files.length }))}</span></div>`;
-    // 文件列表
-    if (files.length === 0) {
-      html += `<div class="review-empty">${esc(t('reviewNoChanges'))}</div>`;
-    } else {
-      html += `<div class="review-section-title" data-i18n="filesTab">${esc(t('filesTab'))}</div>`;
-      html += `<div class="review-file-list">`;
       const statusLabel = {
         modified: t('statusModified'), added: t('statusAdded'), deleted: t('statusDeleted'),
         renamed: t('statusRenamed'), untracked: t('statusUntracked'), changed: t('statusChanged')
       };
-      for (const f of files) {
-        html += `<div class="review-file-item"><span class="rf-name">${esc(f.file)}</span><span class="rf-badge ${f.status}">${esc(statusLabel[f.status] || f.status)}</span></div>`;
+      const renderReviewFileList = (items) => {
+        if (!items.length) return `<div class="review-empty compact">${esc(t('reviewNoChanges'))}</div>`;
+        return `<div class="review-file-list">${items.map(f => `<div class="review-file-item"><span class="rf-name">${esc(f.file)}</span><span class="rf-badge ${esc(f.status)}">${esc(statusLabel[f.status] || f.status)}</span></div>`).join('')}</div>`;
+      };
+      const stagedFiles = data.stagedFiles || [];
+      const unstagedFiles = data.unstagedFiles || [];
+      const hasSplitFiles = stagedFiles.length || unstagedFiles.length;
+      if (hasSplitFiles) {
+        html += `<div class="review-change-group staged"><div class="review-section-title" data-i18n="reviewStaged">${esc(t('reviewStaged'))}</div>${renderReviewFileList(stagedFiles)}</div>`;
+        html += `<div class="review-change-group unstaged"><div class="review-section-title" data-i18n="reviewUnstaged">${esc(t('reviewUnstaged'))}</div>${renderReviewFileList(unstagedFiles)}</div>`;
+      } else if (files.length === 0) {
+        html += `<div class="review-empty">${esc(t('reviewNoChanges'))}</div>`;
+      } else {
+        html += `<div class="review-section-title" data-i18n="filesTab">${esc(t('filesTab'))}</div>`;
+        html += renderReviewFileList(files);
       }
-      html += `</div>`;
-    }
     // 变更统计
     if (data.stagedStat) {
       html += `<div class="review-section-title" data-i18n="reviewStaged">${esc(t('reviewStaged'))}</div>`;

@@ -1364,6 +1364,30 @@ body.pane-right-collapsed .chat-sidebar {
   border-bottom: 1px solid var(--border-dim);
 }
 
+.review-change-group {
+  border: 1px solid var(--border-dim);
+  border-radius: var(--radius-xs);
+  background: rgba(255,255,255,0.015);
+  overflow: hidden;
+}
+.review-change-group .review-section-title {
+  margin: 0;
+  padding: 6px 8px;
+  background: rgba(255,255,255,0.02);
+}
+.review-change-group.staged .review-section-title {
+  color: var(--green-dim);
+}
+.review-change-group.unstaged .review-section-title {
+  color: var(--amber);
+}
+.review-change-group .review-file-list {
+  padding: 3px;
+}
+.review-empty.compact {
+  padding: 10px 8px;
+}
+
 .review-file-list {
   display: flex; flex-direction: column; gap: 1px;
 }
