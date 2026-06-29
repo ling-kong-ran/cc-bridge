@@ -19,7 +19,6 @@ class ScheduledTaskRunner:
         self._stop_event = asyncio.Event()
 
     async def start(self):
-        store.reset_running_tasks()
         while not self._stop_event.is_set():
             try:
                 await self.tick()

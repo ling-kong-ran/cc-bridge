@@ -136,24 +136,6 @@ def list_tasks() -> list[dict]:
     return tasks
 
 
-def reset_running_tasks(error: str = "上次运行未正常结束") -> list[dict]:
-    data = _read_raw()
-    tasks = [normalize_task(t) for t in data.get("tasks", []) if isinstance(t, dict)]
-    changed = False
-    now = _now()
-    for task in tasks:
-        if task.get("last_status") == "running":
-            task["last_status"] = "error"
-            task["last_error"] = error
-            task["updated_at"] = now
-            task["next_run_at"] = compute_next_run_at(task)
-            changed = True
-    if changed:
-        data["tasks"] = tasks
-        _write_raw(data)
-    return tasks
-
-
 def get_task(task_id: str) -> dict | None:
     for task in list_tasks():
         if task.get("id") == task_id:
