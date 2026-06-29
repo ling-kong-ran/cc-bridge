@@ -698,6 +698,7 @@ function updateRemoteMutateRow() {
   remoteMutateRow.style.display = active ? '' : 'none';
   if (!active && remoteAllowMutate) remoteAllowMutate.checked = false;
   updateRuntimeSummary();
+  renderWelcomeRuntime();
 }
 
 function updateRuntimeSummary() {
@@ -1118,6 +1119,7 @@ async function loadClis() {
         body: JSON.stringify({ path: cliSelect.value }),
       });
       renderTopbarMeta();
+      renderWelcomeRuntime();
       addSystemMsg(t('cliSwitched', { path: cliSelect.value }));
       loadSlashCommands();
     };
@@ -1138,6 +1140,7 @@ function selectCli(path) {
     body: JSON.stringify({ path }),
   }).catch(() => {});
   renderTopbarMeta();
+  renderWelcomeRuntime();
   return true;
 }
 
@@ -1402,6 +1405,7 @@ async function loadModels() {
     if (!availableModels.length) {
       modelSelect.innerHTML = '<option value="claude-sonnet-4-6">Sonnet 4.6</option>';
       renderModelPill();
+      renderWelcomeRuntime();
       return;
     }
     modelSelect.innerHTML = availableModels.map((model, idx) => (
@@ -1411,9 +1415,11 @@ async function loadModels() {
       modelSelect.value = availableModels[0] || '';
     }
     renderModelPill();
+    renderWelcomeRuntime();
   } catch (e) {
     modelSelect.innerHTML = '<option value="claude-sonnet-4-6">Sonnet 4.6</option>';
     renderModelPill();
+    renderWelcomeRuntime();
   }
 }
 
@@ -1705,6 +1711,7 @@ function bindSSEEvents() {
     renderTopbarMeta(data.model || '');
     if (data.model && modelSelect) { modelSelect.value = data.model; }
     renderModelPill();
+    renderWelcomeRuntime();
     if (modelLabel) addSystemMsg(t('modelChanged', { model: modelLabel }));
   });
 
@@ -2665,6 +2672,7 @@ function initInput() {
   modelSelect.addEventListener('change', () => {
     renderTopbarMeta();
     renderModelPill();
+    renderWelcomeRuntime();
     slashCommands = [];
     closeSlashCommandPanel();
     // 记住选择，刷新后恢复
@@ -2675,6 +2683,7 @@ function initInput() {
     slashCommands = [];
     closeSlashCommandPanel();
     updateRuntimeSummary();
+    renderWelcomeRuntime();
     openCurrentCwdSessionGroup();
     loadSessions();
     loadMcpServers();
@@ -4543,6 +4552,7 @@ async function loadSessions() {
     sessionTotal = data.total || 0;
     renderSessionList(cachedSessions);
     renderWelcomeSessions(cachedSessions);
+    renderWelcomeRuntime();
     renderLoadMore();
   } catch (e) {
     console.error('历史会话加载失败:', e);
@@ -4584,21 +4594,25 @@ function renderLoadMore() {
 function renderWelcomeSessions(sessions) {
   const el = document.getElementById('welcome-sessions');
   if (!el) return;
-  const active = sessions.filter(s => s.is_active);
-  const recent = sessions.filter(s => !s.is_active).slice(0, 5);
-  if (!active.length && !recent.length) { el.innerHTML = ''; return; }
+  const current = sessions.filter(s => isCurrentCwd(s.cwd)).slice(0, 3);
+  const currentIds = new Set(current.map(s => s.session_id));
+  const recent = sessions.filter(s => !currentIds.has(s.session_id)).slice(0, Math.max(0, 5 - current.length));
+  if (!current.length && !recent.length) {
+    el.innerHTML = `<div class="welcome-empty">${esc(t('noHistory'))}</div>`;
+    return;
+  }
 
   let html = '';
-  if (active.length) {
-    html += `<div class="welcome-session-section">
-      <div class="welcome-session-label"><span class="welcome-session-dot-pulse"></span> ${esc(t('activeSessions') || 'Active')}</div>
-      ${active.map(s => renderWelcomeSessionItem(s, true)).join('')}
+  if (current.length) {
+    html += `<div class="welcome-session-section current">
+      <div class="welcome-session-label">${esc(t('currentProject'))}</div>
+      ${current.map(s => renderWelcomeSessionItem(s, s.is_active)).join('')}
     </div>`;
   }
   if (recent.length) {
     html += `<div class="welcome-session-section">
       <div class="welcome-session-label">${esc(t('recentSessions') || 'Recent')}</div>
-      ${recent.map(s => renderWelcomeSessionItem(s, false)).join('')}
+      ${recent.map(s => renderWelcomeSessionItem(s, s.is_active)).join('')}
     </div>`;
   }
   el.innerHTML = html;
@@ -4611,6 +4625,20 @@ function renderWelcomeSessions(sessions) {
       resumeSession(item.dataset.sid, item.dataset.cwd, item.dataset.model, Number(item.dataset.cost || 0), item.dataset.remoteTarget || '', tokens, item.dataset.cli || '');
     });
   });
+}
+
+function renderWelcomeRuntime() {
+  const el = document.getElementById('welcome-runtime');
+  if (!el) return;
+  const cwd = cwdInput?.value?.trim() || '';
+  const modelLabel = getDisplayModelName(modelSelect?.value || '', false) || '-';
+  const cliLabel = getSelectedCliLabel();
+  const remoteName = remoteTargetSelect?.selectedOptions?.[0]?.textContent?.trim() || t('remoteTargetNone');
+  el.innerHTML = `
+    <div class="welcome-runtime-row"><span>${esc(t('cwd'))}</span><strong title="${esc(cwd || t('unsetCwd'))}">${esc(shortenPlainPath(cwd, 4) || t('unsetCwd'))}</strong></div>
+    <div class="welcome-runtime-row"><span>${esc(t('cliTool'))}</span><strong>${esc(cliLabel)}</strong></div>
+    <div class="welcome-runtime-row"><span>${esc(t('model'))}</span><strong>${esc(modelLabel)}</strong></div>
+    <div class="welcome-runtime-row"><span>${esc(t('remote'))}</span><strong>${esc(remoteName)}</strong></div>`;
 }
 
 function renderWelcomeSessionItem(s, isActive) {

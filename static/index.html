@@ -154,25 +154,28 @@
         <div class="chat-main">
           <div id="messages" class="messages">
             <div class="welcome-msg">
-              <pre class="welcome-art">
-  ██████╗ ██████╗██████╗
- ██╔════╝██╔════╝██╔══██╗
- ██║     ██║     ██████╔╝
- ██║     ██║     ██╔══██╗
- ╚██████╗╚██████╗██████╔╝
-  ╚═════╝ ╚═════╝╚═════╝</pre>
-              <p class="welcome-sub" data-i18n="appSubtitleShort">Claude Code Bridge</p>
-              <div id="welcome-sessions" class="welcome-sessions"></div>
-              <div class="welcome-guide">
-                <div class="welcome-guide-title" data-i18n="gettingStarted">Getting Started</div>
-                <div class="welcome-guide-steps">
-                  <span data-i18n="stepRuntime">Set runtime options</span>
-                  <span data-i18n="stepCwd">Choose a working directory</span>
-                  <span data-i18n="stepNewSession">Start a session, then type</span>
+              <div class="welcome-panel">
+                <div class="welcome-hero">
+                  <div class="welcome-kicker" data-i18n="appSubtitleShort">Claude Code Bridge</div>
+                  <div class="welcome-title">Claude Code Bridge</div>
+                  <div class="welcome-sub" data-i18n="welcomeWorkflowHint">Start from runtime context, then resume or create a session.</div>
                 </div>
-                <button type="button" id="welcome-new-session" class="welcome-action">
-                  <span class="btn-prefix">&gt;</span> <span data-i18n="newSession">New Session</span>
-                </button>
+                <div class="welcome-grid">
+                  <section class="welcome-card welcome-start-card">
+                    <div class="welcome-card-label" data-i18n="welcomeStart">Start</div>
+                    <button type="button" id="welcome-new-session" class="welcome-action">
+                      <span class="btn-prefix">&gt;</span> <span data-i18n="newSession">New Session</span>
+                    </button>
+                  </section>
+                  <section class="welcome-card welcome-recent-card">
+                    <div class="welcome-card-label" data-i18n="recentSessions">Recent</div>
+                    <div id="welcome-sessions" class="welcome-sessions"></div>
+                  </section>
+                  <section class="welcome-card welcome-runtime-card">
+                    <div class="welcome-card-label" data-i18n="welcomeRuntime">Runtime</div>
+                    <div id="welcome-runtime" class="welcome-runtime"></div>
+                  </section>
+                </div>
               </div>
             </div>
           </div>
