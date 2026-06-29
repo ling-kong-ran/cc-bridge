@@ -927,6 +927,7 @@ async function loadThemePreference() {
     await applyLanguage(language, false);
     applyNotificationPreference(Boolean(data.notifications_enabled));
     accessContext = { isLocalhost: Boolean(data.is_localhost), defaultCwd: data.default_cwd || '' };
+    document.body.classList.toggle('pane-right-collapsed', data.right_panel_collapsed === true);
     applyLanAccessPreference(data);
 
     if (data.language !== language || Number(data.font_size_percent) !== size) {
@@ -4048,6 +4049,11 @@ function initRightPanel() {
     }
   };
 
+  const persistDesktopState = () => {
+    if (isMobile()) return;
+    saveGuiSettings({ right_panel_collapsed: document.body.classList.contains('pane-right-collapsed') });
+  };
+
   const ensurePaneContent = (resetTab = false) => {
     if (resetTab) switchToSidebarTab('files');
     refreshRightPaneFiles();
@@ -4064,6 +4070,7 @@ function initRightPanel() {
     }
     document.body.classList.remove('pane-right-collapsed');
     if (toggleBtn) toggleBtn.classList.add('active');
+    persistDesktopState();
     ensurePaneContent(false);
   };
 
@@ -4077,6 +4084,7 @@ function initRightPanel() {
     } else {
       document.body.classList.add('pane-right-collapsed');
       if (toggleBtn) toggleBtn.classList.remove('active');
+      persistDesktopState();
     }
   };
 
