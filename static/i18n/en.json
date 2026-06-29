@@ -6,6 +6,7 @@
   "restartSession": "Restart",
   "runtimeSettings": "Runtime Settings",
   "runtimeSummary": "CWD / Remote",
+  "currentProject": "Current project",
   "cliTool": "CLI Tool",
   "model": "Model",
   "skipPermissions": "Skip Permissions",

@@ -6,6 +6,7 @@
   "restartSession": "重新开始",
   "runtimeSettings": "运行设置",
   "runtimeSummary": "工作目录 / 远程",
+  "currentProject": "当前项目",
   "cliTool": "命令行工具",
   "model": "模型",
   "skipPermissions": "跳过权限确认",

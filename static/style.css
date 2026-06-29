@@ -407,6 +407,13 @@ body.sidebar-collapsed .sidebar-content {
   border: 1px solid var(--border-dim);
   border-radius: var(--radius-xs);
   background: rgba(255,255,255,0.015);
+  transition: border-color var(--t-fast), background var(--t-fast), box-shadow var(--t-fast);
+}
+
+body:not(.has-active-session) .runtime-panel {
+  border-color: rgba(var(--accent-rgb), 0.24);
+  background: linear-gradient(135deg, rgba(var(--accent-rgb), 0.055), rgba(255,255,255,0.015));
+  box-shadow: inset 0 0 0 1px rgba(var(--accent-rgb), 0.035);
 }
 
 .runtime-summary {
@@ -445,6 +452,12 @@ body.sidebar-collapsed .sidebar-content {
   color: var(--text-ghost);
   font-size: 9px;
   white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+body:not(.has-active-session) .runtime-summary-value {
+  color: var(--green-dim);
 }
 
 .runtime-panel-body {
@@ -813,6 +826,34 @@ html.light-theme .select {
 
 .session-group.open > .session-group-header {
   color: var(--text-bright);
+}
+
+.session-group.current-project > .session-group-header {
+  border-color: rgba(var(--accent-rgb), 0.22);
+  background: rgba(var(--accent-rgb), 0.035);
+}
+
+.session-group.current-project.open > .session-group-header,
+.session-group.current-project > .session-group-header:hover {
+  border-color: rgba(var(--accent-rgb), 0.34);
+  background: var(--green-faint);
+}
+
+.session-group.current-project .session-group-chevron {
+  text-shadow: 0 0 10px rgba(var(--accent-rgb), 0.55);
+}
+
+.session-group-badge {
+  margin-left: 5px;
+  padding: 1px 5px;
+  border: 1px solid rgba(var(--accent-rgb), 0.28);
+  border-radius: 999px;
+  color: var(--green-dim);
+  background: rgba(var(--accent-rgb), 0.06);
+  font-size: 8.5px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  vertical-align: 1px;
 }
 
 .session-group-chevron {

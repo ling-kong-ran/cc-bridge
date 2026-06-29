@@ -703,11 +703,12 @@ function updateRemoteMutateRow() {
 function updateRuntimeSummary() {
   const el = document.querySelector('.runtime-summary-value');
   if (!el) return;
-  const cwdName = getProjectName(cwdInput?.value?.trim() || '', t('cwd'));
+  const cwd = cwdInput?.value?.trim() || '';
+  const cwdName = shortenPlainPath(cwd, 3) || t('cwd');
   const remoteName = remoteTargetSelect?.selectedOptions?.[0]?.textContent?.trim() || '';
   const remoteActive = !!(remoteTargetSelect && remoteTargetSelect.value);
   el.textContent = remoteActive ? `${cwdName} / ${remoteName}` : cwdName;
-  el.title = remoteActive ? `${cwdInput?.value?.trim() || ''} / ${remoteName}` : (cwdInput?.value?.trim() || '');
+  el.title = remoteActive ? `${cwd || ''} / ${remoteName}` : (cwd || '');
 }
 
 function renderRemoteTargetList() {
@@ -3328,6 +3329,7 @@ function updateUI() {
   btnStop.classList.toggle('visible', isResponding);
   btnStop.disabled = isViewer;
   btnNewSession.innerHTML = `<span class="btn-prefix">&gt;</span> ${sessionActive ? t('restartSession') : t('newSession')}`;
+  document.body.classList.toggle('has-active-session', sessionActive);
   if (!sessionActive && sidebarCollapsed) sidebarCollapsed = false;
   setSidebarCollapsed(sidebarCollapsed);
   // viewer 模式时禁用部分配置修改（CWD 可随时更换）
@@ -4658,17 +4660,18 @@ function renderSessionList(sessions) {
     const forcedOpen = group.sessions.some(s => s.session_id === currentSessionId);
     const savedOpen = sessionGroupOpenState.get(group.key);
     const defaultOpen = isCurrentCwd(group.cwd) || groups.length === 1;
+    const isCurrentProject = isCurrentCwd(group.cwd);
     const isOpen = forcedOpen || (savedOpen === undefined ? defaultOpen : savedOpen);
     const latestTime = formatTime(group.latest);
     const groupCost = group.sessions.reduce((sum, s) => sum + Number(s.total_cost_usd || 0), 0);
     const sessionsHtml = group.sessions.map(s => renderSessionItem(s)).join('');
 
-    return `<div class="session-group${isOpen ? ' open' : ' collapsed'}" data-group-key="${esc(group.key)}" data-cwd="${esc(group.cwd || '')}">
+    return `<div class="session-group${isOpen ? ' open' : ' collapsed'}${isCurrentProject ? ' current-project' : ''}" data-group-key="${esc(group.key)}" data-cwd="${esc(group.cwd || '')}">
       <button type="button" class="session-group-header" aria-expanded="${isOpen ? 'true' : 'false'}">
         <span class="session-group-chevron">${isOpen ? '▾' : '▸'}</span>
         <span class="session-group-main">
-          <span class="session-group-title">${esc(group.name)}</span>
-        <span class="session-group-path">${esc(group.cwd || t('unsetCwd'))}</span>
+          <span class="session-group-title">${esc(group.name)}${isCurrentProject ? ` <span class="session-group-badge">${esc(t('currentProject'))}</span>` : ''}</span>
+        <span class="session-group-path">${shortenPath(group.cwd || t('unsetCwd'), 3)}</span>
       </span>
       <span class="session-group-meta">${esc(t('itemCount', { count: group.sessions.length }))} · ${esc(latestTime)}${groupCost > 0 ? ` · $${groupCost.toFixed(4)}` : ''}</span>
       </button>
@@ -5298,12 +5301,17 @@ function esc(str) {
     .replace(/"/g, '&quot;');
 }
 
-function shortenPath(path, maxSegments = 3) {
+function shortenPlainPath(path, maxSegments = 3) {
   if (!path) return '';
-  const normalized = path.replace(/\\/g, '/').replace(/\/+$/, '');
-  const parts = normalized.split('/');
-  if (parts.length <= maxSegments) return esc(normalized);
-  return '.../' + esc(parts.slice(-maxSegments).join('/'));
+  const normalized = String(path).replace(/\\/g, '/').replace(/\/+$/, '');
+  const parts = normalized.split('/').filter(Boolean);
+  if (parts.length <= maxSegments) return normalized;
+  const prefix = /^[A-Za-z]:$/.test(parts[0]) ? `${parts[0]}/` : '';
+  return `.../${prefix}${parts.slice(-maxSegments).join('/')}`;
+}
+
+function shortenPath(path, maxSegments = 3) {
+  return esc(shortenPlainPath(path, maxSegments));
 }
 
 function sanitizeLinkHref(href) {
