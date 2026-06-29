@@ -205,19 +205,26 @@
         </div>
         <div class="chat-sidebar" id="chat-sidebar">
           <div class="chat-sidebar-header">
+            <div class="chat-sidebar-title-row">
+              <span class="chat-sidebar-title" data-i18n="workspacePanel">Workspace</span>
+              <div class="chat-sidebar-header-actions">
+                <button id="btn-session-agent-add" class="btn-icon-mini" title="拉入成员" data-i18n-title="pullMember" style="display:none">+</button>
+                <button id="btn-chat-sidebar-close" class="btn-icon-mini btn-close-sidebar" title="收起面板" data-i18n-title="collapsePanel">›</button>
+              </div>
+            </div>
             <div class="chat-sidebar-tabs">
               <button class="chat-sidebar-tab active" data-tab="files" data-i18n="filesTab">Files</button>
               <button class="chat-sidebar-tab" data-tab="review" data-i18n="reviewTab">Review</button>
               <button class="chat-sidebar-tab" data-tab="members" data-i18n="sessionMembers">Members</button>
             </div>
-            <div class="chat-sidebar-header-actions">
-              <button id="btn-session-agent-add" class="btn-icon-mini" title="拉入成员" data-i18n-title="pullMember">+</button>
-              <button id="btn-chat-sidebar-close" class="btn-icon-mini btn-close-sidebar" title="收起面板" data-i18n-title="collapsePanel">×</button>
-            </div>
           </div>
           <div class="chat-sidebar-body">
             <div id="file-tree-panel" class="file-tree-panel">
               <div class="file-tree-toolbar">
+                <div class="file-tree-context">
+                  <div class="file-tree-label" data-i18n="cwd">Working Directory</div>
+                  <div id="file-tree-path" class="file-tree-path">-</div>
+                </div>
                 <button id="btn-file-tree-refresh" class="btn-icon-mini" title="Refresh">↻</button>
               </div>
               <div id="file-tree-content" class="file-tree-content"></div>

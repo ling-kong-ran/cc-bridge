@@ -73,7 +73,7 @@
 
   --pane-left:  304px;
   --nav-rail:    64px;
-  --pane-right: 280px;
+  --pane-right: 320px;
 }
 
 html.light-theme {
@@ -1113,10 +1113,10 @@ html.light-theme .select {
 .chat-sidebar {
   width: var(--pane-right);
   flex: 0 0 var(--pane-right);
-  min-width: 240px;
-  max-width: 360px;
+  min-width: 260px;
+  max-width: 380px;
   overflow: hidden;
-  background: var(--bg-deep);
+  background: linear-gradient(180deg, var(--bg-surface), var(--bg-deep));
   border-left: 1px solid var(--border);
   display: flex; flex-direction: column;
   transition: flex-basis var(--t-base), width var(--t-base), min-width var(--t-base), border-color var(--t-base), opacity var(--t-base);
@@ -1141,29 +1141,61 @@ body.pane-right-collapsed .chat-sidebar {
   /* mobile 兼容：桌面端由 pane-right-collapsed 控制 */
 }
 .chat-sidebar-header {
-  display: flex; align-items: center; justify-content: space-between;
-  padding: 6px 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 10px 8px;
   border-bottom: 1px solid var(--border-dim);
-  flex-shrink: 0; gap: 6px;
+  flex-shrink: 0;
+}
+.chat-sidebar-title-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.chat-sidebar-title {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--text-bright);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
 }
 .chat-sidebar-tabs {
-  display: flex; gap: 2px;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 4px;
 }
 .chat-sidebar-tab {
-  background: none; border: none;
-  padding: 4px 10px; border-radius: var(--radius-xs);
+  background: transparent;
+  border: 1px solid transparent;
+  padding: 5px 8px;
+  border-radius: var(--radius-xs);
   font-size: 11px; font-family: var(--font-mono);
   color: var(--text-muted); cursor: pointer;
   transition: all var(--t-fast); white-space: nowrap;
   letter-spacing: 0.03em;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .chat-sidebar-tab.active {
-  background: var(--bg-raised); color: var(--text-base);
+  background: var(--green-faint);
+  border-color: rgba(var(--accent-rgb), 0.22);
+  color: var(--green);
 }
-.chat-sidebar-tab:hover:not(.active) { color: var(--text-base); }
+.chat-sidebar-tab:hover:not(.active) {
+  background: var(--bg-raised);
+  border-color: var(--border-dim);
+  color: var(--text-base);
+}
 .chat-sidebar-header-actions {
   display: flex; align-items: center; gap: 4px;
   flex-shrink: 0;
+}
+.btn-close-sidebar {
+  font-size: 18px;
+  font-weight: 700;
 }
 .chat-sidebar-body {
   padding: 10px 10px 16px; flex: 1; overflow-y: auto;
@@ -1171,7 +1203,34 @@ body.pane-right-collapsed .chat-sidebar {
 }
 /* 文件树 */
 .file-tree-toolbar {
-  display: flex; justify-content: flex-end; margin-bottom: 6px;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 10px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--border-dim);
+}
+.file-tree-context {
+  min-width: 0;
+  flex: 1;
+}
+.file-tree-label {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  font-weight: 700;
+  color: var(--text-ghost);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  margin-bottom: 3px;
+}
+.file-tree-path {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .file-tree-content { font-size: 11px; }
 .file-tree-entry {
@@ -3647,7 +3706,7 @@ html.light-theme .agent-status-bar {
   .chat-sidebar {
     position: fixed;
     top: 0; right: 0; bottom: 0;
-    width: min(78vw, 280px);
+    width: min(84vw, 320px);
     flex: none;
     min-width: 0;
     max-width: none;
@@ -3662,7 +3721,7 @@ html.light-theme .agent-status-bar {
   }
   body.pane-right-open .chat-sidebar,
   body.pane-right-collapsed .chat-sidebar {
-    width: min(78vw, 280px);
+    width: min(84vw, 320px);
     flex-basis: auto;
     min-width: 0;
     border-left-color: var(--border);
@@ -3924,7 +3983,7 @@ html.light-theme .agent-status-bar {
   }
 
   .chat-sidebar {
-    width: min(78vw, 280px);
+    width: min(84vw, 320px);
   }
 }
 

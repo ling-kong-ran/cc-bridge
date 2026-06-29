@@ -4189,14 +4189,24 @@ async function loadReview(cwd) {
   }
 }
 
+function updateFileTreePathLabel(path = fileTreePath || cwdInput?.value || '') {
+  const label = document.getElementById('file-tree-path');
+  if (!label) return;
+  const normalized = String(path || '').replace(/\\/g, '/');
+  label.textContent = normalized || '-';
+  label.title = normalized;
+}
+
 async function loadFileTree(path) {
   const content = document.getElementById('file-tree-content');
   if (!content) return;
   content.innerHTML = '<div class="file-tree-empty">Loading...</div>';
+  updateFileTreePathLabel(path);
   try {
     const resp = await fetch(`/api/browse?path=${encodeURIComponent(path)}`);
     const data = await resp.json();
     fileTreePath = path;
+    updateFileTreePathLabel(path);
     if (data.items) {
       let html = '';
       if (data.parent) {

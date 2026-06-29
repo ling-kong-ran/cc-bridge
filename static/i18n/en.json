@@ -355,6 +355,7 @@
   "sessionMembers": "Members",
   "pullMember": "Add member",
   "filesTab": "Files",
+  "workspacePanel": "Workspace",
   "searchAgent": "Search members...",
   "collapsePanel": "Collapse panel",
   "viewingSession": "Viewing live session from another client (read-only)",

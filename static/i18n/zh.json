@@ -354,6 +354,7 @@
   "sessionMembers": "成员",
   "pullMember": "拉入成员",
   "filesTab": "文件",
+  "workspacePanel": "工作区",
   "searchAgent": "搜索成员...",
   "collapsePanel": "收起面板",
   "viewingSession": "正在观看其他客户端的实时会话（只读）",
