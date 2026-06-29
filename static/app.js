@@ -159,6 +159,7 @@ async function loadDefaultCwd() {
     const data = await resp.json();
     if (data.cwd && !cwdInput.value.trim()) {
       cwdInput.value = data.cwd;
+      updateRuntimeSummary();
       loadSessions();
       refreshRightPaneFiles();
     }
@@ -696,6 +697,17 @@ function updateRemoteMutateRow() {
   const active = !!(remoteTargetSelect && remoteTargetSelect.value);
   remoteMutateRow.style.display = active ? '' : 'none';
   if (!active && remoteAllowMutate) remoteAllowMutate.checked = false;
+  updateRuntimeSummary();
+}
+
+function updateRuntimeSummary() {
+  const el = document.querySelector('.runtime-summary-value');
+  if (!el) return;
+  const cwdName = getProjectName(cwdInput?.value?.trim() || '', t('cwd'));
+  const remoteName = remoteTargetSelect?.selectedOptions?.[0]?.textContent?.trim() || '';
+  const remoteActive = !!(remoteTargetSelect && remoteTargetSelect.value);
+  el.textContent = remoteActive ? `${cwdName} / ${remoteName}` : cwdName;
+  el.title = remoteActive ? `${cwdInput?.value?.trim() || ''} / ${remoteName}` : (cwdInput?.value?.trim() || '');
 }
 
 function renderRemoteTargetList() {
@@ -1568,7 +1580,10 @@ function bindSSEEvents() {
       if (welcome) welcome.remove();
       if (data.session_id) {
         currentSessionId = data.session_id;
-        if (data.cwd) cwdInput.value = data.cwd;
+        if (data.cwd) {
+          cwdInput.value = data.cwd;
+          updateRuntimeSummary();
+        }
         refreshRightPaneFiles();
         showPage('chat');
         loadSessionHistory(data.session_id, data.cwd || '');
@@ -1670,6 +1685,7 @@ function bindSSEEvents() {
     const data = JSON.parse(e.data);
     if (data.cwd) {
       cwdInput.value = data.cwd;
+      updateRuntimeSummary();
       slashCommands = [];
       closeSlashCommandPanel();
       openCurrentCwdSessionGroup();
@@ -2630,6 +2646,7 @@ function initInput() {
   cwdInput.addEventListener('change', () => {
     slashCommands = [];
     closeSlashCommandPanel();
+    updateRuntimeSummary();
     openCurrentCwdSessionGroup();
     loadSessions();
     loadMcpServers();
@@ -3243,7 +3260,10 @@ function startNewSession() {
 function createNewSession(cwd) {
   resetSessionViewState();
 
-  if (cwd) cwdInput.value = cwd;
+  if (cwd) {
+    cwdInput.value = cwd;
+    updateRuntimeSummary();
+  }
   refreshRightPaneFiles();
   openCurrentCwdSessionGroup();
   sendAction('new_session', {
@@ -4611,6 +4631,7 @@ function renderSessionList(sessions) {
         loadSessions();
         if (sessionId === currentSessionId) {
           cwdInput.value = newCwd.trim();
+          updateRuntimeSummary();
         }
       } else {
         addSystemMsg(t('cwdNotChanged', { message: result.error || t('unknownError') }), true);
@@ -4907,7 +4928,10 @@ async function resumeSession(sessionId, cwd, model, savedCost = 0, remoteTargetI
   renderTokens();
 
   // 设置 UI
-  if (cwd) cwdInput.value = cwd;
+  if (cwd) {
+    cwdInput.value = cwd;
+    updateRuntimeSummary();
+  }
   refreshRightPaneFiles();
   openCurrentCwdSessionGroup();
   if (model && hasModelOption(model)) {
@@ -4963,6 +4987,7 @@ async function resumeSession(sessionId, cwd, model, savedCost = 0, remoteTargetI
       if (updateResult.ok) {
         addSystemMsg(t('cwdChanged', { path: newCwd }));
         cwdInput.value = newCwd;
+        updateRuntimeSummary();
         resumeCwd = newCwd;
         // 重试 resume
         result = await sendAction('resume_session', {
@@ -5191,6 +5216,7 @@ pickerSelect.addEventListener('click', () => {
     return;
   }
   cwdInput.value = pickerCurrentDir;
+  updateRuntimeSummary();
   slashCommands = [];
   closeSlashCommandPanel();
   openCurrentCwdSessionGroup();
