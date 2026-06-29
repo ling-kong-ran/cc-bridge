@@ -3944,14 +3944,15 @@ async function removeSessionAgent(name) {
 
 function renderSessionAgentsPanel() {
   const panel = document.getElementById('group-member-panel');
-  if (!panel) return;
+  const list = document.getElementById('group-member-list') || panel;
+  if (!panel || !list) return;
 
   if (!sessionAgents.length) {
-    panel.innerHTML = `<div class="group-member-empty">${esc(t('noSessionAgents'))}</div>`;
+    list.innerHTML = `<div class="group-member-empty">${esc(t('noSessionAgents'))}</div>`;
     return;
   }
 
-  panel.innerHTML = sessionAgents.map(a => `
+  list.innerHTML = sessionAgents.map(a => `
     <span class="group-member-chip" data-agent="${esc(a)}">
       <span class="chip-name" title="${esc(a)}">${esc(a)}</span>
       <span class="chip-remove" data-action="remove" data-agent="${esc(a)}">&times;</span>
@@ -3959,7 +3960,7 @@ function renderSessionAgentsPanel() {
   `).join('');
 
   // 点击芯片名 → 插入 @名称
-  panel.querySelectorAll('.group-member-chip .chip-name').forEach(nameEl => {
+  list.querySelectorAll('.group-member-chip .chip-name').forEach(nameEl => {
     nameEl.addEventListener('click', () => {
       const name = nameEl.parentElement.dataset.agent;
       const input = document.getElementById('message-input');
@@ -3976,7 +3977,7 @@ function renderSessionAgentsPanel() {
   });
 
   // 点击 × → 移除 agent
-  panel.querySelectorAll('.chip-remove').forEach(btn => {
+  list.querySelectorAll('.chip-remove').forEach(btn => {
     btn.addEventListener('click', (e) => {
       e.stopPropagation();
       removeSessionAgent(btn.dataset.agent);
@@ -4177,7 +4178,6 @@ function switchToSidebarTab(tab) {
   document.getElementById('file-tree-panel').style.display = tab === 'files' ? '' : 'none';
   document.getElementById('review-panel').style.display = tab === 'review' ? '' : 'none';
   document.getElementById('group-member-panel').style.display = tab === 'members' ? '' : 'none';
-  document.getElementById('btn-session-agent-add').style.display = tab === 'members' ? '' : 'none';
 }
 
 let fileTreePath = '';

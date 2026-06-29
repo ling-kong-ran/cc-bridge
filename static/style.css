@@ -1323,6 +1323,25 @@ body.pane-right-collapsed .chat-sidebar {
 }
 .btn-icon-mini:hover { color: var(--text-base); border-color: var(--text-dim); }
 .chat-sidebar .group-member-panel {
+  display: flex; flex-direction: column; gap: 10px;
+}
+.member-panel-head {
+  display: flex; align-items: flex-start; justify-content: space-between;
+  gap: 10px; padding-bottom: 9px; border-bottom: 1px solid var(--border-dim);
+}
+.member-panel-label {
+  font-family: var(--font-mono); font-size: 9px; font-weight: 700;
+  color: var(--text-ghost); letter-spacing: 0.12em; text-transform: uppercase;
+  margin-bottom: 3px;
+}
+.member-panel-hint {
+  font-family: var(--font-mono); font-size: 10.5px; color: var(--text-muted);
+  line-height: 1.45;
+}
+.member-panel-head .btn-mini {
+  margin: 0; padding: 5px 8px; font-size: 10px;
+}
+.group-member-list {
   display: flex; flex-direction: column; gap: 4px;
 }
 .chat-sidebar .group-member-chip {
