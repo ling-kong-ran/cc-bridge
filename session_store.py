@@ -108,6 +108,10 @@ def list_sessions() -> list[dict]:
             merged["manual_title"] = bool(existing.get("manual_title"))
             merged["created_at"] = existing.get("created_at") or discovered.get("created_at", "")
             merged["source"] = existing.get("source") or "gui"
+            if existing.get("scheduled_task_id"):
+                merged["scheduled_task_id"] = existing.get("scheduled_task_id", "")
+            if existing.get("scheduled_task_name"):
+                merged["scheduled_task_name"] = existing.get("scheduled_task_name", "")
         sessions_by_id[sid] = merged
 
     sessions = list(sessions_by_id.values())
@@ -206,7 +210,8 @@ def parse_session_jsonl(jsonl_path: Path) -> dict | None:
 
 
 def save_session(session_id: str, title: str, model: str, cwd: str,
-                 remote_target_id: str = "", cli: str = "") -> dict:
+                 remote_target_id: str = "", cli: str = "",
+                 scheduled_task_id: str = "", scheduled_task_name: str = "") -> dict:
     """创建或更新会话记录"""
     sessions = _load()
     now = datetime.now().isoformat(timespec="seconds")
@@ -236,6 +241,10 @@ def save_session(session_id: str, title: str, model: str, cwd: str,
             s["pinned"] = bool(s.get("pinned"))
             if cli:
                 s["cli"] = cli
+            if scheduled_task_id:
+                s["scheduled_task_id"] = scheduled_task_id
+            if scheduled_task_name:
+                s["scheduled_task_name"] = scheduled_task_name
             _save(sessions)
             return s
 
@@ -252,6 +261,10 @@ def save_session(session_id: str, title: str, model: str, cwd: str,
         "created_at": now,
         "updated_at": now,
     }
+    if scheduled_task_id:
+        entry["scheduled_task_id"] = scheduled_task_id
+    if scheduled_task_name:
+        entry["scheduled_task_name"] = scheduled_task_name
     sessions.insert(0, entry)
     _save(sessions)
     return entry

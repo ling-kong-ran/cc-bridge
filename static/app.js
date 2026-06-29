@@ -4868,7 +4868,7 @@ function filterSessions(sessions) {
   const keywords = (sessionSearchInput?.value || '').trim().toLowerCase().split(/\s+/).filter(Boolean);
   if (!keywords.length) return sessions;
   return sessions.filter(s => {
-    const haystack = [s.title, s.cwd, s.model, s.updated_at, s.remote_target_id].map(value => String(value || '').toLowerCase());
+    const haystack = [s.title, s.cwd, s.model, s.updated_at, s.remote_target_id, s.scheduled_task_name].map(value => String(value || '').toLowerCase());
     return keywords.every(keyword => haystack.some(value => value.includes(keyword)));
   });
 }
@@ -4881,11 +4881,18 @@ function renderSessionItem(s, showCwd = false) {
   const savedTokens = normalizeTokenUsage(s.total_tokens);
   const tokenTotal = tokenUsageTotal(savedTokens);
   const modelLabel = getDisplayModelName(s.model || '', false);
+  const scheduledTaskName = s.scheduled_task_name || '';
+  const isScheduled = Boolean(s.scheduled_task_id || scheduledTaskName);
+  const scheduledBadge = isScheduled ? `<span class="session-item-badge scheduled" title="${esc(scheduledTaskName || t('scheduledSession'))}">${esc(t('scheduledSession'))}</span>` : '';
+  const scheduledMeta = isScheduled && scheduledTaskName ? ` · ${esc(t('scheduledTaskName', { name: scheduledTaskName }))}` : '';
   const cwdLine = showCwd && s.cwd ? `<div class="session-item-cwd-line">${esc(s.cwd)}</div>` : '';
   return `<div class="session-item${isActive ? ' active' : ''}" data-sid="${esc(s.session_id)}" data-cwd="${esc(s.cwd)}" data-model="${esc(s.model)}" data-cli="${esc(s.cli || '')}" data-cost="${esc(savedCost)}" data-tokens="${esc(JSON.stringify(savedTokens))}" data-remote-target="${esc(s.remote_target_id || '')}">
     <div class="session-item-main">
-      <div class="session-item-title">${esc(title)}</div>
-      <div class="session-item-meta">${modelLabel ? `${esc(modelLabel)} · ` : ''}${esc(time)}${savedCost > 0 ? ` · $${savedCost.toFixed(4)}` : ''}${tokenTotal > 0 ? ` · ${formatTokenCount(tokenTotal)} tok` : ''}</div>
+      <div class="session-item-title-row">
+        <div class="session-item-title">${esc(title)}</div>
+        ${scheduledBadge}
+      </div>
+      <div class="session-item-meta">${modelLabel ? `${esc(modelLabel)} · ` : ''}${esc(time)}${scheduledMeta}${savedCost > 0 ? ` · $${savedCost.toFixed(4)}` : ''}${tokenTotal > 0 ? ` · ${formatTokenCount(tokenTotal)} tok` : ''}</div>
       ${cwdLine}
     </div>
     <div class="session-item-actions">

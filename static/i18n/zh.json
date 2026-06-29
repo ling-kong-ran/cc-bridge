@@ -111,6 +111,8 @@
   "noHistory": "暂无历史会话",
   "loadMore": "加载更多...",
   "newChat": "新会话",
+  "scheduledSession": "定时",
+  "scheduledTaskName": "任务：{name}",
   "unsetCwd": "未设置工作目录",
   "itemCount": "{count} 个",
   "delete": "删除",

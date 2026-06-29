@@ -71,6 +71,8 @@ class ScheduledTaskRunner:
                         task.get("cwd") or "",
                         remote_target_id=task.get("remote_target_id", ""),
                         cli=task.get("cli", ""),
+                        scheduled_task_id=task_id,
+                        scheduled_task_name=task.get("name") or "定时任务",
                     )
                 elif evt_type == "result":
                     saw_result = True

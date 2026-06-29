@@ -875,11 +875,40 @@ html.light-theme .select {
 
 .session-item-main { flex: 1; min-width: 0; }
 
+.session-item-title-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
 .session-item-title {
   font-size: 12px; font-family: var(--font-mono);
   color: var(--text-base);
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
   letter-spacing: 0.02em;
+}
+
+.session-item-title-row .session-item-title {
+  flex: 1;
+  min-width: 0;
+}
+
+.session-item-badge {
+  flex-shrink: 0;
+  border: 1px solid var(--border-dim);
+  border-radius: 999px;
+  padding: 1px 5px;
+  font-size: 9px;
+  line-height: 1.4;
+  color: var(--text-muted);
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.session-item-badge.scheduled {
+  color: var(--amber);
+  border-color: rgba(232, 167, 48, 0.35);
+  background: var(--amber-faint);
 }
 
 .session-item.active .session-item-title { color: var(--green); }

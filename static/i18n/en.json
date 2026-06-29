@@ -112,6 +112,8 @@
   "noHistory": "No history",
   "loadMore": "Load more...",
   "newChat": "New Chat",
+  "scheduledSession": "Scheduled",
+  "scheduledTaskName": "Task: {name}",
   "unsetCwd": "Unset working directory",
   "itemCount": "{count} items",
   "delete": "Delete",
