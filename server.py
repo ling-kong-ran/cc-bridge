@@ -46,6 +46,8 @@ from session_store import list_sessions, save_session, add_session_usage, delete
 from artifact_store import list_artifacts as list_artifact_records
 from memory_index import list_memory_files, search_memory, get_memory_file, delete_memory_file, save_memory_file, index_memory
 import remote_manager
+import scheduled_task_store
+from scheduled_task_runner import ScheduledTaskRunner
 
 STATIC_DIR = Path(__file__).parent / "static"
 DEFAULT_CWD = str(Path(__file__).parent.resolve())  # 项目根目录作为默认 CWD
@@ -360,6 +362,9 @@ client_ips: dict[str, str] = {}
 
 # 每个 client 的会话 agent 列表（右面板拉入的 agent）
 client_session_agents: dict[str, list] = {}
+
+# 定时任务后台 runner
+scheduled_runner: ScheduledTaskRunner | None = None
 
 # 会话共享：记录哪个 client_id 拥有哪个 session_id（owner），以及谁是 viewer
 session_owner: dict[str, str] = {}  # session_id → owner_client_id
@@ -1944,6 +1949,12 @@ async def handle_action(body: bytes, writer: asyncio.StreamWriter):
         await send_response(writer, 400, "application/json", b'{"error":"unknown action"}')
 
 
+async def publish_scheduled_event(event_type: str, data: dict):
+    """向所有已连接客户端广播定时任务事件。"""
+    for client_id in list(sse_clients.keys()):
+        await push_event(client_id, event_type, data)
+
+
 # ─── REST API ──────────────────────────────────────────────
 async def handle_api_get(path: str, writer: asyncio.StreamWriter, query: dict = None):
     if path == "/api/settings":
@@ -2012,6 +2023,8 @@ async def handle_api_get(path: str, writer: asyncio.StreamWriter, query: dict = 
         cwd = query.get("cwd", [DEFAULT_CWD])[0] or DEFAULT_CWD
         count = index_memory(cwd, force=True)
         data = {"count": count, "ok": count >= 0}
+    elif path == "/api/scheduled-tasks":
+        data = {"tasks": scheduled_task_store.list_tasks()}
     elif path == "/api/remote-targets":
         data = {"targets": remote_manager.list_targets(), "password_supported": remote_manager.password_supported()}
     elif path == "/api/sessions":
@@ -2191,6 +2204,40 @@ async def handle_api_post(path: str, body: bytes, writer: asyncio.StreamWriter):
         result = delete_uploaded_files(data.get("paths") or [])
         resp = json.dumps(result, ensure_ascii=False).encode("utf-8")
         await send_response(writer, 200, "application/json; charset=utf-8", resp)
+        return
+    elif path == "/api/scheduled-tasks":
+        try:
+            task = scheduled_task_store.save_task(data)
+        except ValueError as exc:
+            resp = json.dumps({"error": str(exc)}, ensure_ascii=False).encode("utf-8")
+            await send_response(writer, 400, "application/json; charset=utf-8", resp)
+            return
+        resp = json.dumps(task, ensure_ascii=False).encode("utf-8")
+        await publish_scheduled_event("scheduled_task_updated", {"task": task})
+        await send_response(writer, 200, "application/json; charset=utf-8", resp)
+        return
+    elif path == "/api/scheduled-tasks/delete":
+        ok = scheduled_task_store.delete_task(str(data.get("id", "")))
+        await publish_scheduled_event("scheduled_task_updated", {"tasks": scheduled_task_store.list_tasks()})
+        resp = json.dumps({"ok": ok}, ensure_ascii=False).encode("utf-8")
+        await send_response(writer, 200, "application/json; charset=utf-8", resp)
+        return
+    elif path == "/api/scheduled-tasks/toggle":
+        task = scheduled_task_store.set_task_enabled(str(data.get("id", "")), bool(data.get("enabled", True)))
+        if not task:
+            await send_response(writer, 404, "application/json", b'{"error":"not found"}')
+            return
+        await publish_scheduled_event("scheduled_task_updated", {"task": task})
+        resp = json.dumps(task, ensure_ascii=False).encode("utf-8")
+        await send_response(writer, 200, "application/json; charset=utf-8", resp)
+        return
+    elif path == "/api/scheduled-tasks/run-now":
+        task_id = str(data.get("id", ""))
+        if not task_id or not scheduled_runner:
+            await send_response(writer, 400, "application/json", b'{"error":"invalid task"}')
+            return
+        asyncio.create_task(scheduled_runner.run_task(task_id, manual=True))
+        await send_response(writer, 200, "application/json", b'{"ok":true}')
         return
     elif path == "/api/remote-targets":
         try:
@@ -2431,6 +2478,7 @@ async def run_server(port: int = DEFAULT_PORT, cleanup_old_servers: bool = True)
 
 
 async def main():
+    global scheduled_runner
     cleanup_existing_app_servers()
 
     # 恢复上次选中的 CLI（启动时 _current_cli 默认是第一个检测到的，这里覆盖为用户上次的选择）
@@ -2467,11 +2515,21 @@ async def main():
         import webbrowser
         webbrowser.open(local_url)
 
+    scheduled_runner = ScheduledTaskRunner(publish_scheduled_event)
+    scheduled_task = asyncio.create_task(scheduled_runner.start())
+
     async with server:
         try:
             await server.serve_forever()
         except asyncio.CancelledError:
             pass
+        finally:
+            scheduled_runner.stop()
+            scheduled_task.cancel()
+            try:
+                await scheduled_task
+            except asyncio.CancelledError:
+                pass
 
 
 if __name__ == "__main__":

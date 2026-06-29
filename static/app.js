@@ -28,6 +28,7 @@ let cachedSessions = [];
 let sessionOffset = 0;
 let sessionTotal = 0;
 const SESSION_PAGE_SIZE = 50;
+let scheduledTasks = [];
 let sidebarCollapsed = false;
 
 // ─── DOM ─────────────────────────────────────────────────────
@@ -114,6 +115,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   initMentionAutocomplete();
   initMemoryUI();
   initArtifactsUI();
+  initScheduledTasksUI();
   loadDefaultCwd();
   loadClis();
   loadModels();
@@ -398,6 +400,231 @@ function getProjectName(cwd, fallback = '') {
   const normalized = cwd.replace(/[\\\/]+$/, '');
   const parts = normalized.split(/[\\\/]+/).filter(Boolean);
   return parts[parts.length - 1] || normalized || fallback;
+}
+
+// ─── 定时任务 ──────────────────────────────────────────────────
+function initScheduledTasksUI() {
+  document.getElementById('btn-scheduled-refresh')?.addEventListener('click', loadScheduledTasks);
+  document.getElementById('btn-scheduled-save')?.addEventListener('click', saveScheduledTask);
+  document.getElementById('btn-scheduled-reset')?.addEventListener('click', resetScheduledForm);
+  document.getElementById('scheduled-type')?.addEventListener('change', updateScheduledScheduleFields);
+  updateScheduledScheduleFields();
+}
+
+function populateScheduledSelects() {
+  const model = document.getElementById('scheduled-model');
+  if (model && modelSelect) {
+    const prev = model.value || modelSelect.value;
+    model.innerHTML = Array.from(modelSelect.options).map(opt => `<option value="${esc(opt.value)}">${esc(opt.textContent)}</option>`).join('');
+    if (prev && Array.from(model.options).some(opt => opt.value === prev)) model.value = prev;
+  }
+  const cli = document.getElementById('scheduled-cli');
+  const cliSource = document.getElementById('cli-select');
+  if (cli && cliSource) {
+    const prev = cli.value || cliSource.value;
+    cli.innerHTML = Array.from(cliSource.options).map(opt => `<option value="${esc(opt.value)}">${esc(opt.textContent)}</option>`).join('');
+    if (prev && Array.from(cli.options).some(opt => opt.value === prev)) cli.value = prev;
+  }
+  const remote = document.getElementById('scheduled-remote');
+  if (remote) {
+    const prev = remote.value;
+    remote.innerHTML = `<option value="">${esc(t('remoteTargetNone'))}</option>` + remoteTargets.map(tg => `<option value="${esc(tg.id)}">${esc(tg.name || tg.host)}</option>`).join('');
+    if (remoteTargets.some(tg => tg.id === prev)) remote.value = prev;
+  }
+}
+
+function updateScheduledScheduleFields() {
+  const type = document.getElementById('scheduled-type')?.value || 'interval';
+  const interval = document.getElementById('scheduled-interval-field');
+  const daily = document.getElementById('scheduled-daily-field');
+  const once = document.getElementById('scheduled-once-field');
+  if (interval) interval.style.display = type === 'interval' ? '' : 'none';
+  if (daily) daily.style.display = type === 'daily' ? '' : 'none';
+  if (once) once.style.display = type === 'once' ? '' : 'none';
+}
+
+async function loadScheduledTasks() {
+  const list = document.getElementById('scheduled-task-list');
+  if (!list) return;
+  populateScheduledSelects();
+  try {
+    const resp = await fetch('/api/scheduled-tasks');
+    const data = await resp.json();
+    scheduledTasks = Array.isArray(data.tasks) ? data.tasks : [];
+    renderScheduledTasks();
+  } catch (e) {
+    list.innerHTML = `<p class="empty-state">${esc(t('scheduledLoadFailed'))}</p>`;
+  }
+}
+
+function renderScheduledTasks() {
+  const list = document.getElementById('scheduled-task-list');
+  if (!list) return;
+  if (!scheduledTasks.length) {
+    list.innerHTML = `<p class="empty-state">${esc(t('scheduledNoTasks'))}</p>`;
+    return;
+  }
+  list.innerHTML = scheduledTasks.map(task => `
+    <article class="scheduled-task-item ${task.enabled ? '' : 'disabled'}" data-id="${esc(task.id)}">
+      <div class="scheduled-task-main">
+        <div class="scheduled-task-title-row">
+          <strong>${esc(task.name || t('scheduledTask'))}</strong>
+          <span class="scheduled-status status-${esc(task.last_status || 'idle')}">${esc(task.last_status || (task.enabled ? t('enabled') : t('disabled')))}</span>
+        </div>
+        <div class="scheduled-task-meta">${esc(formatSchedule(task.schedule))} · ${esc(t('nextRun'))}: ${esc(formatTaskTime(task.next_run_at))}</div>
+        <div class="scheduled-task-meta">${esc(shortenPath(task.cwd || '', 4))}</div>
+        ${task.last_error ? `<div class="scheduled-task-error">${esc(task.last_error)}</div>` : ''}
+      </div>
+      <div class="scheduled-task-actions">
+        <button class="btn-mini" data-act="run">${esc(t('runNow'))}</button>
+        <button class="btn-mini" data-act="toggle">${esc(task.enabled ? t('disable') : t('enable'))}</button>
+        <button class="btn-mini" data-act="edit">${esc(t('edit'))}</button>
+        <button class="btn-mini danger" data-act="delete">${esc(t('delete'))}</button>
+      </div>
+    </article>
+  `).join('');
+  list.querySelectorAll('.scheduled-task-item').forEach(item => {
+    const task = scheduledTasks.find(t => t.id === item.dataset.id);
+    item.querySelector('[data-act="run"]')?.addEventListener('click', () => runScheduledTask(task));
+    item.querySelector('[data-act="toggle"]')?.addEventListener('click', () => toggleScheduledTask(task));
+    item.querySelector('[data-act="edit"]')?.addEventListener('click', () => fillScheduledForm(task));
+    item.querySelector('[data-act="delete"]')?.addEventListener('click', () => deleteScheduledTask(task));
+  });
+}
+
+function formatSchedule(schedule) {
+  const s = schedule || {};
+  if (s.type === 'daily') return `${t('scheduleDaily')} ${s.time || '09:00'}`;
+  if (s.type === 'once') return `${t('scheduleOnce')} ${formatTaskTime(s.run_at)}`;
+  return `${t('scheduleInterval')} ${s.minutes || 60}m`;
+}
+
+function formatTaskTime(ts) {
+  const value = Number(ts || 0);
+  if (!value) return '-';
+  try { return new Date(value * 1000).toLocaleString(); } catch (e) { return '-'; }
+}
+
+function toDateTimeLocal(ts) {
+  const date = ts ? new Date(Number(ts) * 1000) : new Date(Date.now() + 3600000);
+  const pad = n => String(n).padStart(2, '0');
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+}
+
+function readScheduledForm() {
+  const type = document.getElementById('scheduled-type')?.value || 'interval';
+  const schedule = { type };
+  if (type === 'daily') schedule.time = document.getElementById('scheduled-time')?.value || '09:00';
+  else if (type === 'once') {
+    const raw = document.getElementById('scheduled-run-at')?.value || '';
+    schedule.run_at = raw ? Math.floor(new Date(raw).getTime() / 1000) : Math.floor(Date.now() / 1000) + 3600;
+  } else {
+    schedule.minutes = Math.max(1, Number(document.getElementById('scheduled-minutes')?.value || 60));
+  }
+  return {
+    id: document.getElementById('scheduled-task-id')?.value || '',
+    name: document.getElementById('scheduled-name')?.value || '',
+    prompt: document.getElementById('scheduled-prompt')?.value || '',
+    cwd: document.getElementById('scheduled-cwd')?.value || cwdInput?.value || '',
+    model: document.getElementById('scheduled-model')?.value || modelSelect?.value || '',
+    cli: document.getElementById('scheduled-cli')?.value || document.getElementById('cli-select')?.value || '',
+    remote_target_id: document.getElementById('scheduled-remote')?.value || '',
+    allow_remote_mutate: document.getElementById('scheduled-allow-remote-mutate')?.checked || false,
+    reuse_session: document.getElementById('scheduled-reuse-session')?.checked || false,
+    enabled: document.getElementById('scheduled-enabled')?.checked !== false,
+    schedule,
+  };
+}
+
+function fillScheduledForm(task) {
+  populateScheduledSelects();
+  document.getElementById('scheduled-form-title').textContent = t('scheduledEditTask');
+  document.getElementById('scheduled-task-id').value = task.id || '';
+  document.getElementById('scheduled-name').value = task.name || '';
+  document.getElementById('scheduled-prompt').value = task.prompt || '';
+  document.getElementById('scheduled-cwd').value = task.cwd || cwdInput?.value || '';
+  if (task.model) document.getElementById('scheduled-model').value = task.model;
+  if (task.cli) document.getElementById('scheduled-cli').value = task.cli;
+  document.getElementById('scheduled-remote').value = task.remote_target_id || '';
+  document.getElementById('scheduled-allow-remote-mutate').checked = !!task.allow_remote_mutate;
+  document.getElementById('scheduled-reuse-session').checked = !!task.reuse_session;
+  document.getElementById('scheduled-enabled').checked = task.enabled !== false;
+  const schedule = task.schedule || { type: 'interval', minutes: 60 };
+  document.getElementById('scheduled-type').value = schedule.type || 'interval';
+  document.getElementById('scheduled-minutes').value = schedule.minutes || 60;
+  document.getElementById('scheduled-time').value = schedule.time || '09:00';
+  document.getElementById('scheduled-run-at').value = toDateTimeLocal(schedule.run_at);
+  updateScheduledScheduleFields();
+}
+
+function resetScheduledForm() {
+  document.getElementById('scheduled-form-title').textContent = t('scheduledNewTask');
+  document.getElementById('scheduled-task-id').value = '';
+  document.getElementById('scheduled-name').value = '';
+  document.getElementById('scheduled-prompt').value = '';
+  document.getElementById('scheduled-cwd').value = cwdInput?.value || '';
+  document.getElementById('scheduled-type').value = 'interval';
+  document.getElementById('scheduled-minutes').value = 60;
+  document.getElementById('scheduled-time').value = '09:00';
+  document.getElementById('scheduled-run-at').value = toDateTimeLocal();
+  document.getElementById('scheduled-allow-remote-mutate').checked = false;
+  document.getElementById('scheduled-reuse-session').checked = false;
+  document.getElementById('scheduled-enabled').checked = true;
+  populateScheduledSelects();
+  updateScheduledScheduleFields();
+}
+
+async function saveScheduledTask() {
+  const payload = readScheduledForm();
+  if (!payload.prompt.trim()) {
+    showToast(t('scheduledPromptRequired'), 'warning');
+    return;
+  }
+  const resp = await fetch('/api/scheduled-tasks', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+  const data = await resp.json();
+  if (!resp.ok) {
+    showToast(data.error || t('scheduledSaveFailed'), 'error');
+    return;
+  }
+  showToast(t('scheduledTaskSaved'), 'success');
+  resetScheduledForm();
+  loadScheduledTasks();
+}
+
+async function deleteScheduledTask(task) {
+  if (!task || !confirm(t('scheduledConfirmDelete', { name: task.name || t('scheduledTask') }))) return;
+  await fetch('/api/scheduled-tasks/delete', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ id: task.id }),
+  });
+  showToast(t('scheduledTaskDeleted'), 'success');
+  loadScheduledTasks();
+}
+
+async function toggleScheduledTask(task) {
+  if (!task) return;
+  await fetch('/api/scheduled-tasks/toggle', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ id: task.id, enabled: !task.enabled }),
+  });
+  loadScheduledTasks();
+}
+
+async function runScheduledTask(task) {
+  if (!task) return;
+  await fetch('/api/scheduled-tasks/run-now', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ id: task.id }),
+  });
+  showToast(t('scheduledTaskStarted'), 'info');
+  loadScheduledTasks();
 }
 
 // ─── 远程诊断目标 ────────────────────────────────────────────
@@ -1184,7 +1411,8 @@ function showPage(page) {
   if (target) target.classList.add('active');
   // 更新全局 titlebar
   const pageLabel = document.getElementById('titlebar-page-label');
-  if (pageLabel) pageLabel.textContent = t(page === 'config' ? 'settings' : page === 'artifacts' ? 'artifacts' : 'chat');
+  const pageKey = page === 'config' ? 'settings' : page === 'artifacts' ? 'artifacts' : page === 'scheduled' ? 'scheduledTasks' : 'chat';
+  if (pageLabel) pageLabel.textContent = t(pageKey);
   const backBtn = document.getElementById('btn-titlebar-back');
   if (backBtn) backBtn.style.display = page === 'chat' ? 'none' : '';
   const titlebarMeta = document.getElementById('titlebar-meta');
@@ -1198,6 +1426,8 @@ function showPage(page) {
     renderTopbarStatusSummary();
   } else if (page === 'artifacts') {
     loadArtifacts();
+  } else if (page === 'scheduled') {
+    loadScheduledTasks();
   }
   hideMentionPopup();
 }
@@ -1516,6 +1746,25 @@ function bindSSEEvents() {
     clearSubagentBubbles();
     updateUI();
     addSystemMsg(t('interrupted'));
+  });
+
+  eventSource.addEventListener('scheduled_task_started', () => {
+    loadScheduledTasks();
+  });
+
+  eventSource.addEventListener('scheduled_task_updated', () => {
+    loadScheduledTasks();
+  });
+
+  eventSource.addEventListener('scheduled_task_finished', () => {
+    loadScheduledTasks();
+    loadSessions();
+  });
+
+  eventSource.addEventListener('scheduled_task_error', (e) => {
+    const data = JSON.parse(e.data || '{}');
+    if (data.message) showToast(data.message, 'error');
+    loadScheduledTasks();
   });
 
   eventSource.addEventListener('error', (e) => {

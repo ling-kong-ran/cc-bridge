@@ -73,6 +73,10 @@
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path><path d="M3.27 6.96 12 12.01l8.73-5.05"></path><path d="M12 22.08V12"></path></svg>
             <span data-i18n="artifacts">Artifacts</span>
           </button>
+          <button class="nav-btn" data-page="scheduled" title="Scheduled Tasks" data-i18n-title="scheduledTasks">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"></circle><path d="M12 7v5l3 2"></path></svg>
+            <span data-i18n="scheduledTasks">Scheduled</span>
+          </button>
         </div>
         <button class="nav-btn nav-settings" data-page="config" title="Settings" data-i18n-title="settings">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06A1.65 1.65 0 0 0 15 19.4a1.65 1.65 0 0 0-1 .6 1.65 1.65 0 0 0-.4 1.1V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82-.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.6 15a1.65 1.65 0 0 0-.6-1 1.65 1.65 0 0 0-1.1-.4H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.6a1.65 1.65 0 0 0 1-.6 1.65 1.65 0 0 0 .4-1.1V3a2 2 0 0 1 4 0v.09A1.65 1.65 0 0 0 15 4.6a1.65 1.65 0 0 0 1.82.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9c.14.31.36.58.6.8.31.28.7.4 1.1.4H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
@@ -252,6 +256,100 @@
           </div>
           <div id="artifacts-summary" class="artifacts-summary"></div>
           <div id="artifacts-content" class="artifacts-content"></div>
+        </div>
+      </div>
+
+      <!-- 定时任务页 -->
+      <div id="page-scheduled" class="page scheduled-page">
+        <div class="scheduled-shell">
+          <header class="scheduled-header">
+            <div>
+              <div class="scheduled-kicker" data-i18n="scheduledTasksKicker">Automation</div>
+              <h2 data-i18n="scheduledTasks">Scheduled Tasks</h2>
+              <p data-i18n="scheduledTasksSubtitle">Run Claude Code prompts automatically on an interval, daily time, or one-off schedule.</p>
+            </div>
+            <button id="btn-scheduled-refresh" class="btn-mini" type="button" data-i18n="refresh">Refresh</button>
+          </header>
+          <div class="scheduled-layout">
+            <section class="scheduled-list-card">
+              <div id="scheduled-task-list" class="scheduled-task-list">
+                <p class="empty-state" data-i18n="loading">Loading...</p>
+              </div>
+            </section>
+            <section class="scheduled-form-card">
+              <h3 id="scheduled-form-title" data-i18n="scheduledNewTask">New Task</h3>
+              <input type="hidden" id="scheduled-task-id">
+              <label class="field-label" for="scheduled-name" data-i18n="scheduledTaskName">Name</label>
+              <input id="scheduled-name" class="input" maxlength="80" placeholder="Daily review">
+              <label class="field-label" for="scheduled-prompt" data-i18n="scheduledTaskPrompt">Prompt</label>
+              <textarea id="scheduled-prompt" class="input scheduled-prompt" rows="6" placeholder="Describe what Claude Code should do..." data-i18n-placeholder="scheduledPromptPlaceholder"></textarea>
+              <label class="field-label" for="scheduled-cwd" data-i18n="cwd">Working Directory</label>
+              <input id="scheduled-cwd" class="input" placeholder="C:\project-path" data-i18n-placeholder="cwdPlaceholder">
+              <div class="scheduled-grid">
+                <div>
+                  <label class="field-label" for="scheduled-model" data-i18n="model">Model</label>
+                  <select id="scheduled-model" class="select"></select>
+                </div>
+                <div>
+                  <label class="field-label" for="scheduled-cli" data-i18n="cliTool">CLI Tool</label>
+                  <select id="scheduled-cli" class="select"></select>
+                </div>
+              </div>
+              <div class="scheduled-grid">
+                <div>
+                  <label class="field-label" for="scheduled-remote" data-i18n="remoteTarget">Remote Target</label>
+                  <select id="scheduled-remote" class="select"></select>
+                </div>
+                <label class="toggle-label scheduled-toggle">
+                  <span class="toggle-track">
+                    <input type="checkbox" id="scheduled-allow-remote-mutate">
+                    <span class="toggle-indicator danger"></span>
+                  </span>
+                  <span class="toggle-text" data-i18n="allowRemoteFix">Allow remote writes</span>
+                </label>
+              </div>
+              <div class="scheduled-grid">
+                <div>
+                  <label class="field-label" for="scheduled-type" data-i18n="scheduleType">Schedule</label>
+                  <select id="scheduled-type" class="select">
+                    <option value="interval" data-i18n="scheduleInterval">Interval</option>
+                    <option value="daily" data-i18n="scheduleDaily">Daily</option>
+                    <option value="once" data-i18n="scheduleOnce">Once</option>
+                  </select>
+                </div>
+                <div id="scheduled-interval-field">
+                  <label class="field-label" for="scheduled-minutes" data-i18n="scheduleEveryMinutes">Every minutes</label>
+                  <input id="scheduled-minutes" class="input" type="number" min="1" value="60">
+                </div>
+                <div id="scheduled-daily-field" style="display:none">
+                  <label class="field-label" for="scheduled-time" data-i18n="scheduleAtTime">At time</label>
+                  <input id="scheduled-time" class="input" type="time" value="09:00">
+                </div>
+                <div id="scheduled-once-field" style="display:none">
+                  <label class="field-label" for="scheduled-run-at" data-i18n="scheduleRunAt">Run at</label>
+                  <input id="scheduled-run-at" class="input" type="datetime-local">
+                </div>
+              </div>
+              <label class="toggle-label scheduled-toggle">
+                <span class="toggle-track">
+                  <input type="checkbox" id="scheduled-reuse-session">
+                  <span class="toggle-indicator"></span>
+                </span>
+                <span class="toggle-text" data-i18n="reuseSession">Reuse last conversation</span>
+              </label>
+              <label class="toggle-label scheduled-toggle">
+                <span class="toggle-track">
+                  <input type="checkbox" id="scheduled-enabled" checked>
+                  <span class="toggle-indicator"></span>
+                </span>
+                <span class="toggle-text" data-i18n="enabled">Enabled</span>
+              </label>
+              <div class="scheduled-form-actions">
+                <button id="btn-scheduled-save" class="btn btn-primary" type="button"><span class="btn-prefix">&gt;</span> <span data-i18n="save">Save</span></button>
+                <button id="btn-scheduled-reset" class="btn-save" type="button" data-i18n="cancel">Cancel</button>
+              </div>
+            </section>
+          </div>
         </div>
       </div>
 
