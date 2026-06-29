@@ -211,13 +211,12 @@ function renderTopbarStatusSummary() {
   if (!sidebarCollapsed) return;
   if (topbarConnection) topbarConnection.textContent = connectionOnline ? t('connected') : t('connecting');
   if (topbarCost && topbarCostValue) {
-    topbarCost.style.display = totalCost > 0 ? '' : 'none';
-    topbarCostValue.textContent = totalCost.toFixed(4);
+    topbarCost.style.display = '';
+    topbarCostValue.textContent = costValue?.textContent || totalCost.toFixed(4);
   }
   if (topbarTokens && topbarTokenValue) {
-    const total = tokenUsageTotal(totalTokens);
-    topbarTokens.style.display = total > 0 ? '' : 'none';
-    topbarTokenValue.textContent = formatTokenUsage(totalTokens);
+    topbarTokens.style.display = '';
+    topbarTokenValue.textContent = tokenValue?.textContent || formatTokenUsage(totalTokens);
   }
 }
 

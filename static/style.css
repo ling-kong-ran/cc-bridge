@@ -190,7 +190,7 @@ html, body {
 .titlebar-meta {
   display: flex;
   align-items: center;
-  justify-content: center;
+  justify-content: flex-start;
   gap: 10px;
   min-width: 0;
   flex: 1;
@@ -250,6 +250,7 @@ html, body {
   align-items: center;
   gap: 4px;
   flex-shrink: 0;
+  margin-left: auto;
 }
 
 .titlebar-btn {
