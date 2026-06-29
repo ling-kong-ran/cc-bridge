@@ -928,6 +928,7 @@ async function loadThemePreference() {
     applyNotificationPreference(Boolean(data.notifications_enabled));
     accessContext = { isLocalhost: Boolean(data.is_localhost), defaultCwd: data.default_cwd || '' };
     document.body.classList.toggle('pane-right-collapsed', data.right_panel_collapsed === true);
+    applyRightPaneWidth(data.right_panel_width);
     applyLanAccessPreference(data);
 
     if (data.language !== language || Number(data.font_size_percent) !== size) {
@@ -4031,10 +4032,35 @@ function refreshRightPaneFiles() {
   loadFileTree(cwd);
 }
 
+const RIGHT_PANE_MIN = 280;
+const RIGHT_PANE_MAX = 520;
+const RIGHT_PANE_DEFAULT = 320;
+
+function clampRightPaneWidth(value) {
+  const viewportMax = Math.max(RIGHT_PANE_MIN, Math.min(RIGHT_PANE_MAX, Math.round(window.innerWidth * 0.46)));
+  const width = Number(value) || RIGHT_PANE_DEFAULT;
+  return Math.max(RIGHT_PANE_MIN, Math.min(viewportMax, Math.round(width)));
+}
+
+function applyRightPaneWidth(value) {
+  if (window.matchMedia('(max-width: 760px)').matches) {
+    document.documentElement.style.removeProperty('--pane-right');
+    return;
+  }
+  document.documentElement.style.setProperty('--pane-right', `${clampRightPaneWidth(value)}px`);
+}
+
+function getCurrentRightPaneWidth() {
+  const raw = getComputedStyle(document.documentElement).getPropertyValue('--pane-right').trim();
+  const parsed = parseFloat(raw);
+  return Number.isFinite(parsed) ? parsed : RIGHT_PANE_DEFAULT;
+}
+
 function initRightPanel() {
   const sidebar = document.getElementById('chat-sidebar');
   const toggleBtn = document.getElementById('btn-toggle-right-panel');
   const closeBtn = document.getElementById('btn-chat-sidebar-close');
+  const resizer = document.getElementById('chat-sidebar-resizer');
   const addBtn = document.getElementById('btn-session-agent-add');
   const popover = document.getElementById('agent-add-popover');
 
@@ -4045,6 +4071,7 @@ function initRightPanel() {
       sidebar.classList.remove('open');
       document.body.classList.remove('mobile-overlay', 'pane-right-open');
       document.getElementById('mobile-sidebar-backdrop')?.classList.remove('visible');
+      applyRightPaneWidth(getCurrentRightPaneWidth());
       if (toggleBtn) toggleBtn.classList.toggle('active', !document.body.classList.contains('pane-right-collapsed'));
     }
   };
@@ -4057,6 +4084,38 @@ function initRightPanel() {
   const ensurePaneContent = (resetTab = false) => {
     if (resetTab) switchToSidebarTab('files');
     refreshRightPaneFiles();
+  };
+
+  const initResize = () => {
+    if (!resizer) return;
+    let startX = 0;
+    let startWidth = 0;
+    let nextWidth = 0;
+
+    const finishResize = () => {
+      document.body.classList.remove('resizing-right-pane');
+      document.removeEventListener('pointermove', onPointerMove);
+      document.removeEventListener('pointerup', finishResize);
+      document.removeEventListener('pointercancel', finishResize);
+      if (nextWidth) saveGuiSettings({ right_panel_width: nextWidth });
+    };
+
+    const onPointerMove = (e) => {
+      nextWidth = clampRightPaneWidth(startWidth + startX - e.clientX);
+      applyRightPaneWidth(nextWidth);
+    };
+
+    resizer.addEventListener('pointerdown', (e) => {
+      if (isMobile() || document.body.classList.contains('pane-right-collapsed')) return;
+      e.preventDefault();
+      startX = e.clientX;
+      startWidth = getCurrentRightPaneWidth();
+      nextWidth = startWidth;
+      document.body.classList.add('resizing-right-pane');
+      document.addEventListener('pointermove', onPointerMove);
+      document.addEventListener('pointerup', finishResize);
+      document.addEventListener('pointercancel', finishResize);
+    });
   };
 
   const openPanel = () => {
@@ -4176,6 +4235,7 @@ function initRightPanel() {
   } else {
     desktopQuery.addListener(handleRightPaneQueryChange);
   }
+  initResize();
 
   loadSessionAgents();
 }

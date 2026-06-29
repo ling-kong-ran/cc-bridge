@@ -73,7 +73,8 @@
 
   --pane-left:  304px;
   --nav-rail:    64px;
-  --pane-right: 320px;
+  --pane-right-default: 320px;
+  --pane-right: var(--pane-right-default);
 }
 
 html.light-theme {
@@ -1142,14 +1143,46 @@ html.light-theme .select {
 .chat-sidebar {
   width: var(--pane-right);
   flex: 0 0 var(--pane-right);
-  min-width: 260px;
-  max-width: 380px;
+  min-width: 280px;
+  max-width: min(520px, 46vw);
   overflow: hidden;
   background: linear-gradient(180deg, var(--bg-surface), var(--bg-deep));
   border-left: 1px solid var(--border);
   display: flex; flex-direction: column;
   transition: flex-basis var(--t-base), width var(--t-base), min-width var(--t-base), border-color var(--t-base), opacity var(--t-base);
   position: relative; z-index: 1;
+}
+body.resizing-right-pane {
+  cursor: col-resize;
+  user-select: none;
+}
+body.resizing-right-pane .chat-sidebar,
+body.resizing-right-pane .chat-main {
+  transition: none;
+}
+.chat-sidebar-resizer {
+  position: absolute;
+  left: -4px;
+  top: 0;
+  bottom: 0;
+  width: 8px;
+  cursor: col-resize;
+  z-index: 3;
+}
+.chat-sidebar-resizer::after {
+  content: '';
+  position: absolute;
+  left: 3px;
+  top: 10px;
+  bottom: 10px;
+  width: 1px;
+  background: transparent;
+  transition: background var(--t-fast), box-shadow var(--t-fast);
+}
+.chat-sidebar-resizer:hover::after,
+body.resizing-right-pane .chat-sidebar-resizer::after {
+  background: var(--green);
+  box-shadow: var(--green-glow);
 }
 body.pane-right-collapsed .chat-sidebar {
   width: 0;
@@ -3849,6 +3882,9 @@ html.light-theme .agent-status-bar {
   }
   .chat-sidebar.open {
     transform: translateX(0);
+  }
+  .chat-sidebar-resizer {
+    display: none;
   }
 
   /* 移动端右侧面板 escaping overflow 裁切 + z-index 层级 */
