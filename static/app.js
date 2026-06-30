@@ -16,7 +16,6 @@ let totalCost = 0;
 let totalTokens = emptyTokenUsage();
 let currentSessionId = null; // ccb 的 session UUID
 let currentRunId = null; // 当前打开会话正在生成的 run id
-const sessionGroupOpenState = new Map();
 let connectionOnline = false;
 let currentTurnContent = '';
 let currentTurnHasAssistantOutput = false;
@@ -43,7 +42,6 @@ let savedModelPref = '';  // gui_settings 里上次使用的模型，刷新后�
 let autoUpdateEnabled = true;  // 是否启动时自动检查更新
 let skipUpdateVersion = '';    // 被跳过的远端版本 SHA
 let updateInfo = null;         // 最近一次 check-update 的结果
-let quoteSourceText = '';      // 右键引用时暂存的消息文本
 let quotedMessages = [];       // 输入框上方展示的引用卡片
 let contextMenuCwd = '';       // 工作目录右键菜单暂存的 cwd
 const cwdInput = document.getElementById('cwd-input');
@@ -53,6 +51,8 @@ const costValue = document.getElementById('cost-value');
 const tokenDisplay = document.getElementById('token-display');
 const tokenValue = document.getElementById('token-value');
 const sessionSearchInput = document.getElementById('session-search');
+const sessionsCountEl = document.getElementById('sessions-count');
+const sessionsNewSessionBtn = document.getElementById('sessions-new-session');
 const btnThemeToggle = document.getElementById('btn-theme-toggle');
 const btnShortcuts = document.getElementById('btn-shortcuts');
 const shortcutsOverlay = document.getElementById('shortcuts-overlay');
@@ -68,6 +68,10 @@ const topbarTokenValue = document.getElementById('topbar-token-value');
 const topbarSessionId = document.getElementById('topbar-session-id');
 const topbarModel = document.getElementById('topbar-model');
 const topbarCli = document.getElementById('topbar-cli');
+const btnSessionPin = document.getElementById('btn-session-pin');
+const btnSessionCwd = document.getElementById('btn-session-cwd');
+const btnSessionRename = document.getElementById('btn-session-rename');
+const btnSessionDelete = document.getElementById('btn-session-delete');
 const themeToggleText = document.getElementById('theme-toggle-text');
 const languageSelect = document.getElementById('language-select');
 const fontSizeRange = document.getElementById('font-size-range');
@@ -112,6 +116,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   initLanAccessControl();
   await loadThemePreference();
   initNavigation();
+  initTopbarSessionActions();
   initMobileLayout();
   initSSE();
   initInput();
@@ -1108,6 +1113,26 @@ function renderTopbarMeta(modelOverride = '') {
     topbarCli.textContent = cliLabel;
     topbarCli.title = document.getElementById('cli-select')?.value || cliLabel;
   }
+  renderTopbarSessionActions();
+}
+
+function getCurrentSessionRecord() {
+  return cachedSessions.find(s => s.session_id === currentSessionId) || null;
+}
+
+function renderTopbarSessionActions() {
+  const session = getCurrentSessionRecord();
+  const disabled = !currentSessionId || !session;
+  [btnSessionPin, btnSessionCwd, btnSessionRename, btnSessionDelete].forEach(btn => {
+    if (!btn) return;
+    btn.disabled = disabled;
+  });
+  if (btnSessionPin) {
+    btnSessionPin.classList.toggle('pinned', !!session?.pinned);
+    btnSessionPin.textContent = session?.pinned ? 'UNPIN' : 'PIN';
+    btnSessionPin.title = t(session?.pinned ? 'unpinSession' : 'pinSession');
+  }
+  if (btnSessionCwd) btnSessionCwd.title = session?.cwd || t('changeCwd');
 }
 
 async function loadClis() {
@@ -1460,7 +1485,7 @@ function showPage(page) {
   if (target) target.classList.add('active');
   // 更新全局 titlebar
   const pageLabel = document.getElementById('titlebar-page-label');
-  const pageKey = page === 'home' ? 'home' : page === 'config' ? 'settings' : page === 'artifacts' ? 'artifacts' : page === 'scheduled' ? 'scheduledTasks' : 'chat';
+  const pageKey = page === 'home' ? 'home' : page === 'config' ? 'settings' : page === 'artifacts' ? 'artifacts' : page === 'scheduled' ? 'scheduledTasks' : page === 'sessions' ? 'sessions' : 'chat';
   if (pageLabel) pageLabel.textContent = t(pageKey);
   const isChatPage = page === 'chat';
   const backBtn = document.getElementById('btn-titlebar-back');
@@ -1475,9 +1500,14 @@ function showPage(page) {
   if (btnExport) btnExport.style.display = isChatPage ? '' : 'none';
   const btnPanel = document.getElementById('btn-toggle-right-panel');
   if (btnPanel) btnPanel.style.display = isChatPage ? '' : 'none';
+  [btnSessionPin, btnSessionCwd, btnSessionRename, btnSessionDelete].forEach(btn => {
+    if (btn) btn.style.display = 'none';
+  });
   if (isChatPage) {
     renderTopbarMeta();
     renderTopbarStatusSummary();
+  } else if (page === 'sessions') {
+    renderSessionList(cachedSessions);
   } else if (page === 'artifacts') {
     loadArtifacts();
   } else if (page === 'scheduled') {
@@ -1502,6 +1532,12 @@ function initNavigation() {
   if (btnBack) {
     btnBack.addEventListener('click', () => showPage('chat'));
   }
+  sessionSearchInput?.addEventListener('input', () => renderSessionList(cachedSessions));
+  // 会话页新建会话入口
+  sessionsNewSessionBtn?.addEventListener('click', () => {
+    showPage('chat');
+    startNewSession();
+  });
   // 设置页标签切换
   document.querySelectorAll('.settings-tab').forEach(tab => {
     tab.addEventListener('click', () => {
@@ -1512,6 +1548,81 @@ function initNavigation() {
       const panel = document.querySelector(`.config-tab-panel[data-tab="${tabName}"]`);
       if (panel) panel.classList.add('active');
     });
+  });
+}
+
+async function toggleSessionPin(sessionId) {
+  if (!sessionId) return;
+  try {
+    const resp = await fetch('/api/sessions/toggle-pin', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ session_id: sessionId }),
+    });
+    if (resp.ok) await loadSessions();
+  } catch (err) {
+    console.error('[pin] error', err);
+  }
+}
+
+async function changeSessionCwd(session) {
+  if (!session) return;
+  const oldCwd = session.cwd || '';
+  const newCwd = await promptCwdForSession(oldCwd);
+  if (!newCwd || !newCwd.trim() || newCwd.trim() === oldCwd) return;
+  const result = await updateSessionCwd(session.session_id, newCwd.trim());
+  if (result.ok) {
+    addSystemMsg(t('cwdChanged', { path: newCwd.trim() }));
+    if (session.session_id === currentSessionId) {
+      cwdInput.value = newCwd.trim();
+      updateRuntimeSummary();
+      refreshRightPaneFiles();
+    }
+    await loadSessions();
+  } else {
+    addSystemMsg(t('cwdNotChanged', { message: result.error || t('unknownError') }), true);
+  }
+}
+
+async function promptRenameSession(session) {
+  if (!session) return;
+  const currentTitle = session.title || t('newChat');
+  const nextTitle = window.prompt(t('renameSessionPrompt'), currentTitle);
+  if (!nextTitle || nextTitle.trim() === currentTitle) return;
+  await renameSession(session.session_id, nextTitle.trim());
+}
+
+async function deleteSessionRecord(session, nextPage = 'sessions') {
+  if (!session) return;
+  const title = session.title || t('newChat');
+  if (!window.confirm(t('confirmDeleteSession', { title }))) return;
+  await fetch('/api/sessions/delete', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ session_id: session.session_id, cwd: session.cwd || '' }),
+  });
+  if (session.session_id === currentSessionId) currentSessionId = null;
+  await loadSessions();
+  renderTopbarMeta();
+  showPage(nextPage);
+}
+
+function initTopbarSessionActions() {
+  btnSessionPin?.addEventListener('click', async () => {
+    const session = getCurrentSessionRecord();
+    if (session) await toggleSessionPin(session.session_id);
+  });
+
+  btnSessionCwd?.addEventListener('click', async () => {
+    await changeSessionCwd(getCurrentSessionRecord());
+  });
+
+  btnSessionRename?.addEventListener('click', async () => {
+    await promptRenameSession(getCurrentSessionRecord());
+  });
+
+  btnSessionDelete?.addEventListener('click', async () => {
+    await deleteSessionRecord(getCurrentSessionRecord(), 'sessions');
   });
 }
 
@@ -1751,7 +1862,6 @@ function bindSSEEvents() {
     currentSessionId = data.session_id;
     currentRunId = data.run_id || currentRunId;
     renderTopbarMeta();
-    openCurrentCwdSessionGroup();
     loadSessions();
   });
 
@@ -1763,8 +1873,7 @@ function bindSSEEvents() {
       updateRuntimeSummary();
       slashCommands = [];
       closeSlashCommandPanel();
-      openCurrentCwdSessionGroup();
-      loadSessions();
+        loadSessions();
       if (!isViewer) {
         addSystemMsg(t('cwdChanged', { path: data.cwd }));
       }
@@ -1905,7 +2014,7 @@ function setConnectionStatus(connected) {
   dot.className = `status-dot ${connected ? 'online' : 'offline'}`;
   updateConnectionText();
   renderTopbarStatusSummary();
-  btnNewSession.style.opacity = connected ? '1' : '0.5';
+  if (btnNewSession) btnNewSession.style.opacity = connected ? '1' : '0.5';
 }
 
 function updateConnectionText() {
@@ -2614,6 +2723,7 @@ function createAssistantBubble(streaming = true) {
       <div class="stream-status"><span class="stream-dot"></span><span>${esc(t('streamingReply'))}</span></div>
       <div class="msg-content"></div>
       <div class="msg-meta"></div>
+      <button class="msg-quote-btn" type="button" title="${esc(t('quoteMessage'))}" aria-label="${esc(t('quoteMessage'))}">${esc(t('quoteMessage'))}</button>
     </div>
   `;
   messagesEl.appendChild(el);
@@ -2641,7 +2751,10 @@ function addUserMessage(text, quotes = []) {
   ` : '';
   el.innerHTML = `
     <div class="avatar user-avatar">U</div>
-    <div class="msg-bubble"><div class="msg-content">${quoteHtml}${esc(text)}</div></div>
+    <div class="msg-bubble">
+      <div class="msg-content">${quoteHtml}${esc(text)}</div>
+      <button class="msg-quote-btn" type="button" title="${esc(t('quoteMessage'))}" aria-label="${esc(t('quoteMessage'))}">${esc(t('quoteMessage'))}</button>
+    </div>
   `;
   messagesEl.appendChild(el);
   scrollToBottom();
@@ -2742,7 +2855,7 @@ function initInput() {
 
   btnSend.addEventListener('click', sendMessage);
   btnStop.addEventListener('click', interruptCurrentRun);
-  btnNewSession.addEventListener('click', startNewSession);
+  btnNewSession?.addEventListener('click', startNewSession);
   btnExportChat?.addEventListener('click', copyConversationMarkdown);
   topbarSessionId?.addEventListener('click', copyResumeCommand);
   sessionSearchInput?.addEventListener('input', () => renderSessionList(cachedSessions));
@@ -2763,7 +2876,6 @@ function initInput() {
     closeSlashCommandPanel();
     updateRuntimeSummary();
     renderWelcomeRuntime();
-    openCurrentCwdSessionGroup();
     loadSessions();
     loadMcpServers();
   });
@@ -2825,33 +2937,7 @@ function domText(el) {
   return (el.querySelector('.msg-content') || el).textContent.trim();
 }
 
-// ─── 长按模拟右键（移动端） ──────────────────────────────────
-function addLongPressSupport(el, handler) {
-  let pressTimer = null;
-  let pressPos = null;
-
-  el.addEventListener('contextmenu', handler);
-
-  el.addEventListener('touchstart', (e) => {
-    if (e.touches.length !== 1) { clearPress(); return; }
-    pressPos = { x: e.touches[0].clientX, y: e.touches[0].clientY };
-    pressTimer = setTimeout(() => {
-      handler({ clientX: pressPos.x, clientY: pressPos.y, preventDefault: () => {}, target: e.target });
-      clearPress();
-    }, 500);
-  }, { passive: true });
-
-  function clearPress() {
-    clearTimeout(pressTimer);
-    pressTimer = null;
-    pressPos = null;
-  }
-  el.addEventListener('touchend', clearPress);
-  el.addEventListener('touchmove', clearPress);
-  el.addEventListener('touchcancel', clearPress);
-}
-
-// ─── 消息右键引用 ────────────────────────────────────────────
+// ─── 消息引用 ────────────────────────────────────────────────
 function hideMsgContextMenu() {
   const menu = document.getElementById('msg-context-menu');
   if (menu) { menu.style.display = 'none'; menu.style.visibility = 'hidden'; }
@@ -2913,36 +2999,14 @@ function renderQuotePreview() {
 
 function initMessageContextMenu() {
   const menu = document.getElementById('msg-context-menu');
-  if (!menu) return;
+  menu?.remove();
 
-  addLongPressSupport(messagesEl, (e) => {
-    const msgEl = e.target.closest('.message');
-    if (!msgEl) return;
-    e.preventDefault();
-    quoteSourceText = domText(msgEl);
-    if (!quoteSourceText) return;
-    menu.style.display = 'block';
-    const rect = menu.getBoundingClientRect();
-    let x = e.clientX;
-    let y = e.clientY;
-    if (x + rect.width > window.innerWidth) x = window.innerWidth - rect.width - 4;
-    if (y + rect.height > window.innerHeight) y = window.innerHeight - rect.height - 4;
-    menu.style.left = Math.max(4, x) + 'px';
-    menu.style.top = Math.max(4, y) + 'px';
-    menu.style.visibility = 'visible';
-  });
-
-  menu.querySelector('[data-action="quote"]')?.addEventListener('click', () => {
-    quoteIntoInput(quoteSourceText);
-    hideMsgContextMenu();
-  });
-
-  document.addEventListener('click', (e) => {
-    if (!menu.contains(e.target)) hideMsgContextMenu();
-  });
-  document.addEventListener('scroll', hideMsgContextMenu, true);
-  document.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape') hideMsgContextMenu();
+  messagesEl.addEventListener('click', (e) => {
+    const quoteBtn = e.target.closest('.msg-quote-btn');
+    if (!quoteBtn) return;
+    const msgEl = quoteBtn.closest('.message');
+    const text = domText(msgEl);
+    if (text) quoteIntoInput(text);
   });
 }
 
@@ -3417,7 +3481,6 @@ function createNewSession(cwd) {
     updateRuntimeSummary();
   }
   refreshRightPaneFiles();
-  openCurrentCwdSessionGroup();
   sendAction('new_session', {
     model: modelSelect.value,
     cli: document.getElementById('cli-select')?.value || '',
@@ -3445,7 +3508,7 @@ function updateUI() {
   // viewer 模式下 Stop 按钮可见但禁用，补充发送仍可用。
   btnStop.classList.toggle('visible', isResponding);
   btnStop.disabled = isViewer;
-  btnNewSession.innerHTML = `<span class="btn-prefix">&gt;</span> ${sessionActive ? t('restartSession') : t('newSession')}`;
+  if (btnNewSession) btnNewSession.innerHTML = `<span class="btn-prefix">&gt;</span> ${sessionActive ? t('restartSession') : t('newSession')}`;
   document.body.classList.toggle('has-active-session', sessionActive);
   if (!sessionActive && sidebarCollapsed) sidebarCollapsed = false;
   setSidebarCollapsed(sidebarCollapsed);
@@ -4963,6 +5026,7 @@ async function loadMoreSessions() {
 
 function renderLoadMore() {
   const el = document.getElementById('session-list');
+  if (!el) return;
   let btn = document.getElementById('btn-load-more');
   if (sessionOffset < sessionTotal) {
     if (!btn) {
@@ -5074,147 +5138,45 @@ function renderWelcomeSessionItem(s, isActive) {
 
 function renderSessionList(sessions) {
   const el = document.getElementById('session-list');
-  const filtered = filterSessions(sessions || []);
+  if (!el) return;
+  const allSessions = sessions || [];
+  const filtered = filterSessions(allSessions).sort((a, b) => String(b.updated_at || '').localeCompare(String(a.updated_at || '')));
+  if (sessionsCountEl) {
+    sessionsCountEl.textContent = filtered.length === allSessions.length
+      ? t('sessionsCount', { count: filtered.length })
+      : t('sessionsCountFiltered', { shown: filtered.length, total: allSessions.length });
+  }
   if (!filtered.length) {
-    el.innerHTML = `<div class="session-empty">${esc(t(sessions?.length ? 'noMatches' : 'noHistory'))}</div>`;
+    el.innerHTML = `<div class="session-empty">${esc(t(allSessions.length ? 'noMatches' : 'noHistory'))}</div>`;
+    renderTopbarSessionActions();
     return;
   }
 
-  // 拆分置顶会话
-  const pinned = filtered.filter(s => s.pinned);
-  const unpinned = filtered.filter(s => !s.pinned);
-  const groups = groupSessionsByCwd(unpinned);
-
-  let pinnedHtml = '';
-  if (pinned.length) {
-    const sessionsHtml = pinned.map(s => renderSessionItem(s, true)).join('');
-    pinnedHtml = `<div class="session-group pinned-group open" data-group-key="__pinned__">
-      <button type="button" class="session-group-header" aria-expanded="true">
-        <span class="session-group-chevron">▾</span>
-        <span class="session-group-main">
-          <span class="session-group-title">📌 ${esc(t('pinnedSessions'))}</span>
-        </span>
-        <span class="session-group-meta">${esc(t('itemCount', { count: pinned.length }))}</span>
-      </button>
-      <div class="session-group-body">
-        ${sessionsHtml}
-      </div>
-    </div>`;
-  }
-
-  el.innerHTML = pinnedHtml + groups.map(group => {
-    const forcedOpen = group.sessions.some(s => s.session_id === currentSessionId);
-    const savedOpen = sessionGroupOpenState.get(group.key);
-    const defaultOpen = isCurrentCwd(group.cwd) || groups.length === 1;
-    const isCurrentProject = isCurrentCwd(group.cwd);
-    const isOpen = forcedOpen || (savedOpen === undefined ? defaultOpen : savedOpen);
-    const latestTime = formatTime(group.latest);
-    const groupCost = group.sessions.reduce((sum, s) => sum + Number(s.total_cost_usd || 0), 0);
-    const sessionsHtml = group.sessions.map(s => renderSessionItem(s)).join('');
-
-    return `<div class="session-group${isOpen ? ' open' : ' collapsed'}${isCurrentProject ? ' current-project' : ''}" data-group-key="${esc(group.key)}" data-cwd="${esc(group.cwd || '')}">
-      <button type="button" class="session-group-header" aria-expanded="${isOpen ? 'true' : 'false'}">
-        <span class="session-group-chevron">${isOpen ? '▾' : '▸'}</span>
-        <span class="session-group-main">
-          <span class="session-group-title">${esc(group.name)}${isCurrentProject ? ` <span class="session-group-badge">${esc(t('currentProject'))}</span>` : ''}</span>
-        <span class="session-group-path">${shortenPath(group.cwd || t('unsetCwd'), 3)}</span>
-      </span>
-      <span class="session-group-meta">${esc(t('itemCount', { count: group.sessions.length }))} · ${esc(latestTime)}${groupCost > 0 ? ` · $${groupCost.toFixed(4)}` : ''}</span>
-      </button>
-      <div class="session-group-body" ${isOpen ? '' : 'hidden'}>
-        ${sessionsHtml}
-      </div>
-    </div>`;
-  }).join('');
-
-  el.querySelectorAll('.session-group-header').forEach(header => {
-    header.addEventListener('click', () => {
-      const groupEl = header.closest('.session-group');
-      const key = groupEl?.dataset.groupKey || '';
-      if (!key) return;
-      const body = groupEl.querySelector('.session-group-body');
-      const isOpen = !body.hasAttribute('hidden');
-      body.toggleAttribute('hidden', isOpen);
-      groupEl.classList.toggle('open', !isOpen);
-      groupEl.classList.toggle('collapsed', isOpen);
-      header.setAttribute('aria-expanded', String(!isOpen));
-      const chevron = header.querySelector('.session-group-chevron');
-      if (chevron) chevron.textContent = isOpen ? '▸' : '▾';
-      sessionGroupOpenState.set(key, !isOpen);
-    });
-    addLongPressSupport(header, (e) => showCwdContextMenu(e, header.closest('.session-group')?.dataset.cwd || ''));
-  });
+  el.innerHTML = filtered.map(s => renderSessionItem(s)).join('');
 
   el.querySelectorAll('.session-item').forEach(item => {
-    item.addEventListener('click', (e) => {
-      if (e.target.classList.contains('session-item-delete') || e.target.classList.contains('session-item-rename') || e.target.classList.contains('session-item-cwd') || e.target.classList.contains('session-item-pin')) return;
+    item.addEventListener('click', () => {
       const tokens = safeJsonParse(item.dataset.tokens, null);
       showPage('chat');
       resumeSession(item.dataset.sid, item.dataset.cwd, item.dataset.model, Number(item.dataset.cost || 0), item.dataset.remoteTarget || '', tokens, item.dataset.cli || '');
     });
-    const pinBtn = item.querySelector('.session-item-pin');
-    if (pinBtn) {
-      pinBtn.addEventListener('click', async (e) => {
-        e.stopPropagation();
-        const btn = e.currentTarget;
-        const sid = item.dataset.sid;
-        console.log('[pin] toggle', sid);
-        try {
-          const resp = await fetch('/api/sessions/toggle-pin', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ session_id: sid }),
-          });
-          const data = await resp.json();
-          console.log('[pin] response', data);
-          if (resp.ok) {
-            btn.classList.toggle('pinned', data.pinned);
-            btn.dataset.pinned = data.pinned ? '1' : '0';
-            btn.title = t(data.pinned ? 'unpinSession' : 'pinSession');
-            loadSessions();
-          }
-        } catch (err) {
-          console.error('[pin] error', err);
-        }
-      });
-    }
-    item.querySelector('.session-item-delete').addEventListener('click', async (e) => {
+  });
+  el.querySelectorAll('.session-action').forEach(btn => {
+    btn.addEventListener('click', async (e) => {
+      e.preventDefault();
       e.stopPropagation();
-      const title = item.querySelector('.session-item-title')?.textContent?.trim() || t('newChat');
-      if (!window.confirm(t('confirmDeleteSession', { title }))) return;
-      await fetch('/api/sessions/delete', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ session_id: item.dataset.sid, cwd: item.dataset.cwd || '' }),
-      });
-      loadSessions();
-    });
-    item.querySelector('.session-item-rename').addEventListener('click', async (e) => {
-      e.stopPropagation();
-      const currentTitle = item.querySelector('.session-item-title')?.textContent?.trim() || '';
-      const nextTitle = window.prompt(t('renameSessionPrompt'), currentTitle);
-      if (!nextTitle || nextTitle.trim() === currentTitle) return;
-      await renameSession(item.dataset.sid, nextTitle.trim());
-    });
-    item.querySelector('.session-item-cwd').addEventListener('click', async (e) => {
-      e.stopPropagation();
-      const sessionId = item.dataset.sid;
-      const oldCwd = item.dataset.cwd || '';
-      const newCwd = await promptCwdForSession(oldCwd);
-      if (!newCwd || !newCwd.trim() || newCwd.trim() === oldCwd) return;
-      const result = await updateSessionCwd(sessionId, newCwd.trim());
-      if (result.ok) {
-        addSystemMsg(t('cwdChanged', { path: newCwd.trim() }));
-        loadSessions();
-        if (sessionId === currentSessionId) {
-          cwdInput.value = newCwd.trim();
-          updateRuntimeSummary();
-        }
-      } else {
-        addSystemMsg(t('cwdNotChanged', { message: result.error || t('unknownError') }), true);
-      }
+      const item = btn.closest('.session-item');
+      if (!item) return;
+      const session = cachedSessions.find(s => s.session_id === item.dataset.sid);
+      if (!session) return;
+      const action = btn.dataset.action;
+      if (action === 'pin') await toggleSessionPin(session.session_id);
+      if (action === 'cwd') await changeSessionCwd(session);
+      if (action === 'rename') await promptRenameSession(session);
+      if (action === 'delete') await deleteSessionRecord(session, 'sessions');
     });
   });
+  renderTopbarSessionActions();
 }
 
 function showCwdContextMenu(e, cwd) {
@@ -5393,7 +5355,7 @@ function filterSessions(sessions) {
   });
 }
 
-function renderSessionItem(s, showCwd = false) {
+function renderSessionItem(s) {
   const isActive = s.session_id === currentSessionId;
   const title = s.title || t('newChat');
   const time = formatTime(s.updated_at);
@@ -5404,47 +5366,30 @@ function renderSessionItem(s, showCwd = false) {
   const scheduledTaskName = s.scheduled_task_name || '';
   const isScheduled = Boolean(s.scheduled_task_id || scheduledTaskName);
   const scheduledBadge = isScheduled ? `<span class="session-item-badge scheduled" title="${esc(scheduledTaskName || t('scheduledSession'))}">${esc(t('scheduledSession'))}</span>` : '';
-  const scheduledMeta = isScheduled && scheduledTaskName ? ` · ${esc(t('scheduledTaskName', { name: scheduledTaskName }))}` : '';
-  const cwdLine = showCwd && s.cwd ? `<div class="session-item-cwd-line">${esc(s.cwd)}</div>` : '';
+  const pinnedBadge = s.pinned ? `<span class="session-item-badge pinned" title="${esc(t('pinnedSessions'))}">PIN</span>` : '';
+  const metaParts = [
+    `<span class="session-item-meta-primary">${esc(time)}</span>`,
+    modelLabel ? `<span>${esc(modelLabel)}</span>` : '',
+    isScheduled && scheduledTaskName ? `<span>${esc(t('scheduledTaskName', { name: scheduledTaskName }))}</span>` : '',
+    savedCost > 0 ? `<span>$${savedCost.toFixed(4)}</span>` : '',
+    tokenTotal > 0 ? `<span>${formatTokenCount(tokenTotal)} tok</span>` : '',
+  ].filter(Boolean).join('');
   return `<div class="session-item${isActive ? ' active' : ''}" data-sid="${esc(s.session_id)}" data-cwd="${esc(s.cwd)}" data-model="${esc(s.model)}" data-cli="${esc(s.cli || '')}" data-cost="${esc(savedCost)}" data-tokens="${esc(JSON.stringify(savedTokens))}" data-remote-target="${esc(s.remote_target_id || '')}">
     <div class="session-item-main">
       <div class="session-item-title-row">
-        <div class="session-item-title">${esc(title)}</div>
+        <div class="session-item-title" title="${esc(title)}">${esc(title)}</div>
+        ${pinnedBadge}
         ${scheduledBadge}
       </div>
-      <div class="session-item-meta">${modelLabel ? `${esc(modelLabel)} · ` : ''}${esc(time)}${scheduledMeta}${savedCost > 0 ? ` · $${savedCost.toFixed(4)}` : ''}${tokenTotal > 0 ? ` · ${formatTokenCount(tokenTotal)} tok` : ''}</div>
-      ${cwdLine}
+      <div class="session-item-meta">${metaParts}</div>
     </div>
-    <div class="session-item-actions">
-      <button class="session-item-pin${s.pinned ? ' pinned' : ''}" title="${esc(t(s.pinned ? 'unpinSession' : 'pinSession'))}" data-pinned="${s.pinned ? '1' : '0'}">📌</button>
-      <button class="session-item-cwd" title="${esc(t('changeCwd'))}">📁</button>
-      <button class="session-item-rename" title="${esc(t('rename'))}">✎</button>
-      <button class="session-item-delete" title="${esc(t('delete'))}">&times;</button>
+    <div class="session-item-actions" aria-label="Session actions">
+      <button class="session-action session-action-pin${s.pinned ? ' pinned' : ''}" type="button" data-action="pin" title="${esc(t(s.pinned ? 'unpinSession' : 'pinSession'))}">${esc(s.pinned ? 'UNPIN' : 'PIN')}</button>
+      <button class="session-action" type="button" data-action="cwd" title="${esc(s.cwd || t('changeCwd'))}">DIR</button>
+      <button class="session-action" type="button" data-action="rename" title="${esc(t('rename'))}">EDIT</button>
+      <button class="session-action danger" type="button" data-action="delete" title="${esc(t('delete'))}">×</button>
     </div>
   </div>`;
-}
-
-function groupSessionsByCwd(sessions) {
-  const map = new Map();
-  for (const session of sessions) {
-    const cwd = (session.cwd || '').trim();
-    const key = normalizeCwdKey(cwd);
-    if (!map.has(key)) {
-      map.set(key, {
-        key,
-        cwd,
-        name: getProjectName(cwd, t('unsetCwd')),
-        latest: session.updated_at || '',
-        sessions: [],
-      });
-    }
-    const group = map.get(key);
-    group.sessions.push(session);
-    if ((session.updated_at || '') > (group.latest || '')) {
-      group.latest = session.updated_at || '';
-    }
-  }
-  return [...map.values()].sort((a, b) => (b.latest || '').localeCompare(a.latest || ''));
 }
 
 function normalizeCwdKey(cwd) {
@@ -5456,12 +5401,6 @@ function isCurrentCwd(cwd) {
   const current = cwdInput.value.trim();
   if (!current || !cwd) return false;
   return normalizeCwdKey(current) === normalizeCwdKey(cwd);
-}
-
-function openCurrentCwdSessionGroup() {
-  const current = cwdInput.value.trim();
-  if (!current) return;
-  sessionGroupOpenState.set(normalizeCwdKey(current), true);
 }
 
 // ─── 目录更新辅助函数 ──────────────────────────────────────────
@@ -5517,7 +5456,6 @@ async function resumeSession(sessionId, cwd, model, savedCost = 0, remoteTargetI
     updateRuntimeSummary();
   }
   refreshRightPaneFiles();
-  openCurrentCwdSessionGroup();
   if (model && hasModelOption(model)) {
     modelSelect.value = model;
     renderTopbarMeta(model);
@@ -5654,6 +5592,8 @@ function renderHistory(history) {
       for (const block of (msg.blocks || [])) {
         if (block.type === 'text') {
           html += `<div class="text-block">${renderMd(block.text)}</div>`;
+        } else if (block.type === 'thinking') {
+          html += renderBlock(block);
         } else if (block.type === 'tool_use') {
           html += renderHistoryToolCard(block);
         }
@@ -5808,7 +5748,6 @@ pickerSelect.addEventListener('click', () => {
   updateRuntimeSummary();
   slashCommands = [];
   closeSlashCommandPanel();
-  openCurrentCwdSessionGroup();
   loadSessions();
   closePicker();
 });

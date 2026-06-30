@@ -687,6 +687,8 @@ def load_session_history(session_id: str, cwd: str, max_messages: int = 50) -> l
                         for block in content:
                             if block.get("type") == "text" and block.get("text"):
                                 blocks.append({"type": "text", "text": block["text"]})
+                            elif block.get("type") == "thinking" and block.get("thinking"):
+                                blocks.append({"type": "thinking", "thinking": block["thinking"]})
                             elif block.get("type") == "tool_use":
                                 tool_id = block.get("id", "")
                                 item = {

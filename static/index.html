@@ -43,6 +43,10 @@
     </div>
     <div class="titlebar-right">
       <button id="btn-toggle-right-panel" class="titlebar-btn" type="button" title="Toggle panel" style="display:none">◧</button>
+      <button id="btn-session-pin" class="titlebar-btn titlebar-session-action" type="button" title="Pin session" style="display:none">PIN</button>
+      <button id="btn-session-cwd" class="titlebar-btn titlebar-session-action" type="button" title="Change working directory" style="display:none">DIR</button>
+      <button id="btn-session-rename" class="titlebar-btn titlebar-session-action" type="button" title="Rename session" style="display:none">EDIT</button>
+      <button id="btn-session-delete" class="titlebar-btn titlebar-session-action" type="button" title="Delete session" style="display:none">×</button>
       <button id="btn-export-chat" class="titlebar-btn" type="button" title="Copy as Markdown" data-i18n-title="copyMarkdown">MD</button>
       <button id="btn-shortcuts" class="titlebar-btn" type="button" title="Help" data-i18n-title="shortcutsTitle">?</button>
       <button id="btn-theme-toggle" class="titlebar-btn" type="button" title="Switch Theme" aria-label="Switch theme">
@@ -68,6 +72,10 @@
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>
             <span data-i18n="chat">Chat</span>
           </button>
+          <button class="nav-btn" data-page="sessions" title="Sessions" data-i18n-title="sessions">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h16"></path><path d="M4 12h16"></path><path d="M4 18h10"></path></svg>
+            <span data-i18n="sessions">Sessions</span>
+          </button>
           <button class="nav-btn" data-page="artifacts" title="Artifacts" data-i18n-title="artifacts">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path><path d="M3.27 6.96 12 12.01l8.73-5.05"></path><path d="M12 22.08V12"></path></svg>
             <span data-i18n="artifacts">Artifacts</span>
@@ -83,55 +91,7 @@
         </button>
       </nav>
 
-      <div class="sidebar-content">
-
-      <!-- 新建会话 -->
-      <div class="sidebar-section">
-        <button id="btn-new-session" class="btn btn-primary">
-          <span class="btn-prefix">&gt;</span> <span data-i18n="newSession">New Session</span>
-        </button>
-      </div>
-
-      <!-- 运行设置 -->
-      <div class="sidebar-section compact-runtime-section">
-        <details class="runtime-panel">
-          <summary class="runtime-summary">
-            <span data-i18n="runtimeSettings">Runtime Settings</span>
-            <span class="runtime-summary-value" data-i18n="runtimeSummary">CWD / Remote</span>
-          </summary>
-          <div class="runtime-panel-body">
-            <label class="field-label" data-i18n="cwd">Working Directory</label>
-            <div class="cwd-wrapper">
-              <input id="cwd-input" type="text" class="input cwd-input" placeholder="C:\project-path" data-i18n-placeholder="cwdPlaceholder">
-              <button id="btn-browse" class="btn-browse" title="Browse Directory" data-i18n-title="browseDir">
-                <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path></svg>
-              </button>
-            </div>
-
-            <label class="field-label" for="remote-target-select" data-i18n="remoteTarget">Remote Target</label>
-            <select id="remote-target-select" class="select">
-              <option value="" data-i18n="remoteTargetNone">Local (no remote)</option>
-            </select>
-            <label class="toggle-label runtime-toggle" id="remote-mutate-row" style="display:none">
-              <span class="toggle-track">
-                <input type="checkbox" id="remote-allow-mutate">
-                <span class="toggle-indicator danger"></span>
-              </span>
-              <span class="toggle-text" data-i18n="allowRemoteFix">Allow remote writes</span>
-            </label>
-          </div>
-        </details>
-      </div>
-
-      <!-- 历史会话 -->
-      <div class="sidebar-section session-section">
-        <label class="field-label" data-i18n="history">History</label>
-        <input id="session-search" type="search" class="input session-search" placeholder="Search sessions..." data-i18n-placeholder="sessionSearchPlaceholder">
-        <div id="session-list" class="session-list"></div>
-      </div>
-
-      <!-- 状态栏 -->
-      <div class="status-bar">
+      <div class="sidebar-status" aria-hidden="false">
         <div id="connection-status" class="conn-status">
           <span class="status-dot offline"></span>
           <span class="status-text" data-i18n="connecting">Connecting...</span>
@@ -144,7 +104,6 @@
           <span class="cost-label" data-i18n="tokenUsage">Tokens</span>
           <span class="cost-value" id="token-value">0</span>
         </div>
-      </div>
       </div>
     </aside>
 
@@ -205,6 +164,35 @@
           </div>
           <div class="input-area">
             <div id="agent-status-bar" class="agent-status-bar" style="display:none"></div>
+            <div class="chat-runtime-section">
+              <details class="runtime-panel">
+                <summary class="runtime-summary">
+                  <span data-i18n="runtimeSettings">Runtime Settings</span>
+                  <span class="runtime-summary-value" data-i18n="runtimeSummary">CWD / Remote</span>
+                </summary>
+                <div class="runtime-panel-body">
+                  <label class="field-label" data-i18n="cwd">Working Directory</label>
+                  <div class="cwd-wrapper">
+                    <input id="cwd-input" type="text" class="input cwd-input" placeholder="C:\project-path" data-i18n-placeholder="cwdPlaceholder">
+                    <button id="btn-browse" class="btn-browse" title="Browse Directory" data-i18n-title="browseDir">
+                      <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path></svg>
+                    </button>
+                  </div>
+
+                  <label class="field-label" for="remote-target-select" data-i18n="remoteTarget">Remote Target</label>
+                  <select id="remote-target-select" class="select">
+                    <option value="" data-i18n="remoteTargetNone">Local (no remote)</option>
+                  </select>
+                  <label class="toggle-label runtime-toggle" id="remote-mutate-row" style="display:none">
+                    <span class="toggle-track">
+                      <input type="checkbox" id="remote-allow-mutate">
+                      <span class="toggle-indicator danger"></span>
+                    </span>
+                    <span class="toggle-text" data-i18n="allowRemoteFix">Allow remote writes</span>
+                  </label>
+                </div>
+              </details>
+            </div>
             <div id="attachments-bar" class="attachments-bar" style="display:none"></div>
             <div id="quote-preview-bar" class="quote-preview-bar" style="display:none"></div>
             <div id="slash-command-panel" class="slash-command-panel" style="display:none"></div>
@@ -222,8 +210,6 @@
               </div>
               <div class="input-status-row">
                 <button id="model-pill" class="model-pill" title="Switch Model" data-i18n-title="switchModel"></button>
-                <span id="input-cli-status" class="input-status-item"></span>
-                <span id="input-cwd-status" class="input-status-item"></span>
               </div>
             </div>
             <input type="file" id="file-input" multiple style="display:none">
@@ -271,6 +257,25 @@
             <div id="agent-add-popover" class="agent-add-popover" style="display:none"></div>
             </div>
           </div>
+        </div>
+      </div>
+
+      <!-- 会话页 -->
+      <div id="page-sessions" class="page sessions-page">
+        <div class="sessions-shell">
+          <header class="sessions-header">
+            <div>
+              <div class="sessions-kicker" data-i18n="sessionsKicker">Conversation history</div>
+              <h2 data-i18n="sessions">Sessions</h2>
+              <p data-i18n="sessionsSubtitle">Browse all conversations by time and resume a session when needed.</p>
+            </div>
+            <button id="sessions-new-session" class="btn btn-primary" type="button"><span class="btn-prefix">&gt;</span> <span data-i18n="newSession">New Session</span></button>
+          </header>
+          <div class="sessions-toolbar">
+            <input id="session-search" type="search" class="input session-search sessions-search" placeholder="Search sessions..." data-i18n-placeholder="sessionSearchPlaceholder">
+            <div id="sessions-count" class="sessions-count"></div>
+          </div>
+          <div id="session-list" class="session-list sessions-list"></div>
         </div>
       </div>
 
@@ -932,10 +937,6 @@
         </button>
       </div>
     </div>
-  </div>
-
-  <div id="msg-context-menu" class="msg-context-menu" style="display:none">
-    <button type="button" class="msg-context-item" data-action="quote" data-i18n="quoteMessage">Quote</button>
   </div>
 
   <div id="cwd-context-menu" class="msg-context-menu" style="display:none">
