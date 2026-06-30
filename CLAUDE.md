@@ -9,11 +9,47 @@ A lightweight web GUI that wraps the `ccb` / `claude` Claude Code CLI. The backe
 ## Running
 
 ```bash
-python server.py        # cross-platform
-start.bat               # Windows (checks Python, then runs server.py)
+start.bat               # Windows entry; should delegate to start.ps1/bootstrap
+./start.sh              # macOS/Linux entry; should delegate to bootstrap.py
+python bootstrap.py     # cross-platform bootstrap once Python exists
+python server.py        # development / already configured environments
 ```
 
 The server binds `127.0.0.1:17878` and auto-increments the port if occupied, then opens a browser. There is no build, lint, or test setup — changes are verified by running the server and exercising the UI.
+
+### Bootstrap design
+
+Do not put Python / Node / npm / Claude CLI installation logic in `server.py`. `server.py` is the Web/SSE/REST service only. Startup environment preparation belongs in platform launchers plus a separate bootstrap layer:
+
+```text
+start.bat       # Windows double-click entry; thin wrapper around start.ps1
+start.ps1       # Windows Python-missing fallback, then calls bootstrap.py
+start.sh        # macOS/Linux Python-missing fallback, then calls bootstrap.py
+bootstrap.py    # cross-platform bootstrap once Python can run
+bootstrap/      # probe/install/venv/launcher modules
+```
+
+Planned bootstrap modules:
+
+- `bootstrap/probe.py` — detect OS, Python, venv, Node, npm, ccb, and claude.
+- `bootstrap/python_setup.py` — Python version checks and platform installer hints/calls.
+- `bootstrap/venv_setup.py` — create/use project `.venv`.
+- `bootstrap/node_setup.py` — install Node/npm via winget, brew, apt, dnf, or pacman.
+- `bootstrap/claude_setup.py` — install Claude Code CLI via npm.
+- `bootstrap/launcher.py` — launch `server.py` with `.venv` Python.
+- `bootstrap/state.py` — write `~/.ccb/bootstrap.log` and `~/.ccb/bootstrap_state.json`.
+
+Python-missing cases must be handled by `start.ps1` / `start.sh`, because Python code cannot run without Python. After Python exists, `bootstrap.py` should create `<repo>/.venv/`, ensure Node/npm, ensure Claude CLI, then run `server.py` with `.venv` Python.
+
+Prefer installing Claude CLI into a controlled prefix instead of global npm:
+
+```bash
+npm install --prefix ~/.ccb/npm-global @anthropic-ai/claude-code
+```
+
+Then prepend that bin directory to the server process `PATH`. Update CLI detection to include this path before PATH lookup: local `ccb.exe` → parent `ccb.exe` → `~/.ccb/npm-global` claude → PATH `ccb` → PATH `claude`.
+
+Installer actions should be interactive by default and support unattended mode via `CCB_BOOTSTRAP_ASSUME_YES=1` or `bootstrap.py --yes`.
 
 ## Architecture
 

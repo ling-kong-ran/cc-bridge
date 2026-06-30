@@ -13,6 +13,15 @@ PY_FILES = [
     "config_manager.py",
     "session_store.py",
     "remote_manager.py",
+    "bootstrap.py",
+    "bootstrap/probe.py",
+    "bootstrap/installer.py",
+    "bootstrap/python_setup.py",
+    "bootstrap/venv_setup.py",
+    "bootstrap/node_setup.py",
+    "bootstrap/claude_setup.py",
+    "bootstrap/launcher.py",
+    "bootstrap/state.py",
 ]
 
 

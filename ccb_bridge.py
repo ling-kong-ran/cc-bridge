@@ -15,6 +15,15 @@ from pathlib import Path
 
 import shutil
 
+
+def _controlled_npm_claude_candidates() -> list[Path]:
+    """受控 npm prefix 中 Claude Code CLI 可能生成的可执行文件。"""
+    prefix = Path.home() / ".ccb" / "npm-global"
+    bin_dirs = [prefix, prefix / "node_modules" / ".bin"] if os.name == "nt" else [prefix / "bin", prefix / "node_modules" / ".bin"]
+    names = ["claude.cmd", "claude.exe", "claude"] if os.name == "nt" else ["claude"]
+    return [folder / name for folder in bin_dirs for name in names]
+
+
 def _detect_available_clis() -> list[dict]:
     """检测所有可用的 CLI，返回列表 [{name, path, source}]"""
     available = []
@@ -34,7 +43,16 @@ def _detect_available_clis() -> list[dict]:
             "path": str(parent_ccb),
             "source": "local",
         })
-    # 2. PATH 中的 ccb
+    # 3. 受控 npm prefix 中的 claude（bootstrap 推荐安装位置）
+    for candidate in _controlled_npm_claude_candidates():
+        if candidate.exists():
+            available.append({
+                "name": "claude (~/.ccb/npm-global)",
+                "path": str(candidate),
+                "source": "controlled-npm",
+            })
+            break
+    # 4. PATH 中的 ccb
     found = shutil.which("ccb")
     if found:
         available.append({
@@ -42,7 +60,7 @@ def _detect_available_clis() -> list[dict]:
             "path": found,
             "source": "path",
         })
-    # 3. PATH 中的 claude
+    # 5. PATH 中的 claude
     found = shutil.which("claude")
     if found:
         available.append({
