@@ -94,6 +94,7 @@ let currentPreviewFile = null;
 let previewSelectedLines = new Set();
 let lastPreviewSelectedLine = 0;
 let previewDragState = null;
+let previewResizeState = null;
 let currentLanguage = 'en';
 let i18nMap = {};
 let fontSizePercent = 100;
@@ -4453,19 +4454,34 @@ function initFilePreviewPanel() {
   previewQuoteSelectionBtn?.addEventListener('mousedown', (e) => e.preventDefault());
   previewQuoteSelectionBtn?.addEventListener('click', quoteSelectedPreviewText);
   previewPanel?.querySelector('.file-preview-header')?.addEventListener('mousedown', startFilePreviewDrag);
-  document.addEventListener('mousemove', dragFilePreviewPanel);
-  document.addEventListener('mouseup', stopFilePreviewDrag);
+  previewPanel?.querySelector('.file-preview-resizer')?.addEventListener('mousedown', startFilePreviewResize);
+  document.addEventListener('mousemove', handleFilePreviewPointerMove);
+  document.addEventListener('mouseup', stopFilePreviewPointerAction);
   document.addEventListener('keydown', (e) => {
     if (e.key === 'Escape' && previewPanel?.style.display !== 'none') closeFilePreview();
   });
 }
 
-function startFilePreviewDrag(e) {
-  if (!previewPanel || e.button !== 0 || e.target.closest('button, input')) return;
+function ensureFilePreviewBox() {
+  if (!previewPanel) return null;
   const parent = previewPanel.offsetParent || previewPanel.parentElement;
-  if (!parent) return;
+  if (!parent) return null;
   const rect = previewPanel.getBoundingClientRect();
   const parentRect = parent.getBoundingClientRect();
+  previewPanel.style.width = `${rect.width}px`;
+  previewPanel.style.height = `${rect.height}px`;
+  previewPanel.style.right = 'auto';
+  previewPanel.style.bottom = 'auto';
+  previewPanel.style.left = `${rect.left - parentRect.left}px`;
+  previewPanel.style.top = `${rect.top - parentRect.top}px`;
+  return { rect, parentRect };
+}
+
+function startFilePreviewDrag(e) {
+  if (!previewPanel || e.button !== 0 || e.target.closest('button, input')) return;
+  const box = ensureFilePreviewBox();
+  if (!box) return;
+  const { rect, parentRect } = box;
   previewDragState = {
     offsetX: e.clientX - rect.left,
     offsetY: e.clientY - rect.top,
@@ -4477,12 +4493,6 @@ function startFilePreviewDrag(e) {
     height: rect.height,
   };
   previewPanel.classList.add('dragging');
-  previewPanel.style.width = `${rect.width}px`;
-  previewPanel.style.height = `${rect.height}px`;
-  previewPanel.style.right = 'auto';
-  previewPanel.style.bottom = 'auto';
-  previewPanel.style.left = `${rect.left - parentRect.left}px`;
-  previewPanel.style.top = `${rect.top - parentRect.top}px`;
   e.preventDefault();
 }
 
@@ -4497,10 +4507,58 @@ function dragFilePreviewPanel(e) {
   previewPanel.style.top = `${nextTop}px`;
 }
 
+function startFilePreviewResize(e) {
+  if (!previewPanel || e.button !== 0) return;
+  const box = ensureFilePreviewBox();
+  if (!box) return;
+  const { rect, parentRect } = box;
+  previewResizeState = {
+    startX: e.clientX,
+    startY: e.clientY,
+    left: rect.left - parentRect.left,
+    top: rect.top - parentRect.top,
+    width: rect.width,
+    height: rect.height,
+    parentWidth: parentRect.width,
+    parentHeight: parentRect.height,
+  };
+  previewPanel.classList.add('resizing');
+  e.preventDefault();
+  e.stopPropagation();
+}
+
+function resizeFilePreviewPanel(e) {
+  if (!previewPanel || !previewResizeState) return;
+  const s = previewResizeState;
+  const minWidth = Math.min(520, Math.max(320, s.parentWidth - 16));
+  const minHeight = Math.min(260, Math.max(220, s.parentHeight - 16));
+  const maxWidth = Math.max(minWidth, s.parentWidth - s.left - 8);
+  const maxHeight = Math.max(minHeight, s.parentHeight - s.top - 8);
+  const nextWidth = Math.min(maxWidth, Math.max(minWidth, s.width + e.clientX - s.startX));
+  const nextHeight = Math.min(maxHeight, Math.max(minHeight, s.height + e.clientY - s.startY));
+  previewPanel.style.width = `${nextWidth}px`;
+  previewPanel.style.height = `${nextHeight}px`;
+}
+
+function handleFilePreviewPointerMove(e) {
+  if (previewResizeState) resizeFilePreviewPanel(e);
+  else if (previewDragState) dragFilePreviewPanel(e);
+}
+
+function stopFilePreviewPointerAction() {
+  if (!previewPanel) return;
+  if (previewDragState) {
+    previewDragState = null;
+    previewPanel.classList.remove('dragging');
+  }
+  if (previewResizeState) {
+    previewResizeState = null;
+    previewPanel.classList.remove('resizing');
+  }
+}
+
 function stopFilePreviewDrag() {
-  if (!previewPanel || !previewDragState) return;
-  previewDragState = null;
-  previewPanel.classList.remove('dragging');
+  stopFilePreviewPointerAction();
 }
 
 function closeFilePreview() {
@@ -4510,7 +4568,8 @@ function closeFilePreview() {
   previewSelectedLines.clear();
   lastPreviewSelectedLine = 0;
   previewDragState = null;
-  previewPanel.classList.remove('dragging');
+  previewResizeState = null;
+  previewPanel.classList.remove('dragging', 'resizing');
   if (previewContentEl) previewContentEl.innerHTML = '';
   if (previewSearchEl) previewSearchEl.value = '';
 }

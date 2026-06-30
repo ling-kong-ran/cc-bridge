@@ -1463,9 +1463,34 @@ body.pane-right-collapsed .chat-sidebar {
   cursor: move;
   user-select: none;
 }
-.file-preview-panel.dragging {
+.file-preview-panel.dragging,
+.file-preview-panel.resizing {
   opacity: 0.96;
   user-select: none;
+}
+.file-preview-resizer {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  width: 18px;
+  height: 18px;
+  cursor: nwse-resize;
+  z-index: 2;
+}
+.file-preview-resizer::before {
+  content: '';
+  position: absolute;
+  right: 5px;
+  bottom: 5px;
+  width: 8px;
+  height: 8px;
+  border-right: 2px solid var(--text-ghost);
+  border-bottom: 2px solid var(--text-ghost);
+  opacity: 0.65;
+}
+.file-preview-resizer:hover::before {
+  border-color: var(--green);
+  opacity: 1;
 }
 .file-preview-header button,
 .file-preview-header input {
