@@ -325,6 +325,7 @@
   "filePreviewSearchPlaceholder": "Search in file...",
   "quoteSelection": "Quote selection",
   "quoteLine": "Quote this line",
+  "filePreviewSelectHint": "Click lines to select, Shift+click for range",
   "filePreviewUnsupported": "This file cannot be previewed as text",
   "filePreviewLoadFailed": "File preview failed: {message}",
   "historyUser": "User",

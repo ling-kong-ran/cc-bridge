@@ -2630,7 +2630,7 @@ function addUserMessage(text, quotes = []) {
   el.className = 'message user';
   const quoteHtml = quotes.length ? `
     <div class="msg-quoted-list">
-      ${quotes.map(q => `<div class="msg-quoted-item">${esc(q)}</div>`).join('')}
+      ${quotes.map(q => `<div class="msg-quoted-item">${esc(quoteDisplayText(q))}</div>`).join('')}
     </div>
   ` : '';
   el.innerHTML = `
@@ -2851,10 +2851,27 @@ function hideMsgContextMenu() {
   if (menu) { menu.style.display = 'none'; menu.style.visibility = 'hidden'; }
 }
 
-function quoteIntoInput(text) {
+function normalizeQuoteEntry(entry) {
+  if (entry && typeof entry === 'object') {
+    return {
+      type: entry.type || 'text',
+      text: String(entry.text || entry.display || '').trim(),
+      path: entry.path || '',
+      lines: Array.isArray(entry.lines) ? entry.lines.map(n => Number(n)).filter(Boolean) : [],
+    };
+  }
+  return { type: 'text', text: String(entry || '').trim(), path: '', lines: [] };
+}
+
+function quoteDisplayText(entry) {
+  const quote = normalizeQuoteEntry(entry);
+  return quote.text;
+}
+
+function quoteIntoInput(text, meta = null) {
   const normalized = (text || '').trim();
   if (!normalized) return;
-  quotedMessages.push(normalized);
+  quotedMessages.push(normalizeQuoteEntry({ ...(meta || {}), text: normalized }));
   showPage('chat');
   requestAnimationFrame(() => {
     renderQuotePreview();
@@ -2871,13 +2888,13 @@ function renderQuotePreview() {
     return;
   }
   quotePreviewBar.style.display = 'flex';
-  quotePreviewBar.innerHTML = quotedMessages.map((text, i) => `
+  quotePreviewBar.innerHTML = quotedMessages.map((quote, i) => `
     <div class="quote-preview-item">
       <div class="quote-preview-head">
         <span>${esc(t('quotedMessage'))}</span>
         <button class="quote-preview-remove" data-idx="${i}" title="${esc(t('removeQuote'))}" type="button">&times;</button>
       </div>
-      <div class="quote-preview-text">${esc(text)}</div>
+      <div class="quote-preview-text">${esc(quoteDisplayText(quote))}</div>
     </div>
   `).join('');
   quotePreviewBar.querySelectorAll('.quote-preview-remove').forEach(btn => {
@@ -2924,6 +2941,7 @@ function initMessageContextMenu() {
 }
 
 function interruptCurrentRun() {
+  if (!isResponding || !currentSessionId) return Promise.resolve(null);
   return sendAction('interrupt', { session_id: currentSessionId, run_id: currentRunId });
 }
 
@@ -3249,9 +3267,22 @@ function getAttachmentTitle(file) {
   return file.originalPath || file.path || file.name;
 }
 
+function quotePayloadForBackend(quotes) {
+  return quotes.map(normalizeQuoteEntry).filter(q => q.text || (q.path && q.lines.length));
+}
+
+function quoteBackendPayload(quotes) {
+  return quotes.map(normalizeQuoteEntry).map(q => {
+    if (q.type === 'file_lines' && q.path && q.lines.length) {
+      return { type: 'file_lines', path: q.path, lines: q.lines };
+    }
+    return { type: 'text', text: q.text };
+  }).filter(q => q.text || (q.path && q.lines?.length));
+}
+
 async function sendMessage() {
   let content = inputEl.value.trim();
-  const quotesForThisTurn = quotedMessages.slice();
+  const quotesForThisTurn = quotePayloadForBackend(quotedMessages);
   const isLiveFollowup = isResponding;
   if ((!content && attachedFiles.length === 0 && quotesForThisTurn.length === 0) || !sessionActive) return;
   if (isViewer && !isLiveFollowup) {
@@ -3262,10 +3293,13 @@ async function sendMessage() {
   const attachmentCount = attachedFiles.length;
 
   if (quotesForThisTurn.length > 0) {
-    const quotedText = quotesForThisTurn
-      .map(text => text.split('\n').map(line => `> ${line}`).join('\n'))
-      .join('\n\n');
-    content = content ? `${quotedText}\n\n${content}` : quotedText;
+    const inlineQuotes = quotesForThisTurn.filter(q => q.type !== 'file_lines' || !q.path || !q.lines.length);
+    if (inlineQuotes.length) {
+      const quotedText = inlineQuotes
+        .map(q => quoteDisplayText(q).split('\n').map(line => `> ${line}`).join('\n'))
+        .join('\n\n');
+      content = content ? `${quotedText}\n\n${content}` : quotedText;
+    }
     quotedMessages = [];
     renderQuotePreview();
   }
@@ -3305,6 +3339,7 @@ async function sendMessage() {
 
   const result = await sendAction('send_message', {
     content,
+    quotes: quoteBackendPayload(quotesForThisTurn),
     model: modelSelect.value,
     cli: document.getElementById('cli-select')?.value || '',
     remote_target_id: remoteTargetSelect?.value || '',
@@ -4399,23 +4434,13 @@ function updateFileTreePathLabel(path = fileTreePath || cwdInput?.value || '') {
   label.title = normalized;
 }
 
-function updateFileTreeSelectedCount() {
-  const el = document.getElementById('file-tree-selected-count');
-  if (!el) return;
-  const visibleSelected = document.querySelectorAll('#file-tree-content .file-tree-entry.selected:not([style*="display: none"])').length;
-  const totalSelected = attachedFiles.length;
-  el.textContent = visibleSelected ? `${visibleSelected}/${totalSelected}` : String(totalSelected);
-  el.title = t('selectedFiles', { count: totalSelected });
-}
-
 function applyFileTreeFilter() {
   const input = document.getElementById('file-tree-filter');
   const q = (input?.value || '').trim().toLowerCase();
   document.querySelectorAll('#file-tree-content .file-tree-entry').forEach(el => {
-    const name = el.textContent.replace(/^📁|^📄|^✓/, '').trim().toLowerCase();
+    const name = el.textContent.replace(/^📁|^📄/, '').trim().toLowerCase();
     el.style.display = !q || name.includes(q) ? '' : 'none';
   });
-  updateFileTreeSelectedCount();
 }
 
 function escapeRegExp(text) {
@@ -4488,22 +4513,6 @@ function closeFilePreview() {
   previewPanel.classList.remove('dragging');
   if (previewContentEl) previewContentEl.innerHTML = '';
   if (previewSearchEl) previewSearchEl.value = '';
-}
-
-function toggleWorkspaceAttachment(filePath, el) {
-  const fileName = filePath.split('/').pop();
-  const icon = el?.querySelector('.ft-icon');
-  if (attachedFiles.some(f => f.path === filePath)) {
-    attachedFiles = attachedFiles.filter(f => f.path !== filePath);
-    el?.classList.remove('selected');
-    if (icon) icon.textContent = '📄';
-  } else {
-    attachedFiles.push({ name: fileName, path: filePath, isImage: false, uploaded: false, source: 'server', originalPath: filePath });
-    el?.classList.add('selected');
-    if (icon) icon.textContent = '✓';
-  }
-  renderAttachments();
-  updateFileTreeSelectedCount();
 }
 
 async function openFilePreview(filePath) {
@@ -4580,6 +4589,10 @@ function getSelectedPreviewText() {
   }).join('\n');
 }
 
+function getSortedPreviewSelectedLines() {
+  return Array.from(previewSelectedLines).sort((a,b) => a-b);
+}
+
 function renderFilePreviewContent() {
   if (!previewContentEl || !currentPreviewFile) return;
   const content = currentPreviewFile.content || '';
@@ -4593,7 +4606,6 @@ function renderFilePreviewContent() {
   }).join('') || `<div class="file-preview-state">${esc(t('historyEmpty'))}</div>`;
   previewContentEl.querySelectorAll('.file-preview-line').forEach(row => {
     row.addEventListener('click', (e) => {
-      if (e.target.closest('.file-preview-line-no')) return;
       selectPreviewLine(Number(row.dataset.line || 0), e.shiftKey);
     });
   });
@@ -4613,7 +4625,11 @@ function quoteSelectedPreviewText() {
   const path = currentPreviewFile?.path || currentPreviewFile?.name || '';
   const selectedLinesText = getSelectedPreviewText();
   if (selectedLinesText) {
-    quoteIntoInput(path ? `${path}\n${selectedLinesText}` : selectedLinesText);
+    quoteIntoInput(path ? `${path}\n${selectedLinesText}` : selectedLinesText, {
+      type: 'file_lines',
+      path,
+      lines: getSortedPreviewSelectedLines(),
+    });
     return;
   }
   const sel = window.getSelection();
@@ -4645,8 +4661,7 @@ async function loadFileTree(path) {
       }
       for (const f of files) {
         const fPath = path.replace(/\\/g, '/').replace(/\/+$/, '') + '/' + f.name;
-        const selected = attachedFiles.some(af => af.path === fPath);
-        html += `<div class="file-tree-entry${selected ? ' selected' : ''}" data-path="${esc(fPath)}"><span class="ft-icon">${selected ? '✓' : '📄'}</span>${esc(f.name)}</div>`;
+        html += `<div class="file-tree-entry" data-path="${esc(fPath)}"><span class="ft-icon">📄</span>${esc(f.name)}</div>`;
       }
       content.innerHTML = html || '<div class="file-tree-empty">' + esc(t('emptyDir')) + '</div>';
       applyFileTreeFilter();
@@ -4656,21 +4671,14 @@ async function loadFileTree(path) {
       content.querySelectorAll('.file-tree-entry:not(.dir)').forEach(el => {
         el.addEventListener('click', (e) => {
           e.stopPropagation();
-          const filePath = el.dataset.path;
-          if (e.shiftKey || e.ctrlKey || e.metaKey) {
-            toggleWorkspaceAttachment(filePath, el);
-          } else {
-            openFilePreview(filePath);
-          }
+          openFilePreview(el.dataset.path);
         });
       });
     } else {
       content.innerHTML = '<div class="file-tree-empty">' + esc(t('emptyDir')) + '</div>';
-      updateFileTreeSelectedCount();
     }
   } catch (e) {
     content.innerHTML = '<div class="file-tree-empty">' + esc(t('unknownError')) + '</div>';
-    updateFileTreeSelectedCount();
   }
 }
 

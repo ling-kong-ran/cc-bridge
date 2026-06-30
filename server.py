@@ -1611,6 +1611,63 @@ async def _sse_write(writer: asyncio.StreamWriter, event: str, data: dict):
 
 
 # ─── Action API (客户端发送消息/命令) ──────────────────────
+def format_line_ranges(numbers: list[int]) -> str:
+    """把行号列表压缩成 1-3,7 这样的短格式。"""
+    ordered = sorted({n for n in numbers if n > 0})
+    if not ordered:
+        return ""
+    ranges = []
+    start = prev = ordered[0]
+    for number in ordered[1:]:
+        if number == prev + 1:
+            prev = number
+            continue
+        ranges.append(f"{start}-{prev}" if start != prev else str(start))
+        start = prev = number
+    ranges.append(f"{start}-{prev}" if start != prev else str(start))
+    return ",".join(ranges)
+
+
+def build_quote_context(quotes: list, cwd: str = "") -> str:
+    """把前端传来的轻量引用（文件路径 + 行号）整理为给 CLI 的短引用。"""
+    if not isinstance(quotes, list):
+        return ""
+    chunks = []
+    cwd_root = None
+    try:
+        cwd_root = Path(cwd).resolve() if cwd else None
+    except Exception:
+        cwd_root = None
+
+    for quote in quotes:
+        if not isinstance(quote, dict):
+            text = str(quote or "").strip()
+            if text:
+                chunks.append(text)
+            continue
+        qtype = quote.get("type") or "text"
+        if qtype != "file_lines":
+            text = str(quote.get("text") or "").strip()
+            if text:
+                chunks.append(text)
+            continue
+        path_text = str(quote.get("path") or "").strip()
+        line_numbers = []
+        for value in quote.get("lines") or []:
+            try:
+                number = int(value)
+            except (TypeError, ValueError):
+                continue
+            if number > 0 and number not in line_numbers:
+                line_numbers.append(number)
+        if not path_text or not line_numbers:
+            continue
+        line_ref = format_line_ranges(line_numbers)
+        if line_ref:
+            chunks.append(f"{path_text}:{line_ref}")
+    return "\n\n".join(chunks)
+
+
 async def handle_action(body: bytes, writer: asyncio.StreamWriter):
     """处理客户端 action (new_session, send_message, stop)"""
     try:
@@ -1812,6 +1869,13 @@ async def handle_action(body: bytes, writer: asyncio.StreamWriter):
     elif action == "send_message":
         content = data.get("content", "")
         requested_model = data.get("model") or ""
+        viewing_owner = client_viewing.get(client_id)
+        quote_cwd = client_meta.get(client_id, {}).get("cwd", "")
+        if viewing_owner and not quote_cwd:
+            quote_cwd = client_meta.get(viewing_owner, {}).get("cwd", "")
+        quote_context = build_quote_context(data.get("quotes") or [], quote_cwd)
+        if quote_context:
+            content = f"引用内容:\n{quote_context}\n\n{content}".strip()
         # viewer 在 owner 正在生成时优先走持久进程 stdin 补充发送；不接管、不改锁 holder。
         viewing_owner = client_viewing.get(client_id)
         if viewing_owner:
@@ -2105,6 +2169,7 @@ async def handle_action(body: bytes, writer: asyncio.StreamWriter):
             await push_event(client_id, "error", {"message": "Viewer cannot interrupt"})
             await send_response(writer, 200, "application/json", b'{"ok":false,"error":"viewer cannot interrupt"}')
             return
+        interrupted = False
         if session and session.is_running:
             await session.interrupt(requester_id=client_id)
             await release_session_lock_for_client(client_id)
@@ -2112,8 +2177,10 @@ async def handle_action(body: bytes, writer: asyncio.StreamWriter):
                 session_run_ids.pop(sid, None)
             if run_id:
                 session_manager.finish_run(run_id)
-        await push_event(client_id, "generation_interrupted", {"session_id": sid, "run_id": run_id})
-        await send_response(writer, 200, "application/json", b'{"ok":true}')
+            interrupted = True
+        if interrupted:
+            await push_event(client_id, "generation_interrupted", {"session_id": sid, "run_id": run_id})
+        await send_response(writer, 200, "application/json", json.dumps({"ok": interrupted}, ensure_ascii=False).encode("utf-8"))
 
     else:
         await send_response(writer, 400, "application/json", b'{"error":"unknown action"}')
