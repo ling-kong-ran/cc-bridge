@@ -788,9 +788,13 @@ html.light-theme .select {
   grid-template-columns: 70px minmax(0, 1fr);
   align-items: baseline;
   gap: 10px;
+  width: 100%;
   padding: 7px 0;
+  border: 0;
   border-bottom: 1px solid var(--border-dim);
+  background: transparent;
   font-family: var(--font-mono);
+  text-align: left;
 }
 .welcome-runtime-row:last-child {
   border-bottom: none;
@@ -809,6 +813,43 @@ html.light-theme .select {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+.welcome-runtime-select {
+  min-width: 0;
+  width: 100%;
+  padding: 4px 6px;
+  border: 1px solid var(--border-dim);
+  border-radius: var(--radius-xs);
+  background: var(--bg-raised);
+  color: var(--text-base);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  outline: none;
+}
+.welcome-runtime-select:focus {
+  border-color: var(--green-dim);
+  box-shadow: 0 0 0 1px rgba(var(--accent-rgb), 0.12);
+}
+.welcome-runtime-select option {
+  background: var(--bg-raised);
+  color: var(--text-base);
+}
+.welcome-runtime-action {
+  cursor: pointer;
+  border-radius: var(--radius-xs);
+  transition: background var(--t-fast), border-color var(--t-fast), padding var(--t-fast);
+}
+.welcome-runtime-action:hover,
+.welcome-runtime-action:focus-visible {
+  padding-left: 8px;
+  padding-right: 8px;
+  background: var(--bg-raised);
+  border-bottom-color: rgba(var(--accent-rgb), 0.28);
+  outline: none;
+}
+.welcome-runtime-action:hover strong,
+.welcome-runtime-action:focus-visible strong {
+  color: var(--green);
 }
 .welcome-session-dot {
   width: 7px; height: 7px; border-radius: 50%;
@@ -944,8 +985,8 @@ html.light-theme .select {
 }
 
 .session-item {
-  display: flex; align-items: center; gap: 4px;
-  padding: 7px 7px;
+  display: flex; align-items: flex-start; gap: 4px;
+  padding: 5px 6px;
   border-radius: var(--radius-xs);
   cursor: pointer;
   transition: background var(--t-fast);
@@ -960,7 +1001,7 @@ html.light-theme .select {
   border-left-color: var(--green);
 }
 
-.session-item-main { flex: 1; min-width: 0; }
+.session-item-main { flex: 1; min-width: 0; overflow: hidden; }
 
 .session-item-title-row {
   display: flex;
@@ -970,10 +1011,11 @@ html.light-theme .select {
 }
 
 .session-item-title {
-  font-size: 12px; font-family: var(--font-mono);
+  font-size: 11.5px; font-family: var(--font-mono);
   color: var(--text-base);
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-  letter-spacing: 0.02em;
+  letter-spacing: 0.01em;
+  line-height: 1.25;
 }
 
 .session-item-title-row .session-item-title {
@@ -1001,8 +1043,10 @@ html.light-theme .select {
 .session-item.active .session-item-title { color: var(--green); }
 
 .session-item-meta {
-  font-size: 10.5px; color: var(--text-muted);
-  margin-top: 1px; letter-spacing: 0.04em;
+  font-size: 10px; color: var(--text-muted);
+  margin-top: 0; letter-spacing: 0.025em;
+  line-height: 1.25;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
 .session-item-cwd-line {
   font-size: 10px; color: var(--text-ghost);
@@ -1010,7 +1054,7 @@ html.light-theme .select {
   letter-spacing: 0.02em;
 }
 
-.session-item-actions { display: flex; gap: 2px; }
+.session-item-actions { display: flex; gap: 1px; flex-shrink: 0; padding-top: 1px; }
 
 .session-item-pin { background: none; border: none;
   color: var(--text-ghost); font-size: 12px;
@@ -1027,8 +1071,8 @@ html.light-theme .select {
 .session-item-rename,
 .session-item-cwd {
   background: none; border: none;
-  color: var(--text-ghost); font-size: 14px;
-  cursor: pointer; padding: 0 3px;
+  color: var(--text-ghost); font-size: 12px;
+  cursor: pointer; padding: 0 2px;
   opacity: 0; transition: all var(--t-fast);
   border-radius: 3px; line-height: 1;
 }
@@ -1924,9 +1968,9 @@ body.pane-right-collapsed .chat-sidebar {
 
 .welcome-grid {
   display: grid;
-  grid-template-columns: minmax(180px, 0.7fr) minmax(260px, 1.4fr) minmax(220px, 1fr);
+  grid-template-columns: minmax(260px, 0.95fr) minmax(300px, 1.45fr);
   gap: 12px;
-  align-items: stretch;
+  align-items: start;
 }
 
 .welcome-card {
@@ -1941,13 +1985,15 @@ body.pane-right-collapsed .chat-sidebar {
 }
 
 .welcome-start-card {
-  justify-content: space-between;
   border-color: rgba(var(--accent-rgb), 0.24);
   background: linear-gradient(180deg, rgba(var(--accent-rgb), 0.05), rgba(255,255,255,0.015));
 }
 
-.welcome-recent-card,
-.welcome-runtime-card {
+.welcome-runtime-inline-label {
+  margin-top: 2px;
+}
+
+.welcome-recent-card {
   min-height: 180px;
 }
 

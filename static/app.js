@@ -163,7 +163,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (!card) return;
     toggleCard(card, e.shiftKey);
   });
-  showPage('chat');
+  showPage('home');
   if (autoUpdateEnabled) setTimeout(() => checkForUpdate(), 3000);
 });
 
@@ -1460,17 +1460,22 @@ function showPage(page) {
   if (target) target.classList.add('active');
   // 更新全局 titlebar
   const pageLabel = document.getElementById('titlebar-page-label');
-  const pageKey = page === 'config' ? 'settings' : page === 'artifacts' ? 'artifacts' : page === 'scheduled' ? 'scheduledTasks' : 'chat';
+  const pageKey = page === 'home' ? 'home' : page === 'config' ? 'settings' : page === 'artifacts' ? 'artifacts' : page === 'scheduled' ? 'scheduledTasks' : 'chat';
   if (pageLabel) pageLabel.textContent = t(pageKey);
+  const isChatPage = page === 'chat';
   const backBtn = document.getElementById('btn-titlebar-back');
-  if (backBtn) backBtn.style.display = page === 'chat' ? 'none' : '';
+  if (backBtn) {
+    const canBackToChat = page !== 'home' && !isChatPage && sessionActive;
+    backBtn.style.display = canBackToChat ? '' : 'none';
+    backBtn.textContent = t('backToChat');
+  }
   const titlebarMeta = document.getElementById('titlebar-meta');
-  if (titlebarMeta) titlebarMeta.style.display = page === 'chat' ? '' : 'none';
+  if (titlebarMeta) titlebarMeta.style.display = isChatPage ? '' : 'none';
   const btnExport = document.getElementById('btn-export-chat');
-  if (btnExport) btnExport.style.display = page === 'chat' ? '' : 'none';
+  if (btnExport) btnExport.style.display = isChatPage ? '' : 'none';
   const btnPanel = document.getElementById('btn-toggle-right-panel');
-  if (btnPanel) btnPanel.style.display = page === 'chat' ? '' : 'none';
-  if (page === 'chat') {
+  if (btnPanel) btnPanel.style.display = isChatPage ? '' : 'none';
+  if (isChatPage) {
     renderTopbarMeta();
     renderTopbarStatusSummary();
   } else if (page === 'artifacts') {
@@ -1554,7 +1559,7 @@ function initMobileLayout() {
 
   sidebar.addEventListener('click', (e) => {
     if (!mobileQuery.matches) return;
-    if (e.target.closest('.nav-btn, .session-item, #btn-new-session')) closeMenu();
+    if (e.target.closest('.nav-btn, .session-item, #btn-new-session, #welcome-new-session')) closeMenu();
   });
 
   document.getElementById('welcome-new-session')?.addEventListener('click', () => {
@@ -3400,6 +3405,7 @@ function startNewSession() {
     return;
   }
 
+  showPage('chat');
   createNewSession(cwdInput.value.trim());
 }
 
@@ -4960,14 +4966,45 @@ function renderWelcomeRuntime() {
   const el = document.getElementById('welcome-runtime');
   if (!el) return;
   const cwd = cwdInput?.value?.trim() || '';
-  const modelLabel = getDisplayModelName(modelSelect?.value || '', false) || '-';
-  const cliLabel = getSelectedCliLabel();
-  const remoteName = remoteTargetSelect?.selectedOptions?.[0]?.textContent?.trim() || t('remoteTargetNone');
+  const modelOptions = Array.from(modelSelect?.options || [])
+    .map(opt => `<option value="${esc(opt.value)}" ${opt.selected ? 'selected' : ''}>${esc(opt.textContent || opt.value)}</option>`)
+    .join('');
+  const cliSelect = document.getElementById('cli-select');
+  const cliOptions = Array.from(cliSelect?.options || [])
+    .map(opt => `<option value="${esc(opt.value)}" ${opt.selected ? 'selected' : ''}>${esc(opt.textContent || opt.value)}</option>`)
+    .join('');
+  const remoteOptions = Array.from(remoteTargetSelect?.options || [])
+    .map(opt => `<option value="${esc(opt.value)}" ${opt.selected ? 'selected' : ''}>${esc(opt.textContent || opt.value)}</option>`)
+    .join('');
   el.innerHTML = `
-    <div class="welcome-runtime-row"><span>${esc(t('cwd'))}</span><strong title="${esc(cwd || t('unsetCwd'))}">${esc(shortenPlainPath(cwd, 4) || t('unsetCwd'))}</strong></div>
-    <div class="welcome-runtime-row"><span>${esc(t('cliTool'))}</span><strong>${esc(cliLabel)}</strong></div>
-    <div class="welcome-runtime-row"><span>${esc(t('model'))}</span><strong>${esc(modelLabel)}</strong></div>
-    <div class="welcome-runtime-row"><span>${esc(t('remote'))}</span><strong>${esc(remoteName)}</strong></div>`;
+    <button type="button" class="welcome-runtime-row welcome-runtime-action" data-action="browse-cwd">
+      <span>${esc(t('cwd'))}</span><strong title="${esc(cwd || t('unsetCwd'))}">${esc(shortenPlainPath(cwd, 4) || t('unsetCwd'))}</strong>
+    </button>
+    <label class="welcome-runtime-row welcome-runtime-field">
+      <span>${esc(t('cliTool'))}</span><select class="welcome-runtime-select" data-runtime="cli">${cliOptions}</select>
+    </label>
+    <label class="welcome-runtime-row welcome-runtime-field">
+      <span>${esc(t('model'))}</span><select class="welcome-runtime-select" data-runtime="model">${modelOptions}</select>
+    </label>
+    <label class="welcome-runtime-row welcome-runtime-field">
+      <span>${esc(t('remote'))}</span><select class="welcome-runtime-select" data-runtime="remote">${remoteOptions}</select>
+    </label>`;
+  el.querySelector('[data-action="browse-cwd"]')?.addEventListener('click', () => openPicker());
+  el.querySelector('[data-runtime="cli"]')?.addEventListener('change', (e) => {
+    if (!cliSelect) return;
+    cliSelect.value = e.target.value;
+    cliSelect.dispatchEvent(new Event('change'));
+  });
+  el.querySelector('[data-runtime="model"]')?.addEventListener('change', (e) => {
+    if (!modelSelect) return;
+    modelSelect.value = e.target.value;
+    modelSelect.dispatchEvent(new Event('change'));
+  });
+  el.querySelector('[data-runtime="remote"]')?.addEventListener('change', (e) => {
+    if (!remoteTargetSelect) return;
+    remoteTargetSelect.value = e.target.value;
+    remoteTargetSelect.dispatchEvent(new Event('change'));
+  });
 }
 
 function renderWelcomeSessionItem(s, isActive) {

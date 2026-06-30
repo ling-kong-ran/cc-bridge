@@ -60,7 +60,11 @@
       <nav class="nav" aria-label="Primary navigation">
         <div class="nav-brand" aria-hidden="true">CCB</div>
         <div class="nav-stack">
-          <button class="nav-btn active" data-page="chat" title="Chat" data-i18n-title="chat">
+          <button class="nav-btn active" data-page="home" title="Home" data-i18n-title="home">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 11l9-8 9 8"></path><path d="M5 10v10h14V10"></path><path d="M9 20v-6h6v6"></path></svg>
+            <span data-i18n="home">Home</span>
+          </button>
+          <button class="nav-btn" data-page="chat" title="Chat" data-i18n-title="chat">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>
             <span data-i18n="chat">Chat</span>
           </button>
@@ -149,36 +153,39 @@
 
     <!-- 主内容 -->
     <main class="main">
-      <!-- 对话页 -->
-      <div id="page-chat" class="page active">
-        <div class="chat-main">
-          <div id="messages" class="messages">
-            <div class="welcome-msg">
-              <div class="welcome-panel">
-                <div class="welcome-hero">
-                  <div class="welcome-kicker" data-i18n="appSubtitleShort">Claude Code Bridge</div>
-                  <div class="welcome-title" data-text="Claude Code Bridge">Claude Code Bridge</div>
-                  <div class="welcome-sub" data-i18n="welcomeWorkflowHint">Start from runtime context, then resume or create a session.</div>
-                </div>
-                <div class="welcome-grid">
-                  <section class="welcome-card welcome-start-card">
-                    <div class="welcome-card-label" data-i18n="welcomeStart">Start</div>
-                    <button type="button" id="welcome-new-session" class="welcome-action">
-                      <span class="btn-prefix">&gt;</span> <span data-i18n="newSession">New Session</span>
-                    </button>
-                  </section>
-                  <section class="welcome-card welcome-recent-card">
-                    <div class="welcome-card-label" data-i18n="recentSessions">Recent</div>
-                    <div id="welcome-sessions" class="welcome-sessions"></div>
-                  </section>
-                  <section class="welcome-card welcome-runtime-card">
-                    <div class="welcome-card-label" data-i18n="welcomeRuntime">Runtime</div>
-                    <div id="welcome-runtime" class="welcome-runtime"></div>
-                  </section>
-                </div>
+      <!-- 欢迎页 -->
+      <div id="page-home" class="page active">
+        <div id="home-welcome" class="messages">
+          <div class="welcome-msg">
+            <div class="welcome-panel">
+              <div class="welcome-hero">
+                <div class="welcome-kicker" data-i18n="appSubtitleShort">Claude Code Bridge</div>
+                <div class="welcome-title" data-text="Claude Code Bridge">Claude Code Bridge</div>
+                <div class="welcome-sub" data-i18n="welcomeWorkflowHint">Start from runtime context, then resume or create a session.</div>
+              </div>
+              <div class="welcome-grid">
+                <section class="welcome-card welcome-start-card">
+                  <div class="welcome-card-label" data-i18n="welcomeStart">Start</div>
+                  <button type="button" id="welcome-new-session" class="welcome-action">
+                    <span class="btn-prefix">&gt;</span> <span data-i18n="newSession">New Session</span>
+                  </button>
+                  <div class="welcome-card-label welcome-runtime-inline-label" data-i18n="welcomeRuntime">Runtime</div>
+                  <div id="welcome-runtime" class="welcome-runtime"></div>
+                </section>
+                <section class="welcome-card welcome-recent-card">
+                  <div class="welcome-card-label" data-i18n="recentSessions">Recent</div>
+                  <div id="welcome-sessions" class="welcome-sessions"></div>
+                </section>
               </div>
             </div>
           </div>
+        </div>
+      </div>
+
+      <!-- 对话页 -->
+      <div id="page-chat" class="page">
+        <div class="chat-main">
+          <div id="messages" class="messages"></div>
           <div id="file-preview-panel" class="file-preview-panel" style="display:none" aria-live="polite">
             <div class="file-preview-header">
               <div class="file-preview-title-wrap">
