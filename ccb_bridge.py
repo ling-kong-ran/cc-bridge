@@ -630,6 +630,9 @@ class CCBSession:
         self._viewer_callbacks.pop(viewer_id, None)
 
     async def _emit_event(self, event: dict):
+        if self.session_id and "session_id" not in event:
+            event = dict(event)
+            event["session_id"] = self.session_id
         # 通知 owner
         if self._on_event:
             try:
@@ -763,28 +766,84 @@ class CCBSession:
 
 
 class SessionManager:
-    """管理多个 CCB 会话"""
+    """管理多个 CCB 会话；同一个 client 可同时保留多个运行实例。"""
 
     def __init__(self):
         self.sessions: dict[str, CCBSession] = {}
+        self.client_runs: dict[str, set[str]] = {}
+        self.client_current_run: dict[str, str] = {}
+        self.session_runs: dict[str, str] = {}
         self._counter = 0
 
     def create_session(self, client_id: Optional[str] = None) -> tuple[str, CCBSession]:
-        if not client_id:
+        if client_id:
+            run_id = f"{client_id}:{uuid.uuid4().hex[:8]}"
+            self.client_runs.setdefault(client_id, set()).add(run_id)
+            self.client_current_run[client_id] = run_id
+        else:
             self._counter += 1
-            client_id = f"session_{self._counter}"
+            run_id = f"session_{self._counter}"
         session = CCBSession()
-        self.sessions[client_id] = session
-        return client_id, session
+        self.sessions[run_id] = session
+        return run_id, session
 
     def get_session(self, client_id: str) -> Optional[CCBSession]:
-        return self.sessions.get(client_id)
+        if client_id in self.sessions:
+            return self.sessions.get(client_id)
+        run_id = self.client_current_run.get(client_id, client_id)
+        return self.sessions.get(run_id)
+
+    def get_session_by_run_id(self, run_id: str) -> Optional[CCBSession]:
+        return self.sessions.get(run_id)
+
+    def bind_native_session(self, session_id: str, run_id: str):
+        if session_id and run_id in self.sessions:
+            self.session_runs[session_id] = run_id
+
+    def get_session_by_native_id(self, session_id: str) -> Optional[CCBSession]:
+        if not session_id:
+            return None
+        run_id = self.session_runs.get(session_id)
+        if run_id:
+            session = self.sessions.get(run_id)
+            if session:
+                return session
+            self.session_runs.pop(session_id, None)
+        for run_key, session in self.sessions.items():
+            if session.session_id == session_id:
+                self.session_runs[session_id] = run_key
+                return session
+        return None
+
+    def finish_run(self, run_id: str):
+        session = self.sessions.get(run_id)
+        if session and session.session_id and self.session_runs.get(session.session_id) == run_id:
+            self.session_runs.pop(session.session_id, None)
+        self.sessions.pop(run_id, None)
+        for client_id, run_ids in list(self.client_runs.items()):
+            run_ids.discard(run_id)
+            if not run_ids:
+                self.client_runs.pop(client_id, None)
+            if self.client_current_run.get(client_id) == run_id:
+                self.client_current_run.pop(client_id, None)
 
     async def remove_session(self, client_id: str):
-        session = self.sessions.pop(client_id, None)
-        if session:
-            await session.stop()
+        if client_id in self.sessions:
+            session = self.sessions.get(client_id)
+            if session:
+                await session.stop()
+            self.finish_run(client_id)
+            return
+        run_ids = list(self.client_runs.pop(client_id, set()))
+        current = self.client_current_run.pop(client_id, "")
+        if current and current not in run_ids:
+            run_ids.append(current)
+        for run_id in run_ids:
+            session = self.sessions.get(run_id)
+            if session:
+                await session.stop()
+            self.finish_run(run_id)
 
     async def cleanup_all(self):
-        for client_id in list(self.sessions.keys()):
-            await self.remove_session(client_id)
+        for run_id in list(self.sessions.keys()):
+            await self.remove_session(run_id)

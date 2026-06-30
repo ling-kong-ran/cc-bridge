@@ -328,7 +328,7 @@ async def revoke_lan_clients():
     for client_id, ip in list(client_ips.items()):
         if is_localhost_ip(ip):
             continue
-        session = session_manager.get_session(client_id)
+        session = get_current_session(client_id)
         if session:
             await session.stop()
             await session_manager.remove_session(client_id)
@@ -370,6 +370,7 @@ scheduled_runner: ScheduledTaskRunner | None = None
 session_owner: dict[str, str] = {}  # session_id → owner_client_id
 client_viewing: dict[str, str] = {}  # viewer_client_id → owner_client_id
 session_locks: dict[str, dict] = {}  # session_id → {holder_id, locked, started_at}
+session_run_ids: dict[str, str] = {}  # session_id → run_id
 
 
 def get_session_subscribers(session_id: str) -> list[str]:
@@ -407,10 +408,14 @@ async def broadcast_session_lock(session_id: str, locked: bool, holder_id: str =
         })
 
 
+async def release_session_lock_for_session(session_id: str, holder_id: str = ""):
+    if session_id and session_locks.get(session_id, {}).get("holder_id") == holder_id:
+        await broadcast_session_lock(session_id, False, holder_id)
+
+
 async def release_session_lock_for_client(client_id: str):
     sid = client_session_ids.get(client_id, "")
-    if sid and session_locks.get(sid, {}).get("holder_id") == client_id:
-        await broadcast_session_lock(sid, False, client_id)
+    await release_session_lock_for_session(sid, client_id)
 
 
 async def push_current_session_lock(client_id: str, session_id: str):
@@ -442,7 +447,29 @@ def build_generation_state(session) -> dict:
         state = getter()
     except Exception:
         return {}
+    if state.get("running") and getattr(session, "session_id", None):
+        state.setdefault("session_id", session.session_id)
+        run_id = session_run_ids.get(session.session_id, "")
+        if run_id:
+            state.setdefault("run_id", run_id)
     return state if state.get("running") else {}
+
+
+def get_current_session(client_id: str):
+    sid = client_session_ids.get(client_id, "")
+    if sid:
+        run_session = session_manager.get_session_by_native_id(sid)
+        if run_session:
+            return run_session
+    return session_manager.get_session(client_id)
+
+
+def get_owned_session(owner_id: str, session_id: str = ""):
+    if session_id:
+        run_session = session_manager.get_session_by_native_id(session_id)
+        if run_session:
+            return run_session
+    return session_manager.get_session(owner_id)
 
 
 async def push_generation_started(client_id: str, session):
@@ -455,24 +482,33 @@ async def broadcast_user_message(session_id: str, content: str, sender_id: str =
     """把手动发送/补充发送的用户消息同步给同一会话的其他端。"""
     for target_id in get_session_subscribers(session_id):
         if target_id != sender_id:
-            await push_event(target_id, "user_message", {"content": content})
+            await push_event(target_id, "user_message", {"session_id": session_id, "content": content})
 
 
 async def forward_viewer_event(viewer_id: str, event: dict, fallback_session_id: str = ""):
     """把 owner 会话事件转发给观察者，并保持与 owner 前端事件形态一致。"""
     evt_type = event.get("type", "unknown")
+    sid = event.get("session_id") or fallback_session_id or client_session_ids.get(viewer_id, "")
+    if sid and "session_id" not in event:
+        event = dict(event)
+        event["session_id"] = sid
+    run_id = event.get("run_id") or (session_run_ids.get(sid, "") if sid else "")
+    if run_id and "run_id" not in event:
+        event = dict(event)
+        event["run_id"] = run_id
     if evt_type == "session_id_captured":
-        client_session_ids[viewer_id] = event.get("session_id", fallback_session_id or client_session_ids.get(viewer_id, ""))
+        client_session_ids[viewer_id] = sid
         await push_event(viewer_id, "session_id_captured", event)
     elif evt_type == "user":
         results = extract_tool_results(event)
         if results:
             await push_event(viewer_id, "tool_result", {
+                "session_id": sid,
+                "run_id": run_id,
                 "results": results,
                 "parent_tool_use_id": event.get("parent_tool_use_id"),
             })
     elif evt_type == "result":
-        sid = fallback_session_id or client_session_ids.get(viewer_id, "")
         await push_event(viewer_id, evt_type, attach_session_total_cost(sid, event))
     elif evt_type in ("assistant", "stream_event", "system", "error",
                       "process_ended", "model_changed", "tool_result",
@@ -1487,11 +1523,11 @@ async def handle_sse(query: dict, writer: asyncio.StreamWriter):
     await _sse_write(writer, "connected", {"client_id": client_id})
 
     # 重连：如果该 client_id 已有活跃会话，同步当前状态给前端
-    existing_session = session_manager.get_session(client_id)
+    existing_session = get_current_session(client_id)
     viewing_owner = client_viewing.get(client_id, "")
     if viewing_owner:
         # viewer 重连：重新订阅到 owner 的 session
-        owner_sess = session_manager.get_session(viewing_owner)
+        owner_sess = get_owned_session(viewing_owner, client_session_ids.get(client_id, ""))
         if owner_sess and owner_sess.is_running:
             meta = client_meta.setdefault(viewing_owner, {})
             client_meta[client_id] = dict(meta)
@@ -1509,6 +1545,8 @@ async def handle_sse(query: dict, writer: asyncio.StreamWriter):
                 "cwd": owner_sess.cwd or meta.get("cwd", ""),
                 "viewing": True,
             }
+            if owner_sess.session_id and session_run_ids.get(owner_sess.session_id):
+                state["run_id"] = session_run_ids[owner_sess.session_id]
             await _sse_write(writer, "session_started", state)
             gen_state = build_generation_state(owner_sess)
             if gen_state:
@@ -1526,6 +1564,8 @@ async def handle_sse(query: dict, writer: asyncio.StreamWriter):
             "remote_target_id": meta.get("remote_target_id", ""),
             "cli": existing_session.cli or get_current_cli(),
         }
+        if existing_session.session_id and session_run_ids.get(existing_session.session_id):
+            state["run_id"] = session_run_ids[existing_session.session_id]
         await _sse_write(writer, "session_started", state)
         # 如果正在回复中，前端也需进入响应状态
         gen_state = build_generation_state(existing_session)
@@ -1551,7 +1591,7 @@ async def handle_sse(query: dict, writer: asyncio.StreamWriter):
         # 清理 viewer 回调（旧闭包已失效），但保留 client_viewing 映射以支持重连
         viewer_owner = client_viewing.get(client_id, "")
         if viewer_owner:
-            owner_sess = session_manager.get_session(viewer_owner)
+            owner_sess = get_owned_session(viewer_owner, client_session_ids.get(client_id, ""))
             if owner_sess:
                 owner_sess.remove_viewer(client_id)
         # SSE 断开不代表用户主动停止会话。移动端息屏、浏览器后台挂起会断开 EventSource，
@@ -1594,12 +1634,10 @@ async def handle_action(body: bytes, writer: asyncio.StreamWriter):
         allow_mutate = bool(data.get("allow_remote_mutate", False))
         cli = data.get("cli") or get_current_cli()
 
-        # 清理旧 session
-        old_session = session_manager.get_session(client_id)
-        if old_session:
-            await old_session.stop()
+        # 清理当前查看状态；正在运行的旧会话继续保留。
+        client_viewing.pop(client_id, None)
 
-        _, session = session_manager.create_session(client_id)
+        run_id, session = session_manager.create_session(client_id)
 
         # 记录元数据
         remote_target_id = (remote_target or {}).get("id", "")
@@ -1609,39 +1647,7 @@ async def handle_action(body: bytes, writer: asyncio.StreamWriter):
         client_session_agents.pop(client_id, None)
         client_viewing.pop(client_id, None)
 
-        async def on_event(event: dict):
-            evt_type = event.get("type", "unknown")
-            # 拦截 session_id_captured 事件，保存到 store
-            if evt_type == "session_id_captured":
-                sid = event.get("session_id", "")
-                client_session_ids[client_id] = sid
-                session_owner[sid] = client_id  # 记录会话归属
-                title = client_last_msg.get(client_id, "新会话")
-                meta = client_meta.get(client_id, {})
-                save_session(sid, title, meta.get("model", model), meta.get("cwd", cwd or ""),
-                             remote_target_id=meta.get("remote_target_id", ""), cli=meta.get("cli", ""))
-                await push_event(client_id, "session_id_captured", event)
-            elif evt_type == "result":
-                await push_event(client_id, evt_type, persist_result_usage(client_id, event))
-                await release_session_lock_for_client(client_id)
-            elif evt_type == "user":
-                # tool_result: 转发工具调用结果详情（内容截断至 8K）
-                results = extract_tool_results(event)
-                if results:
-                    await push_event(client_id, "tool_result", {
-                        "results": results,
-                        "parent_tool_use_id": event.get("parent_tool_use_id"),
-                    })
-            elif evt_type == "process_ended":
-                await push_event(client_id, evt_type, event)
-                await release_session_lock_for_client(client_id)
-            elif evt_type == "error":
-                await push_event(client_id, evt_type, event)
-                await release_session_lock_for_client(client_id)
-            elif evt_type in ("assistant", "stream_event", "system", "model_changed"):
-                # ccb 高层事件和细粒度流式事件直接按类型推送，前端有对应 listener
-                await push_event(client_id, evt_type, event)
-            # 其他事件（hook_started 等）忽略
+        on_event = make_owner_event_handler(client_id, run_id, session, model, cwd or "", remote_target_id, cli, "新会话")
 
         try:
             await session.start(model=model, cwd=cwd, on_event=on_event, skip_permissions=skip_perms,
@@ -1651,7 +1657,7 @@ async def handle_action(body: bytes, writer: asyncio.StreamWriter):
             err = json.dumps({"ok": False, "error": str(exc)}, ensure_ascii=False).encode("utf-8")
             await send_response(writer, 400, "application/json; charset=utf-8", err)
             return
-        await push_event(client_id, "session_started", {"model": model, "remote_target_id": remote_target_id, "cli": cli})
+        await push_event(client_id, "session_started", {"model": model, "remote_target_id": remote_target_id, "cli": cli, "run_id": run_id})
         await send_response(writer, 200, "application/json", b'{"ok":true}')
 
     elif action == "resume_session":
@@ -1664,22 +1670,18 @@ async def handle_action(body: bytes, writer: asyncio.StreamWriter):
         remote_target_id = (remote_target or {}).get("id", "")
         cli = data.get("cli") or get_current_cli()
 
-        # 清理旧 session / viewer 状态
-        old_session = session_manager.get_session(client_id)
-        if old_session:
-            # 从原 owner 的 session 中移除 viewer
-            old_owner = client_viewing.pop(client_id, None)
-            if old_owner:
-                owner_sess = session_manager.get_session(old_owner)
-                if owner_sess:
-                    owner_sess.remove_viewer(client_id)
-            await old_session.stop()
+        # 切换历史会话只切换当前视图；旧会话如仍在生成则继续运行。
+        old_owner = client_viewing.pop(client_id, None)
+        if old_owner:
+            owner_sess = get_owned_session(old_owner, client_session_ids.get(client_id, ""))
+            if owner_sess:
+                owner_sess.remove_viewer(client_id)
         client_viewing.pop(client_id, None)
 
         # 检查该 session 是否已在另一个客户端活跃；即使当前空闲也要订阅后续事件
         owner_id = session_owner.get(resume_id)
         if owner_id and owner_id != client_id:
-            owner_session = session_manager.get_session(owner_id)
+            owner_session = get_owned_session(owner_id, resume_id)
             if owner_session and owner_session.is_running:
                 # 作为 viewer 订阅到活跃 session
                 client_session_ids[client_id] = resume_id
@@ -1697,6 +1699,7 @@ async def handle_action(body: bytes, writer: asyncio.StreamWriter):
                     "remote_target_id": meta.get("remote_target_id", ""), "cli": owner_session.cli or "",
                     "cwd": owner_session.cwd or meta.get("cwd", ""),
                     "viewing": True,
+                    "run_id": session_run_ids.get(resume_id, ""),
                 })
                 gen_state = build_generation_state(owner_session)
                 if gen_state:
@@ -1706,21 +1709,18 @@ async def handle_action(body: bytes, writer: asyncio.StreamWriter):
                 return
 
         # 常规恢复：创建新 session
-        _, session = session_manager.create_session(client_id)
+        run_id, session = session_manager.create_session(client_id)
+        session.session_id = resume_id
 
         client_meta[client_id] = {"model": model, "cwd": cwd, "remote_target_id": remote_target_id, "cli": cli}
         client_session_ids[client_id] = resume_id
         session_owner[resume_id] = client_id  # 恢复会话时直接设置归属，因为 session_id_captured 不会对已 resume 的 session 重复触发
+        session_run_ids[resume_id] = run_id
+        session_manager.bind_native_session(resume_id, run_id)
 
-        # 如果从旧 owner 手中接管会话，清理旧 session 并注册旧 owner 为 viewer
+        # 已有 owner 但未在生成时，新客户端可直接恢复并成为后续 owner；不停止旧 run。
         if owner_id and owner_id != client_id:
-            # 停止旧 owner 的 CCB session（避免资源泄漏）
-            old_session = session_manager.get_session(owner_id)
-            if old_session:
-                await old_session.stop()
-
             old_meta = client_meta.get(owner_id, {})
-            # 直接注册旧 owner 为 viewer，后续事件自动广播，无需前端再发 resume
             client_viewing[owner_id] = client_id
             client_session_ids[owner_id] = resume_id
             client_meta.setdefault(owner_id, {})
@@ -1745,6 +1745,7 @@ async def handle_action(body: bytes, writer: asyncio.StreamWriter):
                 "cli": cli or old_meta.get("cli", ""),
                 "cwd": old_meta.get("cwd", cwd or ""),
                 "viewing": True,
+                "run_id": run_id,
             })
 
             await push_event(owner_id, "session_taken", {
@@ -1757,30 +1758,47 @@ async def handle_action(body: bytes, writer: asyncio.StreamWriter):
 
         async def on_event_resume(event: dict):
             evt_type = event.get("type", "unknown")
+            sid = event.get("session_id") or resume_id
+            if sid and "session_id" not in event:
+                event = dict(event)
+                event["session_id"] = sid
+            if run_id and "run_id" not in event:
+                event = dict(event)
+                event["run_id"] = run_id
             if evt_type == "session_id_captured":
-                sid = event.get("session_id", "")
+                sid = event.get("session_id", resume_id)
                 client_session_ids[client_id] = sid
                 session_owner[sid] = client_id
+                session_run_ids[sid] = run_id
+                session_manager.bind_native_session(sid, run_id)
                 meta = client_meta.get(client_id, {})
                 save_session(sid, "", meta.get("model", model), meta.get("cwd", cwd or ""),
                              remote_target_id=meta.get("remote_target_id", ""), cli=meta.get("cli", ""))
                 await push_event(client_id, "session_id_captured", event)
             elif evt_type == "result":
                 await push_event(client_id, evt_type, persist_result_usage(client_id, event))
-                await release_session_lock_for_client(client_id)
+                await release_session_lock_for_session(sid, client_id)
             elif evt_type == "user":
                 results = extract_tool_results(event)
                 if results:
                     await push_event(client_id, "tool_result", {
+                        "session_id": sid,
+                        "run_id": run_id,
                         "results": results,
                         "parent_tool_use_id": event.get("parent_tool_use_id"),
                     })
             elif evt_type == "process_ended":
                 await push_event(client_id, evt_type, event)
-                await release_session_lock_for_client(client_id)
+                await release_session_lock_for_session(sid, client_id)
+                session_manager.finish_run(run_id)
+                if sid and session_run_ids.get(sid) == run_id:
+                    session_run_ids.pop(sid, None)
             elif evt_type == "error":
                 await push_event(client_id, evt_type, event)
-                await release_session_lock_for_client(client_id)
+                await release_session_lock_for_session(sid, client_id)
+                session_manager.finish_run(run_id)
+                if sid and session_run_ids.get(sid) == run_id:
+                    session_run_ids.pop(sid, None)
             elif evt_type in ("assistant", "stream_event", "system", "model_changed"):
                 await push_event(client_id, evt_type, event)
             # 其他事件忽略
@@ -1788,7 +1806,7 @@ async def handle_action(body: bytes, writer: asyncio.StreamWriter):
         session_locks.pop(resume_id, None)
         await session.start(model=model, cwd=cwd, resume_id=resume_id, on_event=on_event_resume, skip_permissions=skip_perms,
                             remote_target=remote_target, allow_mutate=allow_mutate, cli=cli)
-        await push_event(client_id, "session_started", {"model": model, "resumed": True, "session_id": resume_id, "remote_target_id": remote_target_id, "cli": cli})
+        await push_event(client_id, "session_started", {"model": model, "resumed": True, "session_id": resume_id, "remote_target_id": remote_target_id, "cli": cli, "run_id": run_id})
         await send_response(writer, 200, "application/json", b'{"ok":true}')
 
     elif action == "send_message":
@@ -1797,8 +1815,8 @@ async def handle_action(body: bytes, writer: asyncio.StreamWriter):
         # viewer 在 owner 正在生成时优先走持久进程 stdin 补充发送；不接管、不改锁 holder。
         viewing_owner = client_viewing.get(client_id)
         if viewing_owner:
-            owner_session = session_manager.get_session(viewing_owner)
-            active_sid = client_session_ids.get(viewing_owner) or client_session_ids.get(client_id, "")
+            owner_session = get_owned_session(viewing_owner, client_session_ids.get(client_id, ""))
+            active_sid = client_session_ids.get(client_id) or client_session_ids.get(viewing_owner, "")
             if owner_session and owner_session._message_owner_id:
                 if content and owner_session.can_accept_live_input():
                     try:
@@ -1825,13 +1843,12 @@ async def handle_action(body: bytes, writer: asyncio.StreamWriter):
                 owner_session.remove_viewer(client_id)
                 for vid in takeover_viewers:
                     owner_session.remove_viewer(vid)
-                await owner_session.stop()
             client_viewing.pop(client_id, None)
             if resume_id:
                 session_owner[resume_id] = client_id
                 client_session_ids[client_id] = resume_id
 
-            _, takeover_session = session_manager.create_session(client_id)
+            run_id, takeover_session = session_manager.create_session(client_id)
             meta = dict(client_meta.get(client_id) or client_meta.get(viewing_owner) or {})
             if requested_model:
                 meta["model"] = requested_model
@@ -1843,30 +1860,47 @@ async def handle_action(body: bytes, writer: asyncio.StreamWriter):
 
             async def on_takeover_event(event: dict):
                 evt_type = event.get("type", "unknown")
+                sid = event.get("session_id") or resume_id
+                if sid and "session_id" not in event:
+                    event = dict(event)
+                    event["session_id"] = sid
+                if run_id and "run_id" not in event:
+                    event = dict(event)
+                    event["run_id"] = run_id
                 if evt_type == "session_id_captured":
                     sid = event.get("session_id", resume_id)
                     client_session_ids[client_id] = sid
                     session_owner[sid] = client_id
+                    session_run_ids[sid] = run_id
+                    session_manager.bind_native_session(sid, run_id)
                     meta_now = client_meta.get(client_id, {})
                     save_session(sid, "", meta_now.get("model", ""), meta_now.get("cwd", ""),
                                  remote_target_id=meta_now.get("remote_target_id", ""), cli=meta_now.get("cli", ""))
                     await push_event(client_id, "session_id_captured", event)
                 elif evt_type == "result":
                     await push_event(client_id, evt_type, persist_result_usage(client_id, event))
-                    await release_session_lock_for_client(client_id)
+                    await release_session_lock_for_session(sid, client_id)
                 elif evt_type == "user":
                     results = extract_tool_results(event)
                     if results:
                         await push_event(client_id, "tool_result", {
+                            "session_id": sid,
+                            "run_id": run_id,
                             "results": results,
                             "parent_tool_use_id": event.get("parent_tool_use_id"),
                         })
                 elif evt_type == "process_ended":
                     await push_event(client_id, evt_type, event)
-                    await release_session_lock_for_client(client_id)
+                    await release_session_lock_for_session(sid, client_id)
+                    session_manager.finish_run(run_id)
+                    if sid and session_run_ids.get(sid) == run_id:
+                        session_run_ids.pop(sid, None)
                 elif evt_type == "error":
                     await push_event(client_id, evt_type, event)
-                    await release_session_lock_for_client(client_id)
+                    await release_session_lock_for_session(sid, client_id)
+                    session_manager.finish_run(run_id)
+                    if sid and session_run_ids.get(sid) == run_id:
+                        session_run_ids.pop(sid, None)
                 elif evt_type in ("assistant", "stream_event", "system", "model_changed"):
                     await push_event(client_id, evt_type, event)
 
@@ -1905,6 +1939,7 @@ async def handle_action(body: bytes, writer: asyncio.StreamWriter):
                     "cli": takeover_session.cli or client_meta.get(vid, {}).get("cli", ""),
                     "cwd": takeover_session.cwd or client_meta.get(vid, {}).get("cwd", ""),
                     "viewing": True,
+                    "run_id": run_id,
                 })
                 await push_event(vid, "session_taken", {
                     "session_id": resume_id,
@@ -1914,7 +1949,51 @@ async def handle_action(body: bytes, writer: asyncio.StreamWriter):
                     "remote_target_id": client_meta.get(vid, {}).get("remote_target_id", ""),
                 })
                 await push_current_session_lock(vid, resume_id)
-        session = session_manager.get_session(client_id)
+        session = get_current_session(client_id)
+        sid = client_session_ids.get(client_id, "")
+        if (not session or not session.is_running) and sid and content:
+            meta = client_meta.setdefault(client_id, {})
+            if requested_model:
+                meta["model"] = requested_model
+            if data.get("cli"):
+                meta["cli"] = data.get("cli")
+            if "remote_target_id" in data:
+                meta["remote_target_id"] = data.get("remote_target_id") or ""
+            run_id, session = session_manager.create_session(client_id)
+            session.session_id = sid
+            session_owner[sid] = client_id
+            session_run_ids[sid] = run_id
+            session_manager.bind_native_session(sid, run_id)
+            remote_target = remote_manager.get_target(meta.get("remote_target_id") or "")
+            on_event = make_owner_event_handler(
+                client_id,
+                run_id,
+                session,
+                meta.get("model") or get_default_model(),
+                meta.get("cwd", ""),
+                meta.get("remote_target_id", ""),
+                meta.get("cli", ""),
+                content.strip()[:50] or "新会话",
+            )
+            try:
+                await session.start(
+                    model=meta.get("model") or get_default_model(),
+                    cwd=meta.get("cwd"),
+                    resume_id=sid,
+                    on_event=on_event,
+                    skip_permissions=True,
+                    remote_target=remote_target,
+                    allow_mutate=bool(data.get("allow_remote_mutate", False)),
+                    cli=meta.get("cli") or get_current_cli(),
+                )
+            except Exception as exc:
+                session_manager.finish_run(run_id)
+                if session_run_ids.get(sid) == run_id:
+                    session_run_ids.pop(sid, None)
+                await push_event(client_id, "error", {"session_id": sid, "run_id": run_id, "message": str(exc)})
+                err = json.dumps({"ok": False, "error": str(exc)}, ensure_ascii=False).encode("utf-8")
+                await send_response(writer, 400, "application/json; charset=utf-8", err)
+                return
         if session and session.is_running and content:
             if requested_model and requested_model != session.model:
                 session.model = requested_model
@@ -1938,6 +2017,7 @@ async def handle_action(body: bytes, writer: asyncio.StreamWriter):
             title = content.strip()[:50]
             client_last_msg[client_id] = title
             sid = client_session_ids.get(client_id)
+            run_id = session_run_ids.get(sid, "") if sid else ""
             if sid:
                 meta = client_meta.get(client_id, {})
                 save_session(sid, title, meta.get("model", ""), meta.get("cwd", ""),
@@ -1991,13 +2071,15 @@ async def handle_action(body: bytes, writer: asyncio.StreamWriter):
                 return
             for vid in [target_id for target_id in get_session_subscribers(sid) if target_id != client_id]:
                 await push_generation_started(vid, session)
-            await send_response(writer, 200, "application/json", b'{"ok":true}')
+            await send_response(writer, 200, "application/json", json.dumps({"ok": True, "run_id": run_id}, ensure_ascii=False).encode("utf-8"))
         else:
             await push_event(client_id, "error", {"message": "Session not running"})
             await send_response(writer, 200, "application/json", b'{"ok":false,"error":"no session"}')
 
     elif action == "stop":
-        session = session_manager.get_session(client_id)
+        sid = data.get("session_id") or client_session_ids.get(client_id, "")
+        run_id = data.get("run_id") or (session_run_ids.get(sid, "") if sid else "")
+        session = session_manager.get_session_by_run_id(run_id) if run_id else get_current_session(client_id)
         if session:
             # viewer 不能 stop session，只能 stop 自己 viewing 的 session
             viewer_owner = client_viewing.get(client_id)
@@ -2007,11 +2089,17 @@ async def handle_action(body: bytes, writer: asyncio.StreamWriter):
                 return
             await session.stop(requester_id=client_id)
             await release_session_lock_for_client(client_id)
-        await push_event(client_id, "session_stopped", {})
+            if sid and session_run_ids.get(sid) == run_id:
+                session_run_ids.pop(sid, None)
+            if run_id:
+                session_manager.finish_run(run_id)
+        await push_event(client_id, "session_stopped", {"session_id": sid, "run_id": run_id})
         await send_response(writer, 200, "application/json", b'{"ok":true}')
 
     elif action == "interrupt":
-        session = session_manager.get_session(client_id)
+        sid = data.get("session_id") or client_session_ids.get(client_id, "")
+        run_id = data.get("run_id") or (session_run_ids.get(sid, "") if sid else "")
+        session = session_manager.get_session_by_run_id(run_id) if run_id else get_current_session(client_id)
         # viewer 不能 interrupt
         if client_viewing.get(client_id):
             await push_event(client_id, "error", {"message": "Viewer cannot interrupt"})
@@ -2020,7 +2108,11 @@ async def handle_action(body: bytes, writer: asyncio.StreamWriter):
         if session and session.is_running:
             await session.interrupt(requester_id=client_id)
             await release_session_lock_for_client(client_id)
-        await push_event(client_id, "generation_interrupted", {})
+            if sid and session_run_ids.get(sid) == run_id:
+                session_run_ids.pop(sid, None)
+            if run_id:
+                session_manager.finish_run(run_id)
+        await push_event(client_id, "generation_interrupted", {"session_id": sid, "run_id": run_id})
         await send_response(writer, 200, "application/json", b'{"ok":true}')
 
     else:
@@ -2031,6 +2123,57 @@ async def publish_scheduled_event(event_type: str, data: dict):
     """向所有已连接客户端广播定时任务事件。"""
     for client_id in list(sse_clients.keys()):
         await push_event(client_id, event_type, data)
+
+
+def make_owner_event_handler(client_id: str, run_id: str, session, model: str, cwd: str, remote_target_id: str, cli: str, default_title: str = "新会话"):
+    async def on_event(event: dict):
+        evt_type = event.get("type", "unknown")
+        sid = event.get("session_id") or getattr(session, "session_id", None) or client_session_ids.get(client_id, "")
+        if sid and "session_id" not in event:
+            event = dict(event)
+            event["session_id"] = sid
+        if run_id and "run_id" not in event:
+            event = dict(event)
+            event["run_id"] = run_id
+        if evt_type == "session_id_captured":
+            sid = event.get("session_id", "")
+            client_session_ids[client_id] = sid
+            session_owner[sid] = client_id
+            session_run_ids[sid] = run_id
+            session_manager.bind_native_session(sid, run_id)
+            title = client_last_msg.get(client_id, default_title)
+            meta = client_meta.get(client_id, {})
+            save_session(sid, title, meta.get("model", model), meta.get("cwd", cwd or ""),
+                         remote_target_id=meta.get("remote_target_id", remote_target_id), cli=meta.get("cli", cli))
+            await push_event(client_id, "session_id_captured", event)
+        elif evt_type == "result":
+            await push_event(client_id, evt_type, persist_result_usage(client_id, event))
+            await release_session_lock_for_session(sid, client_id)
+        elif evt_type == "user":
+            results = extract_tool_results(event)
+            if results:
+                await push_event(client_id, "tool_result", {
+                    "session_id": sid,
+                    "run_id": run_id,
+                    "results": results,
+                    "parent_tool_use_id": event.get("parent_tool_use_id"),
+                })
+        elif evt_type == "process_ended":
+            await push_event(client_id, evt_type, event)
+            await release_session_lock_for_session(sid, client_id)
+            session_manager.finish_run(run_id)
+            if sid and session_run_ids.get(sid) == run_id:
+                session_run_ids.pop(sid, None)
+        elif evt_type == "error":
+            await push_event(client_id, evt_type, event)
+            await release_session_lock_for_session(sid, client_id)
+            session_manager.finish_run(run_id)
+            if sid and session_run_ids.get(sid) == run_id:
+                session_run_ids.pop(sid, None)
+        elif evt_type in ("assistant", "stream_event", "system", "model_changed"):
+            await push_event(client_id, evt_type, event)
+
+    return on_event
 
 
 # ─── REST API ──────────────────────────────────────────────
@@ -2115,7 +2258,7 @@ async def handle_api_get(path: str, writer: asyncio.StreamWriter, query: dict = 
         # 标记活跃中的会话（当前正在生成回复）
         active_sids = set()
         for sid, owner_id in session_owner.items():
-            owner_sess = session_manager.get_session(owner_id)
+            owner_sess = get_owned_session(owner_id, sid)
             if owner_sess and owner_sess.is_running and owner_sess._message_owner_id:
                 active_sids.add(sid)
         for s in sessions:

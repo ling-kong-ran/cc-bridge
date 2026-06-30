@@ -15,6 +15,7 @@ let streamBlocks = {};
 let totalCost = 0;
 let totalTokens = emptyTokenUsage();
 let currentSessionId = null; // ccb 的 session UUID
+let currentRunId = null; // 当前打开会话正在生成的 run id
 const sessionGroupOpenState = new Map();
 let connectionOnline = false;
 let currentTurnContent = '';
@@ -1581,6 +1582,18 @@ function initSSE() {
   bindSSEEvents();
 }
 
+function isEventForCurrentSession(data = {}) {
+  return !data.session_id || !currentSessionId || data.session_id === currentSessionId;
+}
+
+function noteBackgroundSessionEvent(data = {}) {
+  if (data.session_id && data.session_id !== currentSessionId) {
+    scheduleCompletionHistorySync(data.session_id);
+    return true;
+  }
+  return false;
+}
+
 function bindSSEEvents() {
   eventSource.addEventListener('connected', (e) => {
     const data = JSON.parse(e.data);
@@ -1590,6 +1603,8 @@ function bindSSEEvents() {
 
   eventSource.addEventListener('session_started', (e) => {
     const data = JSON.parse(e.data);
+    if (data.session_id) currentSessionId = data.session_id;
+    currentRunId = data.run_id || null;
     const wasActive = sessionActive;
     sessionActive = true;
     isViewer = !!data.viewing;
@@ -1613,6 +1628,7 @@ function bindSSEEvents() {
       if (welcome) welcome.remove();
       if (data.session_id) {
         currentSessionId = data.session_id;
+        currentRunId = data.run_id || currentRunId;
         if (data.cwd) {
           cwdInput.value = data.cwd;
           updateRuntimeSummary();
@@ -1634,9 +1650,12 @@ function bindSSEEvents() {
   });
 
   eventSource.addEventListener('session_stopped', (e) => {
+    const data = JSON.parse(e.data || '{}');
+    if (!isEventForCurrentSession(data)) return;
     sessionActive = false;
     isResponding = false;
     isViewer = false;
+    currentRunId = null;
     updateUI();
     addSystemMsg(t('sessionStopped'));
   });
@@ -1656,6 +1675,7 @@ function bindSSEEvents() {
   eventSource.addEventListener('user_message', (e) => {
     // viewer 收到 owner 发送的用户消息（一问一答中的"问"）
     const data = JSON.parse(e.data);
+    if (!isEventForCurrentSession(data)) return;
     if (data.content) {
       addUserMessage(data.content);
       scrollToBottom();
@@ -1666,7 +1686,9 @@ function bindSSEEvents() {
     // 刷新后重连到正在回复的会话，恢复响应状态和 server 端真实耗时。
     // 未收到实际 assistant 输出前不创建空回复气泡，避免历史加载/进程结束竞态造成短暂流式闪烁。
     const data = JSON.parse(e.data || '{}');
+    if (!isEventForCurrentSession(data)) return;
     if (data.running === false) return;
+    currentRunId = data.run_id || currentRunId;
     isResponding = true;
     currentTurnStartedAt = data.started_at ? data.started_at * 1000 : Date.now() - Number(data.elapsed_ms || 0);
     currentTurnContent = data.prompt || currentTurnContent || '';
@@ -1688,6 +1710,7 @@ function bindSSEEvents() {
 
   eventSource.addEventListener('system', (e) => {
     const data = JSON.parse(e.data);
+    if (!isEventForCurrentSession(data)) return;
     if (data.subtype === 'init') {
       const modelLabel = getDisplayModelName(data.model || '');
       addSystemMsg(t('initStatus', {
@@ -1699,16 +1722,25 @@ function bindSSEEvents() {
   });
 
   eventSource.addEventListener('stream_event', (e) => {
-    handleStreamEvent(JSON.parse(e.data));
+    const data = JSON.parse(e.data);
+    if (noteBackgroundSessionEvent(data)) return;
+    handleStreamEvent(data);
   });
 
   eventSource.addEventListener('assistant', (e) => {
-    handleAssistantFinal(JSON.parse(e.data));
+    const data = JSON.parse(e.data);
+    if (noteBackgroundSessionEvent(data)) return;
+    handleAssistantFinal(data);
   });
 
   eventSource.addEventListener('session_id_captured', (e) => {
     const data = JSON.parse(e.data);
+    if (data.session_id && currentSessionId && data.session_id !== currentSessionId && data.run_id !== currentRunId) {
+      scheduleCompletionHistorySync(data.session_id);
+      return;
+    }
     currentSessionId = data.session_id;
+    currentRunId = data.run_id || currentRunId;
     renderTopbarMeta();
     openCurrentCwdSessionGroup();
     loadSessions();
@@ -1716,6 +1748,7 @@ function bindSSEEvents() {
 
   eventSource.addEventListener('cwd_changed', (e) => {
     const data = JSON.parse(e.data);
+    if (!isEventForCurrentSession(data)) return;
     if (data.cwd) {
       cwdInput.value = data.cwd;
       updateRuntimeSummary();
@@ -1731,6 +1764,7 @@ function bindSSEEvents() {
 
   eventSource.addEventListener('model_changed', (e) => {
     const data = JSON.parse(e.data);
+    if (!isEventForCurrentSession(data)) return;
     const modelLabel = getDisplayModelName(data.model || '');
     renderTopbarMeta(data.model || '');
     if (data.model && modelSelect) { modelSelect.value = data.model; }
@@ -1740,11 +1774,14 @@ function bindSSEEvents() {
   });
 
   eventSource.addEventListener('result', (e) => {
-    handleResult(JSON.parse(e.data));
+    const data = JSON.parse(e.data);
+    if (noteBackgroundSessionEvent(data)) return;
+    handleResult(data);
   });
 
   eventSource.addEventListener('tool_result', (e) => {
     const data = JSON.parse(e.data);
+    if (noteBackgroundSessionEvent(data)) return;
     // 存结果，更新工具卡片
     if (data.results) {
       for (const r of data.results) {
@@ -1770,6 +1807,7 @@ function bindSSEEvents() {
   eventSource.addEventListener('process_ended', (e) => {
     // ccb 进程结束 —— 确保前端退出 responding 状态；即使锁事件已先到达，也要补齐清理/通知。
     const data = JSON.parse(e.data || '{}');
+    if (noteBackgroundSessionEvent(data)) return;
     const finishedTurn = finishCurrentTurnFromProcess();
     if (isSlashCommand(finishedTurn.prompt) && !finishedTurn.hadAssistantOutput) {
       const command = getSlashCommandName(finishedTurn.prompt);
@@ -1779,10 +1817,13 @@ function bindSSEEvents() {
         addSystemMsg(t('commandEnded', { command }), true);
       }
     }
-    scheduleCompletionHistorySync(currentSessionId);
+    scheduleCompletionHistorySync(data.session_id || currentSessionId);
+    currentRunId = null;
   });
 
-  eventSource.addEventListener('generation_interrupted', () => {
+  eventSource.addEventListener('generation_interrupted', (e) => {
+    const data = JSON.parse(e.data || '{}');
+    if (!isEventForCurrentSession(data)) return;
     const hadAssistantOutput = currentTurnHasAssistantOutput;
     isResponding = false;
     if (currentAssistantEl) currentAssistantEl.classList.remove('streaming');
@@ -1791,6 +1832,7 @@ function bindSSEEvents() {
     stopTurnTimer();
     removePendingAssistantBubble(hadAssistantOutput);
     currentAssistantEl = null;
+    currentRunId = null;
     clearRunningTasks({ keepFinished: true });
     clearSubagentBubbles();
     updateUI();
@@ -1819,6 +1861,7 @@ function bindSSEEvents() {
   eventSource.addEventListener('error', (e) => {
     if (e.data) {
       const data = JSON.parse(e.data);
+      if (noteBackgroundSessionEvent(data)) return;
       addSystemMsg(data.message || t('unknownError'), true);
       // 收到错误事件也要退出 responding 状态
       isResponding = false;
@@ -1828,6 +1871,7 @@ function bindSSEEvents() {
       stopTurnTimer();
       removePendingAssistantBubble(false);
       currentAssistantEl = null;
+      currentRunId = null;
       updateUI();
       notifyComplete('process');
     }
@@ -2688,7 +2732,7 @@ function initInput() {
   });
 
   btnSend.addEventListener('click', sendMessage);
-  btnStop.addEventListener('click', () => sendAction('interrupt'));
+  btnStop.addEventListener('click', interruptCurrentRun);
   btnNewSession.addEventListener('click', startNewSession);
   btnExportChat?.addEventListener('click', copyConversationMarkdown);
   topbarSessionId?.addEventListener('click', copyResumeCommand);
@@ -2876,6 +2920,10 @@ function initMessageContextMenu() {
   });
 }
 
+function interruptCurrentRun() {
+  return sendAction('interrupt', { session_id: currentSessionId, run_id: currentRunId });
+}
+
 function handleGlobalShortcuts(e) {
   if (e.key === 'Escape' && shortcutsOverlay && shortcutsOverlay.style.display !== 'none') {
     e.preventDefault();
@@ -2899,7 +2947,7 @@ function handleGlobalShortcuts(e) {
     sendMessage();
   } else if (key === '.') {
     e.preventDefault();
-    sendAction('interrupt');
+    interruptCurrentRun();
   } else if (key === 'e') {
     e.preventDefault();
     copyConversationMarkdown();
@@ -3277,6 +3325,8 @@ async function sendMessage() {
     addSystemMsg(result?.error || t('requestFailed', { message: 'send_message' }), true);
     return;
   }
+
+  if (result.run_id) currentRunId = result.run_id;
 }
 
 function isSlashCommand(content) {
@@ -3299,6 +3349,7 @@ function resetSessionViewState() {
   totalCost = 0;
   totalTokens = emptyTokenUsage();
   currentSessionId = null;
+  currentRunId = null;
   renderTopbarMeta();
   renderCost();
   renderTokens();
@@ -3307,17 +3358,6 @@ function resetSessionViewState() {
 function startNewSession() {
   if (!clientId) {
     addSystemMsg(t('notConnected'), true);
-    return;
-  }
-
-  // 如果当前有活跃会话，先停止并解锁 UI，让用户可以修改配置
-  if (sessionActive) {
-    sendAction('stop');
-    sessionActive = false;
-    isResponding = false;
-    updateUI();
-    resetSessionViewState();
-    addSystemMsg(t('stoppedEditable'));
     return;
   }
 
@@ -3349,13 +3389,6 @@ async function startNewSessionFromCwd(cwd) {
   if (!nextCwd || !clientId) {
     if (!clientId) addSystemMsg(t('notConnected'), true);
     return;
-  }
-
-  if (sessionActive) {
-    await sendAction('stop');
-    sessionActive = false;
-    isResponding = false;
-    updateUI();
   }
 
   showPage('chat');

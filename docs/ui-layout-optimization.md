@@ -537,6 +537,29 @@ client_runs: dict[str, set[str]]            # client_id -> run_id 集合
 3. 前端保存当前 `run_id`，Stop 按钮按 `run_id` 停止。
 4. 历史列表展示非当前会话的 active / unread 状态。
 
+### 实现记录
+
+多会话并发第一版已完成。
+
+已调整：
+
+- `SessionManager` 从单一 `client_id -> CCBSession` 改为以 `run_id` 管理运行实例，并维护 `client_runs / client_current_run / session_runs` 映射。
+- `new_session` 不再停止同一 client 下已有的运行会话，只创建新 run 并切换当前 UI 上下文。
+- owner / resume / takeover 事件处理器都闭包捕获创建时的 `run_id`，避免切换新会话后旧会话事件被归到当前 run。
+- `session_id_captured`、`assistant`、`stream_event`、`system`、`result`、`process_ended`、`tool_result` 等生成相关事件补齐 `session_id` 和 `run_id`。
+- `send_message` 返回 `{ ok: true, run_id }`；当前 run 结束后，同一 `session_id` 的下一条消息会重新创建 run 并用 `resume_id` 继续原生会话。
+- Stop / Interrupt 优先按前端传入的 `run_id` 停止，只清理当前打开会话对应的运行实例。
+- 前端新增 `currentRunId`，发送成功、`session_started`、`generation_started` 时记录 run，结束 / 中断 / 错误时清理。
+- 前端 SSE 事件按 `session_id` 过滤，后台旧会话事件不再写入当前聊天区，只触发历史列表同步。
+- 重新连接、恢复会话、viewer 接管相关的 `session_started` 事件补齐 `run_id`，保证 Stop 按钮和快捷键能定位当前 run。
+
+验证：
+
+- `python .tmp_multi_session_validation.py` 通过，覆盖：同一 client 新建第二个会话不停止第一个会话、后台旧会话事件保留原 `session_id/run_id`、当前会话发送返回 run、run 结束后同一 `session_id` 可重新创建 run 并 resume、Interrupt 只停止指定 run。
+- `python -m py_compile server.py ccb_bridge.py`
+- `node --check static/app.js`
+- `git diff --check`
+
 ## 验证注意事项
 
 验证 ccb-gui 时不要直接运行默认：
