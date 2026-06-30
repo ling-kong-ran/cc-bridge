@@ -131,6 +131,29 @@
 
 目标效果：右侧面板能按当前工作内容临时扩宽或收窄，同时不破坏三栏布局稳定性。
 
+### 8.1 右侧 Workspace 面板二次整理
+
+问题：右侧 Workspace 在初步整理后仍保留了固定 `Workspace` 标题和内容区重复标题，Files / Changes / Members 的层级被拆散，tab 区也像独立导航而不是当前工具面板的一部分。
+
+已调整：
+
+- Header 标题改为当前 active tab 名称，Files / Changes / Members 切换时同步更新。
+- Header subtitle 动态显示当前上下文：Files 显示当前路径，Changes 显示分支与文件数，Members 显示成员数量或提示。
+- Tabs 移入 Header 并改为横向 segmented control，减少右侧栏内部的割裂感。
+- 删除 Files / Changes / Members 内容区重复标题和说明，让内容区只承载具体列表、搜索和操作。
+- Review 分支信息改成弱卡片，和 staged / unstaged 分组形成更清晰的 Git review 面板。
+- Members 面板只保留右上角轻量 `Add member` 操作，降低空成员状态下的视觉重量。
+- 默认宽度从 280px 提升到 340px，桌面端可调范围改为 300px 到 520px，并限制最大为视口宽度的 42%。
+
+验证：
+
+- `node --check static/app.js`
+- `python -m py_compile server.py ccb_bridge.py`
+- `git diff --check`
+- 自定义 Workspace 结构校验通过：确认动态标题 / subtitle 存在、tabs 位于 header 内、旧内容区标题已移除、segmented tabs 样式存在、`updateWorkspaceHeader()` 存在、右侧宽度常量已更新。
+
+目标效果：右侧 Workspace 更像一个稳定的 IDE 辅助工具抽屉，顶部负责说明当前工具和上下文，内容区专注展示文件、变更或成员。
+
 ### 9. 左侧 Sidebar 信息密度优化
 
 问题：左侧 Runtime Settings 收起后路径信息偏长，历史会话分组只靠默认展开表达当前项目，识别不够直接；新建会话前运行设置也不够突出。

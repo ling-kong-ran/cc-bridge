@@ -233,29 +233,25 @@
           <div id="chat-sidebar-resizer" class="chat-sidebar-resizer" role="separator" aria-orientation="vertical" aria-label="Resize workspace panel"></div>
           <div class="chat-sidebar-header">
             <div class="chat-sidebar-title-row">
-              <span class="chat-sidebar-title" data-i18n="workspacePanel">Workspace</span>
+              <div class="chat-sidebar-heading">
+                <span id="chat-sidebar-title" class="chat-sidebar-title" data-i18n="filesTab">Files</span>
+                <span id="chat-sidebar-subtitle" class="chat-sidebar-subtitle">-</span>
+              </div>
               <div class="chat-sidebar-header-actions">
                 <button id="btn-chat-sidebar-close" class="btn-icon-mini btn-close-sidebar" title="收起面板" data-i18n-title="collapsePanel">›</button>
               </div>
             </div>
-          </div>
-          <div class="chat-sidebar-content">
             <div class="chat-sidebar-tabs">
               <button class="chat-sidebar-tab active" data-tab="files" title="Files" data-i18n-title="filesTab"><span data-i18n="filesTab">Files</span></button>
-              <button class="chat-sidebar-tab" data-tab="review" title="Review" data-i18n-title="reviewTab"><span data-i18n="reviewTab">Review</span></button>
+              <button class="chat-sidebar-tab" data-tab="review" title="Changes" data-i18n-title="reviewTab"><span data-i18n="reviewTab">Changes</span></button>
               <button class="chat-sidebar-tab" data-tab="members" title="Members" data-i18n-title="sessionMembers"><span data-i18n="sessionMembers">Members</span></button>
             </div>
+          </div>
+          <div class="chat-sidebar-content">
             <div class="chat-sidebar-body">
             <div id="file-tree-panel" class="file-tree-panel">
-              <div class="workspace-panel-head">
-                <div>
-                  <div class="workspace-panel-label" data-i18n="workspaceFilesTitle">Files</div>
-                  <div class="workspace-panel-hint" data-i18n="workspaceFilesHint">Browse workspace files and attach them to the message</div>
-                </div>
-              </div>
               <div class="file-tree-toolbar">
                 <div class="file-tree-context">
-                  <div class="file-tree-label" data-i18n="cwd">Working Directory</div>
                   <div id="file-tree-path" class="file-tree-path">-</div>
                 </div>
                 <button id="btn-file-tree-refresh" class="btn-icon-mini" title="Refresh">↻</button>
@@ -267,11 +263,7 @@
             </div>
             <div id="review-panel" class="review-panel" style="display:none"></div>
             <div id="group-member-panel" class="group-member-panel" style="display:none">
-              <div class="workspace-panel-head member-panel-head">
-                <div>
-                  <div class="workspace-panel-label" data-i18n="workspaceMembersTitle">Members</div>
-                  <div class="workspace-panel-hint" data-i18n="workspaceMembersHint">Type @ to mention session members</div>
-                </div>
+              <div class="member-panel-actions">
                 <button id="btn-session-agent-add" class="btn-mini" title="拉入成员" data-i18n-title="pullMember" type="button">+ <span data-i18n="pullMember">Add member</span></button>
               </div>
               <div id="group-member-list" class="group-member-list"></div>

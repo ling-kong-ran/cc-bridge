@@ -4070,6 +4070,7 @@ function renderSessionAgentsPanel() {
 
   if (!sessionAgents.length) {
     list.innerHTML = `<div class="group-member-empty">${esc(t('noSessionAgents'))}</div>`;
+    updateWorkspaceHeader('members');
     return;
   }
 
@@ -4079,6 +4080,7 @@ function renderSessionAgentsPanel() {
       <span class="chip-remove" data-action="remove" data-agent="${esc(a)}">&times;</span>
     </span>
   `).join('');
+  updateWorkspaceHeader('members');
 
   // 点击芯片名 → 插入 @名称
   list.querySelectorAll('.group-member-chip .chip-name').forEach(nameEl => {
@@ -4151,12 +4153,12 @@ function refreshRightPaneFiles() {
   loadFileTree(cwd);
 }
 
-const RIGHT_PANE_MIN = 240;
-const RIGHT_PANE_MAX = 480;
-const RIGHT_PANE_DEFAULT = 280;
+const RIGHT_PANE_MIN = 300;
+const RIGHT_PANE_MAX = 520;
+const RIGHT_PANE_DEFAULT = 340;
 
 function clampRightPaneWidth(value) {
-  const viewportMax = Math.max(RIGHT_PANE_MIN, Math.min(RIGHT_PANE_MAX, Math.round(window.innerWidth * 0.38)));
+  const viewportMax = Math.max(RIGHT_PANE_MIN, Math.min(RIGHT_PANE_MAX, Math.round(window.innerWidth * 0.42)));
   const width = Number(value) || RIGHT_PANE_DEFAULT;
   return Math.max(RIGHT_PANE_MIN, Math.min(viewportMax, Math.round(width)));
 }
@@ -4359,6 +4361,33 @@ function initRightPanel() {
   loadSessionAgents();
 }
 
+function getWorkspaceSubtitle(tab) {
+  if (tab === 'files') {
+    return (fileTreePath || cwdInput?.value || '').replace(/\\/g, '/') || '-';
+  }
+  if (tab === 'review') {
+    const branch = document.querySelector('#review-panel .review-branch-name')?.textContent?.trim();
+    const count = document.querySelector('#review-panel .review-branch-count')?.textContent?.trim();
+    return [branch, count].filter(Boolean).join(' · ') || ((cwdInput?.value || '').trim() ? t('reviewLoading') : '-');
+  }
+  if (tab === 'members') {
+    return sessionAgents.length ? t('itemCount', { count: sessionAgents.length }) : t('workspaceMembersHint');
+  }
+  return '';
+}
+
+function updateWorkspaceHeader(tab = document.querySelector('.chat-sidebar-tab.active')?.dataset.tab || 'files') {
+  const titleEl = document.getElementById('chat-sidebar-title');
+  const subtitleEl = document.getElementById('chat-sidebar-subtitle');
+  const titleKey = tab === 'review' ? 'reviewTab' : tab === 'members' ? 'sessionMembers' : 'filesTab';
+  if (titleEl) titleEl.textContent = t(titleKey);
+  if (subtitleEl) {
+    const subtitle = getWorkspaceSubtitle(tab);
+    subtitleEl.textContent = subtitle || '-';
+    subtitleEl.title = subtitle || '';
+  }
+}
+
 function switchToSidebarTab(tab) {
   document.querySelectorAll('.chat-sidebar-tab').forEach(t => t.classList.remove('active'));
   const tabEl = document.querySelector(`.chat-sidebar-tab[data-tab="${tab}"]`);
@@ -4366,6 +4395,7 @@ function switchToSidebarTab(tab) {
   document.getElementById('file-tree-panel').style.display = tab === 'files' ? '' : 'none';
   document.getElementById('review-panel').style.display = tab === 'review' ? '' : 'none';
   document.getElementById('group-member-panel').style.display = tab === 'members' ? '' : 'none';
+  updateWorkspaceHeader(tab);
 }
 
 let fileTreePath = '';
@@ -4373,26 +4403,23 @@ let fileTreePath = '';
 async function loadReview(cwd) {
   const panel = document.getElementById('review-panel');
   if (!panel) return;
-  const panelHead = () => `<div class="workspace-panel-head">
-    <div>
-      <div class="workspace-panel-label">${esc(t('workspaceReviewTitle'))}</div>
-      <div class="workspace-panel-hint">${esc(t('workspaceReviewHint'))}</div>
-    </div>
-  </div>`;
-  panel.innerHTML = panelHead() + `<div class="review-loading">${esc(t('reviewLoading'))}</div>`;
+  panel.innerHTML = `<div class="review-loading">${esc(t('reviewLoading'))}</div>`;
+  updateWorkspaceHeader('review');
   try {
     const resp = await fetch(`/api/review?cwd=${encodeURIComponent(cwd)}`);
     const data = await resp.json();
     if (data.error) {
-      panel.innerHTML = panelHead() + `<div class="review-empty">${esc(data.error)}</div>`;
+      panel.innerHTML = `<div class="review-empty">${esc(data.error)}</div>`;
+      updateWorkspaceHeader('review');
       return;
     }
     if (!data.git) {
-      panel.innerHTML = panelHead() + `<div class="review-empty">${esc(data.message || t('reviewNoGit'))}</div>`;
+      panel.innerHTML = `<div class="review-empty">${esc(data.message || t('reviewNoGit'))}</div>`;
+      updateWorkspaceHeader('review');
       return;
     }
     const files = data.files || [];
-    let html = panelHead();
+    let html = '';
     // 分支名
     html += `<div class="review-branch"><span data-i18n="reviewBranch">${esc(t('reviewBranch'))}</span><span class="review-branch-name">${esc(data.branch)}</span><span class="review-branch-count">${esc(t('itemCount', { count: files.length }))}</span></div>`;
       const statusLabel = {
@@ -4428,8 +4455,10 @@ async function loadReview(cwd) {
       html += `<div class="review-stat-block" style="color:var(--text-ghost)">${esc(data.stat || '')}</div>`;
     }
     panel.innerHTML = html;
+    updateWorkspaceHeader('review');
   } catch (e) {
-    panel.innerHTML = panelHead() + `<div class="review-empty">${esc(t('unknownError'))}</div>`;
+    panel.innerHTML = `<div class="review-empty">${esc(t('unknownError'))}</div>`;
+    updateWorkspaceHeader('review');
   }
 }
 
@@ -4439,6 +4468,7 @@ function updateFileTreePathLabel(path = fileTreePath || cwdInput?.value || '') {
   const normalized = String(path || '').replace(/\\/g, '/');
   label.textContent = normalized || '-';
   label.title = normalized;
+  updateWorkspaceHeader('files');
 }
 
 function applyFileTreeFilter() {

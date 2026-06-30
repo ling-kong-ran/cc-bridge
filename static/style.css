@@ -1274,8 +1274,8 @@ html.light-theme .select {
 .chat-sidebar {
   width: var(--pane-right);
   flex: 0 0 var(--pane-right);
-  min-width: 240px;
-  max-width: min(480px, 38vw);
+  min-width: 300px;
+  max-width: min(520px, 42vw);
   overflow: hidden;
   background: linear-gradient(180deg, var(--bg-surface), var(--bg-deep));
   border-left: 1px solid var(--border);
@@ -1336,9 +1336,10 @@ body.pane-right-collapsed .chat-sidebar {
 .chat-sidebar-header {
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  padding: 10px 10px 8px;
+  gap: 9px;
+  padding: 10px;
   border-bottom: 1px solid var(--border-dim);
+  background: linear-gradient(180deg, rgba(var(--accent-rgb), 0.045), transparent);
   flex-shrink: 0;
 }
 .chat-sidebar-content {
@@ -1349,74 +1350,61 @@ body.pane-right-collapsed .chat-sidebar {
 }
 .chat-sidebar-title-row {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: space-between;
   gap: 8px;
 }
-.chat-sidebar-title {
-  font-family: var(--font-mono);
-  font-size: 10px;
-  font-weight: 700;
-  color: var(--text-bright);
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-}
-.chat-sidebar-tabs {
-  width: 48px;
-  flex: 0 0 48px;
+.chat-sidebar-heading {
+  min-width: 0;
   display: flex;
   flex-direction: column;
-  align-items: stretch;
-  gap: 6px;
-  padding: 10px 6px;
-  border-right: 1px solid var(--border-dim);
+  gap: 2px;
+}
+.chat-sidebar-title {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-bright);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.chat-sidebar-subtitle {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--text-ghost);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}
+.chat-sidebar-tabs {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 4px;
+  padding: 3px;
+  border: 1px solid var(--border-dim);
+  border-radius: 999px;
   background: color-mix(in srgb, var(--bg-deep) 72%, transparent);
 }
 .chat-sidebar-tab {
   position: relative;
-  width: 36px;
-  height: 36px;
-  display: grid;
-  place-items: center;
+  min-width: 0;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   background: transparent;
   border: 1px solid transparent;
-  padding: 0;
-  border-radius: 12px;
-  font-size: 11px; font-family: var(--font-mono);
+  padding: 0 8px;
+  border-radius: 999px;
+  font-size: 10px; font-family: var(--font-mono);
   color: var(--text-muted); cursor: pointer;
   transition: all var(--t-fast); white-space: nowrap;
   letter-spacing: 0.03em;
 }
 .chat-sidebar-tab span {
-  position: absolute;
-  left: calc(100% + 10px);
-  top: 50%;
-  transform: translate(-4px, -50%);
-  max-width: 130px;
-  padding: 5px 8px;
-  border: 1px solid var(--border-dim);
-  border-radius: var(--radius-xs);
-  background: var(--bg-raised);
-  color: var(--text-base);
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.22);
-  opacity: 0;
-  pointer-events: none;
   overflow: hidden;
   text-overflow: ellipsis;
-  z-index: 20;
-  transition: opacity var(--t-fast), transform var(--t-fast);
-}
-.chat-sidebar-tab::after {
-  font-size: 15px;
-  line-height: 1;
-}
-.chat-sidebar-tab[data-tab="files"]::after { content: '▣'; }
-.chat-sidebar-tab[data-tab="review"]::after { content: '⌁'; }
-.chat-sidebar-tab[data-tab="members"]::after { content: '@'; }
-.chat-sidebar-tab:hover span,
-.chat-sidebar-tab:focus-visible span {
-  opacity: 1;
-  transform: translate(0, -50%);
 }
 .chat-sidebar-tab.active {
   background: var(--green-faint);
@@ -1467,12 +1455,10 @@ body.pane-right-collapsed .chat-sidebar {
 /* 文件树 */
 .file-tree-toolbar {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   justify-content: space-between;
   gap: 8px;
-  margin-bottom: 10px;
-  padding-bottom: 8px;
-  border-bottom: 1px solid var(--border-dim);
+  margin-bottom: 8px;
 }
 .file-tree-context {
   min-width: 0;
@@ -1497,7 +1483,7 @@ body.pane-right-collapsed .chat-sidebar {
 }
 .file-tree-filter-row {
   display: block;
-  margin-bottom: 8px;
+  margin-bottom: 10px;
 }
 .file-tree-filter {
   width: 100%;
@@ -1717,8 +1703,11 @@ body.pane-right-collapsed .chat-sidebar {
 
 .review-branch {
   display: flex; align-items: center; gap: 6px;
-  padding: 4px 0; margin-bottom: 2px;
+  padding: 6px 8px; margin-bottom: 4px;
   color: var(--text-muted); font-size: 10px;
+  border: 1px solid var(--border-dim);
+  border-radius: var(--radius-xs);
+  background: rgba(255,255,255,0.018);
 }
 .review-branch-name {
   color: var(--green); font-weight: 600;
@@ -1803,10 +1792,12 @@ body.pane-right-collapsed .chat-sidebar {
 .chat-sidebar .group-member-panel {
   display: flex; flex-direction: column; gap: 10px;
 }
-.member-panel-head {
-  margin-bottom: 0;
+.member-panel-actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 10px;
 }
-.member-panel-head .btn-mini {
+.member-panel-actions .btn-mini {
   margin: 0; padding: 5px 8px; font-size: 10px;
 }
 .group-member-list {
