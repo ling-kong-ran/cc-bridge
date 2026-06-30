@@ -1267,6 +1267,7 @@ html.light-theme .select {
 .chat-main {
   flex: 1; display: flex; flex-direction: column;
   min-width: 0; overflow: hidden;
+  position: relative;
 }
 
 /* Hermes 式三栏 Pane：左侧会话 / 中间对话 / 右侧资源面板 */
@@ -1529,10 +1530,12 @@ body.pane-right-collapsed .chat-sidebar {
 .file-tree-entry .ft-icon { flex-shrink: 0; font-size: 12px; width: 14px; text-align: center; }
 .file-preview-panel {
   position: absolute;
-  left: 18px;
-  right: 18px;
-  bottom: 102px;
-  height: min(66vh, 640px);
+  left: 50%;
+  top: 56px;
+  bottom: auto;
+  transform: translateX(-50%);
+  width: min(680px, calc(100% - 36px));
+  height: min(52vh, 460px);
   z-index: 24;
   flex-direction: column;
   background: color-mix(in srgb, var(--bg-surface) 94%, transparent);

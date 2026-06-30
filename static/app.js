@@ -4468,6 +4468,26 @@ function initFilePreviewPanel() {
   });
 }
 
+function positionFilePreviewAtMessagesCenter() {
+  if (!previewPanel || !messagesEl) return;
+  const parent = previewPanel.offsetParent || previewPanel.parentElement;
+  if (!parent) return;
+  const rect = previewPanel.getBoundingClientRect();
+  const parentRect = parent.getBoundingClientRect();
+  const messagesRect = messagesEl.getBoundingClientRect();
+  const minLeft = 8;
+  const minTop = 8;
+  const maxLeft = Math.max(minLeft, parentRect.width - rect.width - 8);
+  const maxTop = Math.max(minTop, parentRect.height - rect.height - 8);
+  const nextLeft = Math.min(maxLeft, Math.max(minLeft, messagesRect.left - parentRect.left + (messagesRect.width - rect.width) / 2));
+  const nextTop = Math.min(maxTop, Math.max(minTop, messagesRect.top - parentRect.top + (messagesRect.height - rect.height) / 2));
+  previewPanel.style.left = `${nextLeft}px`;
+  previewPanel.style.top = `${nextTop}px`;
+  previewPanel.style.right = 'auto';
+  previewPanel.style.bottom = 'auto';
+  previewPanel.style.transform = 'none';
+}
+
 function ensureFilePreviewBox() {
   if (!previewPanel) return null;
   const parent = previewPanel.offsetParent || previewPanel.parentElement;
@@ -4536,8 +4556,8 @@ function startFilePreviewResize(e) {
 function resizeFilePreviewPanel(e) {
   if (!previewPanel || !previewResizeState) return;
   const s = previewResizeState;
-  const minWidth = Math.min(520, Math.max(320, s.parentWidth - 16));
-  const minHeight = Math.min(260, Math.max(220, s.parentHeight - 16));
+  const minWidth = Math.min(420, Math.max(280, s.parentWidth - 16));
+  const minHeight = Math.min(220, Math.max(180, s.parentHeight - 16));
   const maxWidth = Math.max(minWidth, s.parentWidth - s.left - 8);
   const maxHeight = Math.max(minHeight, s.parentHeight - s.top - 8);
   const nextWidth = Math.min(maxWidth, Math.max(minWidth, s.width + e.clientX - s.startX));
@@ -4591,6 +4611,8 @@ async function openFilePreview(filePath) {
     previewPanel.style.bottom = '';
     previewPanel.style.width = '';
     previewPanel.style.height = '';
+    previewPanel.style.transform = '';
+    requestAnimationFrame(positionFilePreviewAtMessagesCenter);
   }
   previewSelectedLines.clear();
   lastPreviewSelectedLine = 0;
