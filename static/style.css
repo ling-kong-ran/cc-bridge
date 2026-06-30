@@ -1473,6 +1473,16 @@ body.pane-right-collapsed .chat-sidebar {
   padding: 10px 12px;
   border-bottom: 1px solid var(--border-dim);
   background: linear-gradient(90deg, rgba(var(--accent-rgb),0.08), transparent);
+  cursor: move;
+  user-select: none;
+}
+.file-preview-panel.dragging {
+  opacity: 0.96;
+  user-select: none;
+}
+.file-preview-header button,
+.file-preview-header input {
+  cursor: auto;
 }
 .file-preview-title-wrap { min-width: 0; }
 .file-preview-kicker {
@@ -1539,6 +1549,16 @@ body.pane-right-collapsed .chat-sidebar {
   min-height: 20px;
 }
 .file-preview-line:hover { background: rgba(var(--accent-rgb),0.055); }
+.file-preview-line.selected {
+  background: rgba(var(--accent-rgb),0.12);
+  box-shadow: inset 2px 0 0 var(--green);
+}
+.file-preview-line.selected .file-preview-line-no {
+  color: var(--green);
+}
+.file-preview-line.selected code {
+  color: var(--text-bright);
+}
 .file-preview-line-no {
   border: 0;
   background: transparent;

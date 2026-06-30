@@ -91,6 +91,9 @@ const previewSearchEl = document.getElementById('file-preview-search');
 const previewCloseBtn = document.getElementById('file-preview-close');
 const previewQuoteSelectionBtn = document.getElementById('file-preview-quote-selection');
 let currentPreviewFile = null;
+let previewSelectedLines = new Set();
+let lastPreviewSelectedLine = 0;
+let previewDragState = null;
 let currentLanguage = 'en';
 let i18nMap = {};
 let fontSizePercent = 100;
@@ -4424,12 +4427,65 @@ function initFilePreviewPanel() {
   previewSearchEl?.addEventListener('input', () => renderFilePreviewContent());
   previewQuoteSelectionBtn?.addEventListener('mousedown', (e) => e.preventDefault());
   previewQuoteSelectionBtn?.addEventListener('click', quoteSelectedPreviewText);
+  previewPanel?.querySelector('.file-preview-header')?.addEventListener('mousedown', startFilePreviewDrag);
+  document.addEventListener('mousemove', dragFilePreviewPanel);
+  document.addEventListener('mouseup', stopFilePreviewDrag);
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && previewPanel?.style.display !== 'none') closeFilePreview();
+  });
+}
+
+function startFilePreviewDrag(e) {
+  if (!previewPanel || e.button !== 0 || e.target.closest('button, input')) return;
+  const parent = previewPanel.offsetParent || previewPanel.parentElement;
+  if (!parent) return;
+  const rect = previewPanel.getBoundingClientRect();
+  const parentRect = parent.getBoundingClientRect();
+  previewDragState = {
+    offsetX: e.clientX - rect.left,
+    offsetY: e.clientY - rect.top,
+    parentLeft: parentRect.left,
+    parentTop: parentRect.top,
+    parentWidth: parentRect.width,
+    parentHeight: parentRect.height,
+    width: rect.width,
+    height: rect.height,
+  };
+  previewPanel.classList.add('dragging');
+  previewPanel.style.width = `${rect.width}px`;
+  previewPanel.style.height = `${rect.height}px`;
+  previewPanel.style.right = 'auto';
+  previewPanel.style.bottom = 'auto';
+  previewPanel.style.left = `${rect.left - parentRect.left}px`;
+  previewPanel.style.top = `${rect.top - parentRect.top}px`;
+  e.preventDefault();
+}
+
+function dragFilePreviewPanel(e) {
+  if (!previewPanel || !previewDragState) return;
+  const s = previewDragState;
+  const maxLeft = Math.max(0, s.parentWidth - s.width - 8);
+  const maxTop = Math.max(0, s.parentHeight - s.height - 8);
+  const nextLeft = Math.min(maxLeft, Math.max(8, e.clientX - s.parentLeft - s.offsetX));
+  const nextTop = Math.min(maxTop, Math.max(8, e.clientY - s.parentTop - s.offsetY));
+  previewPanel.style.left = `${nextLeft}px`;
+  previewPanel.style.top = `${nextTop}px`;
+}
+
+function stopFilePreviewDrag() {
+  if (!previewPanel || !previewDragState) return;
+  previewDragState = null;
+  previewPanel.classList.remove('dragging');
 }
 
 function closeFilePreview() {
   if (!previewPanel) return;
   previewPanel.style.display = 'none';
   currentPreviewFile = null;
+  previewSelectedLines.clear();
+  lastPreviewSelectedLine = 0;
+  previewDragState = null;
+  previewPanel.classList.remove('dragging');
   if (previewContentEl) previewContentEl.innerHTML = '';
   if (previewSearchEl) previewSearchEl.value = '';
 }
@@ -4452,7 +4508,18 @@ function toggleWorkspaceAttachment(filePath, el) {
 
 async function openFilePreview(filePath) {
   if (!previewPanel || !previewContentEl) return;
+  const wasHidden = previewPanel.style.display === 'none' || !previewPanel.style.display;
   previewPanel.style.display = 'flex';
+  if (wasHidden) {
+    previewPanel.style.left = '';
+    previewPanel.style.right = '';
+    previewPanel.style.top = '';
+    previewPanel.style.bottom = '';
+    previewPanel.style.width = '';
+    previewPanel.style.height = '';
+  }
+  previewSelectedLines.clear();
+  lastPreviewSelectedLine = 0;
   currentPreviewFile = { path: filePath, content: '' };
   if (previewNameEl) previewNameEl.textContent = filePath.split('/').pop() || filePath;
   if (previewMetaEl) previewMetaEl.textContent = shortenPlainPath(filePath);
@@ -4479,6 +4546,40 @@ async function openFilePreview(filePath) {
   }
 }
 
+function updatePreviewLineSelection() {
+  if (!previewContentEl) return;
+  previewContentEl.querySelectorAll('.file-preview-line').forEach(row => {
+    const lineNo = Number(row.dataset.line || 0);
+    row.classList.toggle('selected', previewSelectedLines.has(lineNo));
+  });
+}
+
+function selectPreviewLine(lineNo, extend = false) {
+  if (!lineNo) return;
+  if (extend && lastPreviewSelectedLine) {
+    const start = Math.min(lastPreviewSelectedLine, lineNo);
+    const end = Math.max(lastPreviewSelectedLine, lineNo);
+    previewSelectedLines.clear();
+    for (let n = start; n <= end; n++) previewSelectedLines.add(n);
+  } else if (previewSelectedLines.has(lineNo)) {
+    previewSelectedLines.delete(lineNo);
+    lastPreviewSelectedLine = lineNo;
+  } else {
+    previewSelectedLines.add(lineNo);
+    lastPreviewSelectedLine = lineNo;
+  }
+  updatePreviewLineSelection();
+}
+
+function getSelectedPreviewText() {
+  if (!currentPreviewFile || !previewSelectedLines.size) return '';
+  const lines = String(currentPreviewFile.content || '').split(/\r?\n/);
+  return Array.from(previewSelectedLines).sort((a,b) => a-b).map(lineNo => {
+    const text = lines[lineNo - 1] || '';
+    return `${lineNo}: ${text}`;
+  }).join('\n');
+}
+
 function renderFilePreviewContent() {
   if (!previewContentEl || !currentPreviewFile) return;
   const content = currentPreviewFile.content || '';
@@ -4488,8 +4589,14 @@ function renderFilePreviewContent() {
   previewContentEl.innerHTML = lines.map((line, idx) => {
     const lineNo = idx + 1;
     const text = matcher ? esc(line).replace(matcher, '<mark>$1</mark>') : esc(line);
-    return `<div class="file-preview-line" data-line="${lineNo}"><button class="file-preview-line-no" type="button" title="${esc(t('quoteLine'))}">${lineNo}</button><code>${text || ' '}</code></div>`;
+    return `<div class="file-preview-line${previewSelectedLines.has(lineNo) ? ' selected' : ''}" data-line="${lineNo}"><button class="file-preview-line-no" type="button" title="${esc(t('quoteLine'))}">${lineNo}</button><code>${text || ' '}</code></div>`;
   }).join('') || `<div class="file-preview-state">${esc(t('historyEmpty'))}</div>`;
+  previewContentEl.querySelectorAll('.file-preview-line').forEach(row => {
+    row.addEventListener('click', (e) => {
+      if (e.target.closest('.file-preview-line-no')) return;
+      selectPreviewLine(Number(row.dataset.line || 0), e.shiftKey);
+    });
+  });
   previewContentEl.querySelectorAll('.file-preview-line-no').forEach(btn => {
     btn.addEventListener('click', () => {
       const row = btn.closest('.file-preview-line');
@@ -4503,10 +4610,15 @@ function renderFilePreviewContent() {
 
 function quoteSelectedPreviewText() {
   if (!previewPanel || previewPanel.style.display === 'none') return;
+  const path = currentPreviewFile?.path || currentPreviewFile?.name || '';
+  const selectedLinesText = getSelectedPreviewText();
+  if (selectedLinesText) {
+    quoteIntoInput(path ? `${path}\n${selectedLinesText}` : selectedLinesText);
+    return;
+  }
   const sel = window.getSelection();
   const text = String(sel?.toString() || '').trim();
   if (!text || !previewPanel.contains(sel.anchorNode)) return;
-  const path = currentPreviewFile?.path || currentPreviewFile?.name || '';
   quoteIntoInput(path ? `${path}\n${text}` : text);
 }
 
