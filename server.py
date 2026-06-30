@@ -848,6 +848,65 @@ def search_files(path: str, query: str, max_results: int = 200) -> dict:
     }
 
 
+TEXT_PREVIEW_EXTENSIONS = {
+    ".txt", ".md", ".markdown", ".py", ".js", ".ts", ".tsx", ".jsx", ".json",
+    ".css", ".html", ".xml", ".yaml", ".yml", ".toml", ".ini", ".cfg",
+    ".env", ".gitignore", ".dockerignore", ".sh", ".bat", ".ps1", ".sql", ".log",
+}
+TEXT_PREVIEW_MAX_BYTES = 512 * 1024
+
+
+def preview_text_file(path: str, cwd: str = "") -> dict:
+    """读取工作目录内的文本文件预览内容。"""
+    if not path:
+        return {"ok": False, "error": "missing_path"}
+
+    root_value = cwd or DEFAULT_CWD
+    if not root_value or not os.path.isdir(root_value):
+        return {"ok": False, "error": "cwd_not_found"}
+
+    try:
+        root = Path(root_value).resolve()
+        fp = Path(path).resolve()
+    except OSError as exc:
+        return {"ok": False, "error": str(exc)}
+
+    if fp != root and root not in fp.parents:
+        return {"ok": False, "error": "forbidden"}
+    if not fp.exists() or not fp.is_file():
+        return {"ok": False, "error": "not_found"}
+    if any(part in (".git", "node_modules", "__pycache__", "venv", ".venv") for part in fp.parts):
+        return {"ok": False, "error": "forbidden"}
+    if any(part.startswith(".") and part not in (".env", ".gitignore", ".dockerignore") for part in fp.relative_to(root).parts):
+        return {"ok": False, "error": "forbidden"}
+
+    ext = fp.suffix.lower()
+    if ext not in TEXT_PREVIEW_EXTENSIONS and fp.name not in ("Dockerfile", "Makefile", "LICENSE", "README"):
+        return {"ok": False, "error": "unsupported_type"}
+
+    try:
+        size = fp.stat().st_size
+        data = fp.read_bytes()[:TEXT_PREVIEW_MAX_BYTES + 1]
+    except OSError as exc:
+        return {"ok": False, "error": str(exc)}
+
+    if b"\x00" in data:
+        return {"ok": False, "error": "binary_file"}
+
+    truncated = len(data) > TEXT_PREVIEW_MAX_BYTES
+    if truncated:
+        data = data[:TEXT_PREVIEW_MAX_BYTES]
+    text = data.decode("utf-8-sig", errors="replace")
+    return {
+        "ok": True,
+        "path": str(fp).replace("\\", "/"),
+        "name": fp.name,
+        "size": size,
+        "truncated": truncated,
+        "content": text,
+    }
+
+
 # ─── 目录浏览 ──────────────────────────────────────────────
 def browse_directory(path: str) -> dict:
     import string
@@ -2026,6 +2085,11 @@ async def handle_api_get(path: str, writer: asyncio.StreamWriter, query: dict = 
     elif path == "/api/browse":
         p = (query or {}).get("path", [""])[0]
         data = browse_files(p)
+    elif path == "/api/file-preview":
+        query = query or {}
+        p = query.get("path", [""])[0]
+        cwd = query.get("cwd", [DEFAULT_CWD])[0] or DEFAULT_CWD
+        data = preview_text_file(p, cwd)
     elif path == "/api/default-cwd":
         data = {"cwd": DEFAULT_CWD}
     elif path == "/api/memory/files":

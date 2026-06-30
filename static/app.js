@@ -82,6 +82,14 @@ const mcpFormSection = document.getElementById('mcp-form-section');
 const mcpFormType = document.getElementById('mcp-form-type');
 const mcpStdioFields = document.getElementById('mcp-stdio-fields');
 const mcpUrlFields = document.getElementById('mcp-url-fields');
+const previewPanel = document.getElementById('file-preview-panel');
+const previewNameEl = document.getElementById('file-preview-name');
+const previewMetaEl = document.getElementById('file-preview-meta');
+const previewContentEl = document.getElementById('file-preview-content');
+const previewSearchEl = document.getElementById('file-preview-search');
+const previewCloseBtn = document.getElementById('file-preview-close');
+const previewQuoteSelectionBtn = document.getElementById('file-preview-quote-selection');
+let currentPreviewFile = null;
 let currentLanguage = 'en';
 let i18nMap = {};
 let fontSizePercent = 100;
@@ -112,6 +120,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   initMcpManager();
   initAgentModal();
   initRightPanel();
+  initFilePreviewPanel();
   initMentionAutocomplete();
   initMemoryUI();
   initArtifactsUI();
@@ -4370,6 +4379,100 @@ function applyFileTreeFilter() {
   updateFileTreeSelectedCount();
 }
 
+function escapeRegExp(text) {
+  return String(text || '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function initFilePreviewPanel() {
+  previewCloseBtn?.addEventListener('click', closeFilePreview);
+  previewSearchEl?.addEventListener('input', () => renderFilePreviewContent());
+  previewQuoteSelectionBtn?.addEventListener('click', quoteSelectedPreviewText);
+}
+
+function closeFilePreview() {
+  if (!previewPanel) return;
+  previewPanel.style.display = 'none';
+  currentPreviewFile = null;
+  if (previewContentEl) previewContentEl.innerHTML = '';
+  if (previewSearchEl) previewSearchEl.value = '';
+}
+
+function toggleWorkspaceAttachment(filePath, el) {
+  const fileName = filePath.split('/').pop();
+  const icon = el?.querySelector('.ft-icon');
+  if (attachedFiles.some(f => f.path === filePath)) {
+    attachedFiles = attachedFiles.filter(f => f.path !== filePath);
+    el?.classList.remove('selected');
+    if (icon) icon.textContent = '📄';
+  } else {
+    attachedFiles.push({ name: fileName, path: filePath, isImage: false, uploaded: false, source: 'server', originalPath: filePath });
+    el?.classList.add('selected');
+    if (icon) icon.textContent = '✓';
+  }
+  renderAttachments();
+  updateFileTreeSelectedCount();
+}
+
+async function openFilePreview(filePath) {
+  if (!previewPanel || !previewContentEl) return;
+  previewPanel.style.display = 'flex';
+  currentPreviewFile = { path: filePath, content: '' };
+  if (previewNameEl) previewNameEl.textContent = filePath.split('/').pop() || filePath;
+  if (previewMetaEl) previewMetaEl.textContent = shortenPlainPath(filePath);
+  previewContentEl.innerHTML = `<div class="file-preview-state">${esc(t('loading'))}</div>`;
+  if (previewSearchEl) previewSearchEl.value = '';
+  try {
+    const cwd = cwdInput?.value || '';
+    const resp = await fetch(`/api/file-preview?path=${encodeURIComponent(filePath)}&cwd=${encodeURIComponent(cwd)}`);
+    const data = await resp.json();
+    if (!data.ok) {
+      previewContentEl.innerHTML = `<div class="file-preview-state">${esc(t('filePreviewUnsupported'))}</div>`;
+      if (previewMetaEl) previewMetaEl.textContent = data.error || '';
+      return;
+    }
+    currentPreviewFile = data;
+    if (previewNameEl) previewNameEl.textContent = data.name || filePath.split('/').pop() || filePath;
+    if (previewMetaEl) {
+      const sizeKb = Math.max(1, Math.ceil((data.size || 0) / 1024));
+      previewMetaEl.textContent = `${shortenPlainPath(data.path || filePath)} · ${sizeKb} KB${data.truncated ? ' · truncated' : ''}`;
+    }
+    renderFilePreviewContent();
+  } catch (e) {
+    previewContentEl.innerHTML = `<div class="file-preview-state">${esc(t('filePreviewLoadFailed', { message: e.message }))}</div>`;
+  }
+}
+
+function renderFilePreviewContent() {
+  if (!previewContentEl || !currentPreviewFile) return;
+  const content = currentPreviewFile.content || '';
+  const query = (previewSearchEl?.value || '').trim();
+  const matcher = query ? new RegExp(`(${escapeRegExp(query)})`, 'ig') : null;
+  const lines = content.split(/\r?\n/);
+  previewContentEl.innerHTML = lines.map((line, idx) => {
+    const lineNo = idx + 1;
+    const text = matcher ? esc(line).replace(matcher, '<mark>$1</mark>') : esc(line);
+    return `<div class="file-preview-line" data-line="${lineNo}"><button class="file-preview-line-no" type="button" title="${esc(t('quoteLine'))}">${lineNo}</button><code>${text || ' '}</code></div>`;
+  }).join('') || `<div class="file-preview-state">${esc(t('historyEmpty'))}</div>`;
+  previewContentEl.querySelectorAll('.file-preview-line-no').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const row = btn.closest('.file-preview-line');
+      const lineNo = row?.dataset.line || '';
+      const text = lines[Number(lineNo) - 1] || '';
+      const path = currentPreviewFile.path || currentPreviewFile.name || '';
+      quoteIntoInput(`${path}:${lineNo}\n${text}`);
+    });
+  });
+}
+
+function quoteSelectedPreviewText() {
+  if (!previewPanel || previewPanel.style.display === 'none') return;
+  const sel = window.getSelection();
+  const text = String(sel?.toString() || '').trim();
+  if (!text || !previewPanel.contains(sel.anchorNode)) return;
+  const path = currentPreviewFile?.path || currentPreviewFile?.name || '';
+  quoteIntoInput(path ? `${path}\n${text}` : text);
+}
+
 async function loadFileTree(path) {
   const content = document.getElementById('file-tree-content');
   if (!content) return;
@@ -4405,19 +4508,11 @@ async function loadFileTree(path) {
         el.addEventListener('click', (e) => {
           e.stopPropagation();
           const filePath = el.dataset.path;
-          const fileName = filePath.split('/').pop();
-          const icon = el.querySelector('.ft-icon');
-          if (attachedFiles.some(f => f.path === filePath)) {
-            attachedFiles = attachedFiles.filter(f => f.path !== filePath);
-            el.classList.remove('selected');
-            if (icon) icon.textContent = '📄';
+          if (e.shiftKey || e.ctrlKey || e.metaKey) {
+            toggleWorkspaceAttachment(filePath, el);
           } else {
-            attachedFiles.push({ name: fileName, path: filePath, isImage: false, uploaded: false, source: 'server', originalPath: filePath });
-            el.classList.add('selected');
-            if (icon) icon.textContent = '✓';
+            openFilePreview(filePath);
           }
-          renderAttachments();
-          updateFileTreeSelectedCount();
         });
       });
     } else {

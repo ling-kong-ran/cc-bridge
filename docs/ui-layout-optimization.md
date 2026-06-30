@@ -436,6 +436,29 @@ quoteSelectedText()
 6. 搜索高亮不能直接拼未转义内容。
 7. 插入输入框的引用文本需要保持路径原样，但展示层仍要 escape。
 
+### 实现记录
+
+文件预览浮窗第一版已完成。
+
+已调整：
+
+- 新增 `/api/file-preview`，只读取当前 cwd 范围内的文本文件，并拒绝越界路径、隐藏目录、二进制文件和不支持的类型。
+- 预览读取限制为 512KB，超出时返回截断内容并在浮窗 meta 中提示 truncated。
+- Files tab 普通左键点击文件改为打开中央预览浮窗；`Shift / Ctrl / Cmd + 点击` 保留原附件选择能力。
+- 中央 Chat 区域新增可关闭浮窗，显示文件名、路径、大小、搜索框和带行号的内容。
+- 搜索在前端实时完成，匹配内容在已 escape 的文本上高亮。
+- 点击行号可引用单行到输入框；拖选浮窗中的任意文本后可点击 `引用选中内容` 复用现有引用条机制。
+- 新增中英文 i18n 文案，并补齐中文缺失的 `connectionLost` key，保持 key 集合一致。
+
+验证：
+
+- `python -m py_compile server.py`
+- `node --check static/app.js`
+- `git diff --check`
+- i18n key parity 校验通过：`i18n json parity ok 432`
+- 直接调用 `server.preview_text_file()` 验证可读文本文件、越界路径禁止和失败路径。
+- 隔离端口 `18009` HTTP 验证 `/api/file-preview` 可返回文档内容，HTML 中包含文件预览浮窗 DOM。
+
 ## 验证注意事项
 
 验证 ccb-gui 时不要直接运行默认：
