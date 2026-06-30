@@ -3983,6 +3983,14 @@ html.light-theme .titlebar-back {
   border-color: #d0d5dc;
 }
 
+html.light-theme .chat-sidebar {
+  background: var(--bg-surface);
+}
+
+html.light-theme .chat-sidebar-header {
+  background: var(--bg-surface);
+}
+
 html.light-theme .welcome-hero,
 html.light-theme .welcome-card {
   box-shadow: 0 4px 24px rgba(0, 0, 0, 0.06);
@@ -4090,6 +4098,104 @@ html.light-theme .slash-command-panel {
 html.light-theme .btn-primary:hover,
 html.light-theme .btn-send:hover:not(:disabled) {
   box-shadow: 0 2px 8px rgba(14, 148, 100, 0.12);
+}
+
+html.light-theme .titlebar-logo,
+html.light-theme .nav-brand {
+  text-shadow: none;
+}
+
+html.light-theme .nav {
+  background: var(--bg-surface);
+}
+
+html.light-theme .nav-brand {
+  background: #f4f8f6;
+  border-color: #d7e5df;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.8), 0 2px 8px rgba(20, 40, 32, 0.05);
+}
+
+html.light-theme .nav-btn.active {
+  box-shadow: inset 0 0 0 1px rgba(14, 148, 100, 0.04);
+}
+
+html.light-theme .nav-btn.active::before {
+  box-shadow: none;
+}
+
+html.light-theme .welcome-session-dot,
+html.light-theme .welcome-session-dot-pulse {
+  box-shadow: none;
+  animation: welcomeDotPulseLight 2.4s ease-in-out infinite;
+}
+
+@keyframes welcomeDotPulseLight {
+  0%, 100% { opacity: 0.9; transform: scale(1); }
+  50% { opacity: 0.55; transform: scale(0.82); }
+}
+
+html.light-theme .welcome-runtime-action:hover,
+html.light-theme .welcome-runtime-action:focus-visible {
+  background: #f4f6f8;
+  border-bottom-color: #d9e5df;
+}
+
+html.light-theme .thinking-block {
+  background: #f7f8fa;
+  border-color: #dde3e8;
+}
+
+html.light-theme .thinking-header {
+  color: #6f7785;
+}
+
+html.light-theme .thinking-header:hover {
+  background: #eef2f5;
+  color: #515966;
+}
+
+html.light-theme .thinking-arrow {
+  color: #7d948b;
+  opacity: 0.7;
+}
+
+html.light-theme .thinking-label {
+  color: #67717e;
+}
+
+html.light-theme .thinking-content {
+  color: #47505f;
+  border-top-color: #e1e6eb;
+  background: #ffffff;
+}
+
+html.light-theme .stream-dot {
+  box-shadow: none;
+  animation: pulseLight 2s infinite;
+}
+
+html.light-theme .message.assistant.streaming .msg-bubble::before {
+  background: #2f9a72;
+  animation: none;
+}
+
+@media (max-width: 760px) {
+  html.light-theme .mobile-sidebar-backdrop {
+    background: rgba(245, 247, 250, 0.62);
+    backdrop-filter: none;
+  }
+
+  html.light-theme .sidebar {
+    box-shadow: 10px 0 24px rgba(30, 40, 55, 0.12);
+  }
+
+  html.light-theme .chat-sidebar {
+    box-shadow: -8px 0 22px rgba(30, 40, 55, 0.10);
+  }
+
+  html.light-theme .mobile-menu-toggle span {
+    box-shadow: none;
+  }
 }
 
 /* ─── CLI 安装引导弹窗 ─────────────────────────────────── */

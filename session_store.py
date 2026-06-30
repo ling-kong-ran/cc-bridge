@@ -681,6 +681,8 @@ def load_session_history(session_id: str, cwd: str, max_messages: int = 50) -> l
                         messages.append({"role": "user", "text": text})
 
                 elif msg_type == "assistant":
+                    if obj.get("parent_tool_use_id"):
+                        continue
                     content = obj.get("message", {}).get("content", [])
                     blocks = []
                     if isinstance(content, list):
