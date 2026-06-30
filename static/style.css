@@ -355,7 +355,7 @@ html, body {
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  background: linear-gradient(180deg, var(--bg-deep), rgba(20, 24, 31, 0.72));
+  background: linear-gradient(180deg, var(--bg-deep), color-mix(in srgb, var(--bg-deep) 72%, transparent));
 }
 
 body.sidebar-collapsed .sidebar {
