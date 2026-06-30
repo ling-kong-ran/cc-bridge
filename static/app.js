@@ -4151,12 +4151,12 @@ function refreshRightPaneFiles() {
   loadFileTree(cwd);
 }
 
-const RIGHT_PANE_MIN = 280;
-const RIGHT_PANE_MAX = 520;
-const RIGHT_PANE_DEFAULT = 320;
+const RIGHT_PANE_MIN = 240;
+const RIGHT_PANE_MAX = 480;
+const RIGHT_PANE_DEFAULT = 280;
 
 function clampRightPaneWidth(value) {
-  const viewportMax = Math.max(RIGHT_PANE_MIN, Math.min(RIGHT_PANE_MAX, Math.round(window.innerWidth * 0.46)));
+  const viewportMax = Math.max(RIGHT_PANE_MIN, Math.min(RIGHT_PANE_MAX, Math.round(window.innerWidth * 0.38)));
   const width = Number(value) || RIGHT_PANE_DEFAULT;
   return Math.max(RIGHT_PANE_MIN, Math.min(viewportMax, Math.round(width)));
 }

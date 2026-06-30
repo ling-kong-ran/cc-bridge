@@ -238,13 +238,14 @@
                 <button id="btn-chat-sidebar-close" class="btn-icon-mini btn-close-sidebar" title="收起面板" data-i18n-title="collapsePanel">›</button>
               </div>
             </div>
-            <div class="chat-sidebar-tabs">
-              <button class="chat-sidebar-tab active" data-tab="files" data-i18n="filesTab">Files</button>
-              <button class="chat-sidebar-tab" data-tab="review" data-i18n="reviewTab">Review</button>
-              <button class="chat-sidebar-tab" data-tab="members" data-i18n="sessionMembers">Members</button>
-            </div>
           </div>
-          <div class="chat-sidebar-body">
+          <div class="chat-sidebar-content">
+            <div class="chat-sidebar-tabs">
+              <button class="chat-sidebar-tab active" data-tab="files" title="Files" data-i18n-title="filesTab"><span data-i18n="filesTab">Files</span></button>
+              <button class="chat-sidebar-tab" data-tab="review" title="Review" data-i18n-title="reviewTab"><span data-i18n="reviewTab">Review</span></button>
+              <button class="chat-sidebar-tab" data-tab="members" title="Members" data-i18n-title="sessionMembers"><span data-i18n="sessionMembers">Members</span></button>
+            </div>
+            <div class="chat-sidebar-body">
             <div id="file-tree-panel" class="file-tree-panel">
               <div class="workspace-panel-head">
                 <div>
@@ -276,6 +277,7 @@
               <div id="group-member-list" class="group-member-list"></div>
             </div>
             <div id="agent-add-popover" class="agent-add-popover" style="display:none"></div>
+            </div>
           </div>
         </div>
       </div>
