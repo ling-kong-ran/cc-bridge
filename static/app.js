@@ -2808,9 +2808,12 @@ function quoteIntoInput(text) {
   const normalized = (text || '').trim();
   if (!normalized) return;
   quotedMessages.push(normalized);
-  renderQuotePreview();
   showPage('chat');
-  inputEl.focus();
+  requestAnimationFrame(() => {
+    renderQuotePreview();
+    quotePreviewBar?.scrollIntoView({ block: 'nearest' });
+    inputEl.focus();
+  });
 }
 
 function renderQuotePreview() {
@@ -4386,6 +4389,7 @@ function escapeRegExp(text) {
 function initFilePreviewPanel() {
   previewCloseBtn?.addEventListener('click', closeFilePreview);
   previewSearchEl?.addEventListener('input', () => renderFilePreviewContent());
+  previewQuoteSelectionBtn?.addEventListener('mousedown', (e) => e.preventDefault());
   previewQuoteSelectionBtn?.addEventListener('click', quoteSelectedPreviewText);
 }
 

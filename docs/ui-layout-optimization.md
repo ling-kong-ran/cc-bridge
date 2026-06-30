@@ -459,6 +459,84 @@ quoteSelectedText()
 - 直接调用 `server.preview_text_file()` 验证可读文本文件、越界路径禁止和失败路径。
 - 隔离端口 `18009` HTTP 验证 `/api/file-preview` 可返回文档内容，HTML 中包含文件预览浮窗 DOM。
 
+## 多会话并发设计
+
+当前“重新开始”会中断当前会话的根因是运行态以 `client_id` 作为唯一 key：一个浏览器客户端同一时间只绑定一个 `CCBSession`。当用户发起 `new_session` 时，后端会先取出该客户端已有 session 并执行 `stop()`，因此旧会话生成会被主动中断。
+
+后续应把“客户端连接”“Claude 原生会话”和“一次生成任务”拆开建模：
+
+```text
+client_id：浏览器标签页 / SSE 连接
+session_id：Claude Code 原生会话 UUID
+run_id：某一次消息生成 / subprocess
+```
+
+### 目标语义
+
+- 一个客户端可以同时拥有多个正在运行的会话。
+- 点击“重新开始”只创建并切换到新会话，不停止旧会话。
+- 切换历史会话不影响其他会话继续生成。
+- Stop 只停止当前打开会话的当前 run，不再笼统停止整个 client。
+- 同一个 `session_id` 同一时间仍只允许一个 active run，避免并发 resume 同一个 Claude 原生会话。
+- 非当前打开会话的事件不写入当前聊天区，只更新历史列表 active / unread 状态。
+
+### 后端状态模型
+
+建议从当前的 `client_id -> CCBSession` 调整为：
+
+```python
+active_runs: dict[str, CCBSession]          # run_id -> 运行实例
+session_active_runs: dict[str, str]         # session_id -> run_id
+client_runs: dict[str, set[str]]            # client_id -> run_id 集合
+```
+
+`client_id` 只表示 SSE 连接和 UI 所属客户端；`session_id` 表示 Claude Code 原生上下文；`run_id` 表示某次生成任务。这样同一个客户端可以启动多个不同会话的 run，而不会互相覆盖。
+
+### action 行为调整
+
+`new_session`：
+
+- 移除旧逻辑中的 `old_session.stop()`。
+- 创建新的 UI 会话上下文并切换当前 session。
+- 旧会话如果仍在生成，继续保留在 `active_runs` 中。
+
+`send_message`：
+
+- 每次发送生成新的 `run_id`。
+- 若目标 `session_id` 已存在 active run，则拒绝发送并提示“该会话正在生成中”。
+- 启动 `CCBSession` 后登记到 `active_runs / session_active_runs / client_runs`。
+- 返回 `{ ok: true, run_id }` 给前端。
+
+`interrupt`：
+
+- 优先按前端传入的 `run_id` 停止。
+- 如果未传 `run_id`，按当前打开的 `session_id` 查找 active run。
+- 不再按 `client_id` 停止全部运行任务。
+
+### SSE 事件路由
+
+所有生成相关事件都应带上：
+
+```json
+{
+  "session_id": "...",
+  "run_id": "..."
+}
+```
+
+前端收到事件后：
+
+- 如果 `session_id === currentSessionId`，渲染到当前聊天区。
+- 如果不是当前会话，只更新对应历史会话的 active / unread 状态。
+- `process_ended` / `result` 到达后清理对应 `run_id`，并更新历史列表中的运行状态。
+
+### 分步落地建议
+
+1. 先移除 `new_session` 中停止旧 session 的逻辑，但必须同时让事件带 `session_id`，避免旧会话输出污染当前聊天窗口。
+2. 将 `SessionManager` 的 key 从 `client_id` 迁移到 `run_id`，并补充按 `session_id` 查询 active run 的方法。
+3. 前端保存当前 `run_id`，Stop 按钮按 `run_id` 停止。
+4. 历史列表展示非当前会话的 active / unread 状态。
+
 ## 验证注意事项
 
 验证 ccb-gui 时不要直接运行默认：
