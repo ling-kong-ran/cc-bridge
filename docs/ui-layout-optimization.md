@@ -141,7 +141,7 @@
 - Header subtitle 动态显示当前上下文：Files 显示当前路径，Changes 显示分支与文件数，Members 显示成员数量或提示。
 - Tabs 移入 Header 并改为横向 segmented control，减少右侧栏内部的割裂感。
 - 删除 Files / Changes / Members 内容区重复标题和说明，让内容区只承载具体列表、搜索和操作。
-- Review 分支信息改成弱卡片，和 staged / unstaged 分组形成更清晰的 Git review 面板。
+- Review 移除重复标题后保留原有列表分组样式，避免在布局调整中额外改动颜色和视觉主题。
 - Members 面板只保留右上角轻量 `Add member` 操作，降低空成员状态下的视觉重量。
 - 默认宽度从 280px 提升到 340px，桌面端可调范围改为 300px 到 520px，并限制最大为视口宽度的 42%。
 
@@ -152,7 +152,7 @@
 - `git diff --check`
 - 自定义 Workspace 结构校验通过：确认动态标题 / subtitle 存在、tabs 位于 header 内、旧内容区标题已移除、segmented tabs 样式存在、`updateWorkspaceHeader()` 存在、右侧宽度常量已更新。
 
-目标效果：右侧 Workspace 更像一个稳定的 IDE 辅助工具抽屉，顶部负责说明当前工具和上下文，内容区专注展示文件、变更或成员。
+目标效果：右侧 Workspace 更像一个稳定的 IDE 辅助工具抽屉，顶部负责说明当前工具和上下文，内容区专注展示文件、变更或成员；本轮只调整布局结构，不额外改变颜色主题。
 
 ### 9. 左侧 Sidebar 信息密度优化
 
