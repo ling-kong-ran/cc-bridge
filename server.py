@@ -516,6 +516,22 @@ async def forward_viewer_event(viewer_id: str, event: dict, fallback_session_id:
         await push_event(viewer_id, evt_type, event)
 
 
+def attach_viewers_to_session(owner_id: str, session_id: str, session):
+    """把当前订阅同一会话的观察者挂到本轮运行，确保流式事件继续广播。"""
+    if not session_id or not session:
+        return
+    for viewer_id in get_session_subscribers(session_id):
+        if viewer_id == owner_id:
+            continue
+        client_viewing[viewer_id] = owner_id
+        client_session_ids[viewer_id] = session_id
+
+        async def on_viewer_event(event: dict, target_id: str = viewer_id):
+            await forward_viewer_event(target_id, event, session_id)
+
+        session.add_viewer(viewer_id, on_viewer_event)
+
+
 def extract_result_tokens(event: dict) -> dict:
     """从 result 事件中提取本轮 token 用量。"""
     usage = event.get("usage") if isinstance(event.get("usage"), dict) else {}
@@ -2028,6 +2044,7 @@ async def handle_action(body: bytes, writer: asyncio.StreamWriter):
             session_owner[sid] = client_id
             session_run_ids[sid] = run_id
             session_manager.bind_native_session(sid, run_id)
+            attach_viewers_to_session(client_id, sid, session)
             remote_target = remote_manager.get_target(meta.get("remote_target_id") or "")
             on_event = make_owner_event_handler(
                 client_id,

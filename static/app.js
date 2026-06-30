@@ -2545,8 +2545,7 @@ function scheduleCompletionHistorySync(sessionId) {
     if (sessionId === currentSessionId && !isResponding) {
       reloadSessionHistory(sessionId, cwdInput.value.trim() || '');
     }
-    loadSessions();
-  }, 1200);
+  }, 600);
 }
 
 function handleResult(data) {
@@ -2576,7 +2575,6 @@ function handleResult(data) {
     model: getDisplayModelName(data.model || modelSelect.value),
   });
   if (assistantEl && hadAssistantOutput) checkMemoryHits(assistantEl, finishedTurn);
-  scheduleCompletionHistorySync(data.session_id || currentSessionId);
   currentTurnContent = '';
   currentTurnHasAssistantOutput = false;
   currentTurnStartedAt = 0;
