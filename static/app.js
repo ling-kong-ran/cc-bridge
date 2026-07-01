@@ -35,6 +35,7 @@ let scheduledTasks = [];
 let skillsCache = [];
 let currentSkillDir = '';
 let sidebarCollapsed = false;
+const WORKSPACE_STORAGE_KEY = 'ccb_workspace_state_v1';
 let workspaceMode = 'focus';
 let activeWorkspaceSessionId = '';
 const workspaceSessions = new Map();
@@ -191,6 +192,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
 function initSessionWorkspace() {
   if (!workspaceEl || !workspaceTabsEl || !workspacePanesEl || !workspaceLivePane) return;
+  loadWorkspaceState();
   workspaceFocusBtn?.addEventListener('click', () => setWorkspaceMode('focus'));
   workspaceGridBtn?.addEventListener('click', () => setWorkspaceMode('grid'));
   workspaceLivePane.querySelector('.workspace-pane-head')?.addEventListener('click', () => {
@@ -199,6 +201,52 @@ function initSessionWorkspace() {
   document.addEventListener('pointermove', handleWorkspaceResizeMove);
   document.addEventListener('pointerup', stopWorkspaceResize);
   renderWorkspace();
+}
+
+function saveWorkspaceState() {
+  const sessions = Array.from(workspaceSessions.values())
+    .filter(s => s.sessionId && !s.sessionId.startsWith('pending-'))
+    .map(s => ({
+      sessionId: s.sessionId,
+      title: s.title || '',
+      cwd: s.cwd || '',
+      model: s.model || '',
+      cli: s.cli || '',
+      remoteTargetId: s.remoteTargetId || '',
+      cost: s.cost || 0,
+      tokens: s.tokens || null,
+      status: s.status === 'running' || s.status === 'tool' ? 'idle' : (s.status || 'idle'),
+      phase: '',
+      runId: '',
+      snapshotHtml: s.snapshotHtml || '',
+    }));
+  try {
+    localStorage.setItem(WORKSPACE_STORAGE_KEY, JSON.stringify({
+      mode: workspaceMode,
+      activeSessionId: activeWorkspaceSessionId && !activeWorkspaceSessionId.startsWith('pending-') ? activeWorkspaceSessionId : '',
+      sessions,
+      widths: Array.from(workspacePaneWidths.entries()),
+    }));
+  } catch (e) { /* ignore */ }
+}
+
+function loadWorkspaceState() {
+  try {
+    const raw = localStorage.getItem(WORKSPACE_STORAGE_KEY);
+    if (!raw) return;
+    const state = JSON.parse(raw);
+    workspaceMode = state.mode === 'grid' ? 'grid' : 'focus';
+    workspaceSessions.clear();
+    for (const s of (Array.isArray(state.sessions) ? state.sessions : [])) {
+      if (s.sessionId) workspaceSessions.set(s.sessionId, workspaceSessionFromMeta(s.sessionId, s));
+    }
+    workspacePaneWidths.clear();
+    for (const item of (Array.isArray(state.widths) ? state.widths : [])) {
+      const [sessionId, width] = item;
+      if (sessionId && Number.isFinite(width)) workspacePaneWidths.set(sessionId, width);
+    }
+    activeWorkspaceSessionId = workspaceSessions.has(state.activeSessionId) ? state.activeSessionId : (workspaceSessions.keys().next().value || '');
+  } catch (e) { /* ignore */ }
 }
 
 function workspaceSessionFromMeta(sessionId, meta = {}) {
@@ -233,7 +281,10 @@ function ensureWorkspaceSession(sessionId, meta = {}) {
 function captureActiveWorkspaceSnapshot() {
   if (!activeWorkspaceSessionId || !messagesEl) return;
   const session = workspaceSessions.get(activeWorkspaceSessionId);
-  if (session) session.snapshotHtml = messagesEl.innerHTML;
+  if (session) {
+    session.snapshotHtml = messagesEl.innerHTML;
+    saveWorkspaceState();
+  }
 }
 
 function activateWorkspaceSession(sessionId, opts = {}) {
@@ -289,6 +340,7 @@ function renderWorkspace() {
   workspacePanesEl.classList.toggle('workspace-focus', workspaceMode !== 'grid');
   workspaceFocusBtn?.classList.toggle('active', workspaceMode !== 'grid');
   workspaceGridBtn?.classList.toggle('active', workspaceMode === 'grid');
+  saveWorkspaceState();
 }
 
 function renderWorkspaceTabs() {
@@ -373,7 +425,18 @@ function applyWorkspacePaneWidth(pane, sessionId) {
     }
     return;
   }
-  const width = workspacePaneWidths.get(sessionId) || 420;
+  const savedWidth = workspacePaneWidths.get(sessionId);
+  if (savedWidth) {
+    pane.style.flex = `0 0 ${savedWidth}px`;
+    pane.style.flexBasis = `${savedWidth}px`;
+    return;
+  }
+  if (workspaceSessions.size === 2) {
+    pane.style.flex = '1 1 0';
+    pane.style.flexBasis = '0';
+    return;
+  }
+  const width = 420;
   pane.style.flex = `0 0 ${width}px`;
   pane.style.flexBasis = `${width}px`;
 }
@@ -402,6 +465,7 @@ function stopWorkspaceResize() {
   if (!workspaceResizeState) return;
   workspaceResizeState = null;
   document.body.classList.remove('resizing-workspace-pane');
+  saveWorkspaceState();
 }
 
 
@@ -1765,6 +1829,20 @@ async function openLatestOrNewChatSession() {
     addSystemMsg(t('notConnected'), true);
     return;
   }
+  if (activeWorkspaceSessionId && workspaceSessions.has(activeWorkspaceSessionId)) {
+    const session = workspaceSessions.get(activeWorkspaceSessionId);
+    showPage('chat');
+    resumeSession(
+      session.sessionId,
+      session.cwd || '',
+      session.model || '',
+      Number(session.cost || 0),
+      session.remoteTargetId || '',
+      session.tokens || null,
+      session.cli || '',
+    );
+    return;
+  }
   if (!sessionsLoaded) {
     await loadSessions();
   }
@@ -3046,6 +3124,20 @@ function handleResult(data) {
     renderTokens();
   }
 
+  if (currentSessionId) {
+    const session = ensureWorkspaceSession(currentSessionId, {
+      cost: totalCost,
+      tokens: totalTokens,
+      status: data.is_error ? 'error' : 'done',
+      snapshotHtml: messagesEl.innerHTML,
+    });
+    if (session) {
+      session.cost = totalCost;
+      session.tokens = totalTokens;
+      session.snapshotHtml = messagesEl.innerHTML;
+    }
+  }
+
   if (data.is_error && data.errors) {
     data.errors.forEach(e => addSystemMsg(e, true));
   } else if (isSlashCommand(finishedTurn) && !hadAssistantOutput) {
@@ -3725,6 +3817,7 @@ async function sendMessage() {
   }
 
   addUserMessage(originalContent, quotesForThisTurn);
+  captureActiveWorkspaceSnapshot();
   inputEl.value = '';
   inputEl.style.height = 'auto';
 
@@ -3777,6 +3870,7 @@ async function sendMessage() {
   }
 
   if (result.run_id) currentRunId = result.run_id;
+  captureActiveWorkspaceSnapshot();
 }
 
 function isSlashCommand(content) {
@@ -6049,6 +6143,7 @@ async function reloadSessionHistory(sessionId, cwd) {
     toolResults.clear();
     toolStartTimes.clear();
     renderStaticHistory(history);
+    captureActiveWorkspaceSnapshot();
     for (const msg of systemMessages) {
       if (msg.text) addSystemMsg(msg.text, msg.isError);
     }
