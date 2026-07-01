@@ -32,6 +32,8 @@ from config_manager import (
     save_env_profile,
     delete_env_profile,
     list_skills,
+    get_skill,
+    delete_skill,
     list_agents,
     get_available_models,
     list_mcp_servers,
@@ -2279,6 +2281,13 @@ async def handle_api_get(path: str, writer: asyncio.StreamWriter, query: dict = 
         data = get_env_profiles()
     elif path == "/api/skills":
         data = list_skills()
+    elif path == "/api/skills/detail":
+        query = query or {}
+        skill = get_skill(query.get("dir", [""])[0])
+        if not skill:
+            await send_response(writer, 404, "application/json", b'{"error":"not found"}')
+            return
+        data = skill
     elif path == "/api/agents":
         data = list_agents()
     elif path == "/api/session/agents":
@@ -2612,6 +2621,15 @@ async def handle_api_post(path: str, body: bytes, writer: asyncio.StreamWriter):
             return
         resp = json.dumps(updated, ensure_ascii=False).encode("utf-8")
         await send_response(writer, 200, "application/json; charset=utf-8", resp)
+        return
+    elif path == "/api/skills/delete":
+        try:
+            delete_skill(str(data.get("dir", "")))
+        except ValueError as exc:
+            resp = json.dumps({"error": str(exc)}, ensure_ascii=False).encode("utf-8")
+            await send_response(writer, 400, "application/json; charset=utf-8", resp)
+            return
+        await send_response(writer, 200, "application/json", b'{"ok":true}')
         return
     elif path == "/api/agents/delete":
         try:

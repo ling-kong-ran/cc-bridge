@@ -80,6 +80,10 @@
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path><path d="M3.27 6.96 12 12.01l8.73-5.05"></path><path d="M12 22.08V12"></path></svg>
             <span data-i18n="artifacts">Artifacts</span>
           </button>
+          <button class="nav-btn" data-page="skills" title="Skills" data-i18n-title="skills">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2l2.4 6.8L21 11l-6.6 2.2L12 20l-2.4-6.8L3 11l6.6-2.2L12 2z"></path><path d="M5 3v4"></path><path d="M3 5h4"></path><path d="M19 17v4"></path><path d="M17 19h4"></path></svg>
+            <span data-i18n="skills">Skills</span>
+          </button>
           <button class="nav-btn" data-page="scheduled" title="Scheduled Tasks" data-i18n-title="scheduledTasks">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"></circle><path d="M12 7v5l3 2"></path></svg>
             <span data-i18n="scheduledTasks">Scheduled</span>
@@ -301,6 +305,26 @@
           </div>
           <div id="artifacts-summary" class="artifacts-summary"></div>
           <div id="artifacts-content" class="artifacts-content"></div>
+        </div>
+      </div>
+
+      <!-- 技能页 -->
+      <div id="page-skills" class="page skills-page">
+        <div class="skills-shell">
+          <header class="skills-header">
+            <div>
+              <div class="skills-kicker" data-i18n="skillsKicker">Slash command capabilities</div>
+              <h2 data-i18n="skills">Skills</h2>
+              <p data-i18n="skillsSubtitle">Manage installed skills and inspect their SKILL.md definitions.</p>
+            </div>
+            <button id="btn-skills-refresh" class="btn-mini" type="button" data-i18n="refresh">Refresh</button>
+          </header>
+          <div class="skills-toolbar">
+            <div id="skills-count" class="skills-count"></div>
+          </div>
+          <div id="skills-list" class="skills-grid">
+            <p class="empty-state" data-i18n="loading">Loading...</p>
+          </div>
         </div>
       </div>
 
@@ -660,12 +684,6 @@
                 </div>
               </section>
               <section class="config-section">
-                <h3 class="config-title" data-i18n="skills">Skills</h3>
-                <div id="skills-list" class="config-card">
-                  <p class="empty-state" data-i18n="loading">Loading...</p>
-                </div>
-              </section>
-              <section class="config-section">
                 <h3 class="config-title" data-i18n="agents">Agents</h3>
                 <div class="config-card">
                   <div id="agents-list">
@@ -803,6 +821,26 @@
       </div>
 
     </main>
+  </div>
+
+  <!-- 技能详情弹窗 -->
+  <div id="skill-modal-overlay" class="modal-overlay" style="display:none">
+    <div class="modal skill-modal">
+      <div class="skill-modal-head">
+        <div>
+          <div id="skill-modal-dir" class="skill-modal-dir"></div>
+          <h3 id="skill-modal-title" class="modal-title"></h3>
+          <p id="skill-modal-desc" class="skill-modal-desc"></p>
+        </div>
+        <button id="skill-modal-close" class="close-btn" type="button">&times;</button>
+      </div>
+      <div class="skill-modal-section-title" data-i18n="skillContent">SKILL.md</div>
+      <pre id="skill-modal-body" class="skill-modal-body"></pre>
+      <div class="skill-modal-actions">
+        <button id="btn-skill-uninstall" class="btn-danger" type="button" data-i18n="uninstallSkill">Uninstall</button>
+        <button id="btn-skill-close" class="btn-mini" type="button" data-i18n="close">Close</button>
+      </div>
+    </div>
   </div>
 
   <!-- 目录选择器弹窗 -->

@@ -10,6 +10,7 @@ let sessionActive = false;
 let isResponding = false;
 let isViewer = false;  // 当前是否以观察者身份查看他人的活跃会话
 let currentAssistantEl = null;
+let currentAssistantMessageId = null;
 let currentContent = [];
 let streamBlocks = {};
 let totalCost = 0;
@@ -31,6 +32,8 @@ let sessionOffset = 0;
 let sessionTotal = 0;
 const SESSION_PAGE_SIZE = 50;
 let scheduledTasks = [];
+let skillsCache = [];
+let currentSkillDir = '';
 let sidebarCollapsed = false;
 
 // ─── DOM ─────────────────────────────────────────────────────
@@ -1487,7 +1490,7 @@ function showPage(page) {
   if (target) target.classList.add('active');
   // 更新全局 titlebar
   const pageLabel = document.getElementById('titlebar-page-label');
-  const pageKey = page === 'home' ? 'home' : page === 'config' ? 'settings' : page === 'artifacts' ? 'artifacts' : page === 'scheduled' ? 'scheduledTasks' : page === 'sessions' ? 'sessions' : 'chat';
+  const pageKey = page === 'home' ? 'home' : page === 'config' ? 'settings' : page === 'artifacts' ? 'artifacts' : page === 'scheduled' ? 'scheduledTasks' : page === 'sessions' ? 'sessions' : page === 'skills' ? 'skills' : 'chat';
   if (pageLabel) pageLabel.textContent = t(pageKey);
   const isChatPage = page === 'chat';
   const backBtn = document.getElementById('btn-titlebar-back');
@@ -1512,6 +1515,8 @@ function showPage(page) {
     renderSessionList(cachedSessions);
   } else if (page === 'artifacts') {
     loadArtifacts();
+  } else if (page === 'skills') {
+    loadSkills();
   } else if (page === 'scheduled') {
     loadScheduledTasks();
   }
@@ -1576,6 +1581,13 @@ function initNavigation() {
     showPage('chat');
     startNewSession();
   });
+  document.getElementById('btn-skills-refresh')?.addEventListener('click', loadSkills);
+  document.getElementById('skill-modal-close')?.addEventListener('click', closeSkillModal);
+  document.getElementById('btn-skill-close')?.addEventListener('click', closeSkillModal);
+  document.getElementById('skill-modal-overlay')?.addEventListener('click', (e) => {
+    if (e.target?.id === 'skill-modal-overlay') closeSkillModal();
+  });
+  document.getElementById('btn-skill-uninstall')?.addEventListener('click', uninstallCurrentSkill);
   // 设置页标签切换
   document.querySelectorAll('.settings-tab').forEach(tab => {
     tab.addEventListener('click', () => {
@@ -1741,15 +1753,16 @@ function initSSE() {
 }
 
 function isEventForCurrentSession(data = {}) {
-  return !data.session_id || !currentSessionId || data.session_id === currentSessionId;
+  if (data.run_id && currentRunId && data.run_id === currentRunId) return true;
+  if (data.session_id && currentSessionId) return data.session_id === currentSessionId;
+  return true;
 }
 
 function noteBackgroundSessionEvent(data = {}) {
-  if (data.session_id && data.session_id !== currentSessionId) {
-    scheduleCompletionHistorySync(data.session_id);
-    return true;
-  }
-  return false;
+  if (!data.session_id || !currentSessionId || data.session_id === currentSessionId) return false;
+  if (data.run_id && currentRunId && data.run_id === currentRunId) return false;
+  scheduleCompletionHistorySync(data.session_id);
+  return true;
 }
 
 function bindSSEEvents() {
@@ -1988,6 +2001,7 @@ function bindSSEEvents() {
     stopTurnTimer();
     removePendingAssistantBubble(hadAssistantOutput);
     currentAssistantEl = null;
+    currentAssistantMessageId = null;
     currentRunId = null;
     clearRunningTasks({ keepFinished: true });
     clearSubagentBubbles();
@@ -2027,6 +2041,7 @@ function bindSSEEvents() {
       stopTurnTimer();
       removePendingAssistantBubble(false);
       currentAssistantEl = null;
+      currentAssistantMessageId = null;
       currentRunId = null;
       updateUI();
       notifyComplete('process');
@@ -2430,27 +2445,32 @@ function handleAssistantFinal(data) {
     return;
   }
 
-  // ccb 的 assistant 事件带增量消息（partial messages）
+  // ccb 的 assistant 事件在工具调用回合里可能按 block 拆成多条同 message.id 事件。
   isResponding = true;
   currentTurnHasAssistantOutput = true;
   updateUI();
 
-  if (!currentAssistantEl) {
-    currentAssistantEl = createAssistantBubble();
-    currentContent = [];
-  }
-
   const message = data.message;
   if (!message || !message.content) return;
 
-  currentContent = [];
+  const messageId = message.id || data.uuid || '';
+  if (!currentAssistantEl || (currentAssistantMessageId && messageId && currentAssistantMessageId !== messageId)) {
+    currentAssistantEl = createAssistantBubble();
+    currentContent = [];
+    streamBlocks = {};
+  }
+  currentAssistantMessageId = messageId || currentAssistantMessageId;
+
   for (const block of message.content) {
     if (block.type === 'thinking' && block.thinking) {
-      currentContent.push({ type: 'thinking', thinking: block.thinking });
+      upsertCurrentBlock({ type: 'thinking', thinking: block.thinking }, (existing) => existing.type === 'thinking');
     } else if (block.type === 'text' && block.text) {
-      currentContent.push({ type: 'text', text: block.text });
+      upsertCurrentBlock({ type: 'text', text: block.text }, (existing) => existing.type === 'text');
     } else if (block.type === 'tool_use') {
-      currentContent.push({ type: 'tool_use', name: block.name, id: block.id, input: block.input });
+      upsertCurrentBlock(
+        { type: 'tool_use', name: block.name, id: block.id, input: block.input },
+        (existing) => existing.type === 'tool_use' && existing.id && existing.id === block.id
+      );
     }
   }
   registerTaskBlocks(currentContent);
@@ -2458,6 +2478,15 @@ function handleAssistantFinal(data) {
   streamBlocks = {};
   renderCurrentState(true);
   scrollToBottom();
+}
+
+function upsertCurrentBlock(nextBlock, matcher) {
+  const index = currentContent.findIndex(matcher);
+  if (index >= 0) {
+    currentContent[index] = { ...currentContent[index], ...nextBlock };
+  } else {
+    currentContent.push(nextBlock);
+  }
 }
 
 // ─── Subagent 运行状态跟踪 ───────────────────────────────────
@@ -2660,6 +2689,7 @@ function finishCurrentTurnFromProcess() {
   isResponding = false;
   removePendingAssistantBubble(hadAssistantOutput);
   currentAssistantEl = null;
+  currentAssistantMessageId = null;
   currentContent = [];
   streamBlocks = {};
   currentTurnContent = '';
@@ -2711,6 +2741,7 @@ function handleResult(data) {
   const assistantEl = currentAssistantEl;
   isResponding = false;
   currentAssistantEl = null;
+  currentAssistantMessageId = null;
   currentContent = [];
   streamBlocks = {};
   clearRunningTasks();
@@ -3433,6 +3464,7 @@ async function sendMessage() {
     currentTurnHasAssistantOutput = false;
     isResponding = true;
     currentAssistantEl = createAssistantBubble();
+    currentAssistantMessageId = null;
     currentContent = [];
     streamBlocks = {};
     startTurnTimer();
@@ -3490,6 +3522,7 @@ function resetSessionViewState() {
   renderQuotePreview();
   messagesEl.innerHTML = '';
   currentAssistantEl = null;
+  currentAssistantMessageId = null;
   currentContent = [];
   streamBlocks = {};
   totalCost = 0;
@@ -3584,8 +3617,7 @@ async function loadConfig() {
     renderEnvEditor(env);
     renderEnvPasteSection();
     loadEnvProfiles();
-    const skills = await (await fetch('/api/skills')).json();
-    renderSkills(skills);
+    loadSkills();
     const agents = await (await fetch('/api/agents')).json();
     agentsCache = agents;
     renderAgents(agents);
@@ -3941,18 +3973,94 @@ function splitShellLike(text) {
   return args;
 }
 
+async function loadSkills() {
+  const el = document.getElementById('skills-list');
+  if (!el) return;
+  try {
+    const resp = await fetch('/api/skills');
+    skillsCache = await resp.json();
+    renderSkills(skillsCache);
+  } catch (e) {
+    console.error('技能加载失败:', e);
+    el.innerHTML = `<p class="empty-state">${esc(t('requestFailed', { message: e.message || e }))}</p>`;
+  }
+}
+
 function renderSkills(skills) {
   const el = document.getElementById('skills-list');
-  if (!skills.length) {
+  const countEl = document.getElementById('skills-count');
+  if (!el) return;
+  const list = Array.isArray(skills) ? skills : [];
+  if (countEl) countEl.textContent = t('skillsCount', { count: list.length });
+  if (!list.length) {
     el.innerHTML = `<p class="empty-state">${esc(t('noSkills'))}</p>`;
     return;
   }
-  el.innerHTML = skills.map(s => `
-    <div class="skill-item">
-      <span class="skill-name">/${s.name}</span>
-      <span class="skill-desc">${esc(s.description)}</span>
-    </div>
+  el.innerHTML = list.map(s => `
+    <button class="skill-card" type="button" data-dir="${esc(s.dir)}" title="${esc(t('skillOpen'))}">
+      <span class="skill-card-prefix">/</span>
+      <span class="skill-card-title">${esc(s.name)}</span>
+      <span class="skill-card-desc">${esc(s.description || t('noDescription'))}</span>
+      <span class="skill-card-dir">~/.claude/skills/${esc(s.dir)}</span>
+    </button>
   `).join('');
+  el.querySelectorAll('.skill-card').forEach(card => {
+    card.addEventListener('click', () => openSkillModal(card.dataset.dir));
+  });
+}
+
+async function openSkillModal(dir) {
+  if (!dir) return;
+  const overlay = document.getElementById('skill-modal-overlay');
+  const title = document.getElementById('skill-modal-title');
+  const desc = document.getElementById('skill-modal-desc');
+  const dirEl = document.getElementById('skill-modal-dir');
+  const body = document.getElementById('skill-modal-body');
+  if (!overlay || !title || !desc || !dirEl || !body) return;
+  currentSkillDir = dir;
+  overlay.style.display = 'flex';
+  const cached = skillsCache.find(s => s.dir === dir) || {};
+  title.textContent = '/' + (cached.name || dir);
+  desc.textContent = cached.description || '';
+  dirEl.textContent = `~/.claude/skills/${dir}`;
+  body.textContent = t('loading');
+  try {
+    const resp = await fetch(`/api/skills/detail?dir=${encodeURIComponent(dir)}`);
+    const skill = await resp.json();
+    if (!resp.ok) throw new Error(skill.error || resp.statusText);
+    title.textContent = '/' + (skill.name || dir);
+    desc.textContent = skill.description || '';
+    dirEl.textContent = `~/.claude/skills/${skill.dir || dir}`;
+    body.textContent = skill.content || '';
+  } catch (e) {
+    body.textContent = t('requestFailed', { message: e.message || e });
+  }
+}
+
+function closeSkillModal() {
+  currentSkillDir = '';
+  const overlay = document.getElementById('skill-modal-overlay');
+  if (overlay) overlay.style.display = 'none';
+}
+
+async function uninstallCurrentSkill() {
+  if (!currentSkillDir) return;
+  const skill = skillsCache.find(s => s.dir === currentSkillDir) || { name: currentSkillDir };
+  if (!confirm(t('confirmUninstallSkill', { name: skill.name || currentSkillDir }))) return;
+  try {
+    const resp = await fetch('/api/skills/delete', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ dir: currentSkillDir }),
+    });
+    const data = await resp.json();
+    if (!resp.ok || data.error) throw new Error(data.error || resp.statusText);
+    closeSkillModal();
+    await loadSkills();
+    showToast(t('skillUninstalled'), 'success');
+  } catch (e) {
+    showToast(t('skillUninstallFailed', { message: e.message || e }), 'error');
+  }
 }
 
 function renderAgents(agents) {
@@ -5480,6 +5588,7 @@ async function resumeSession(sessionId, cwd, model, savedCost = 0, remoteTargetI
   renderQuotePreview();
   messagesEl.innerHTML = '';
   currentAssistantEl = null;
+  currentAssistantMessageId = null;
   currentContent = [];
   streamBlocks = {};
   currentSessionId = sessionId;

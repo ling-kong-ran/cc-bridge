@@ -3,6 +3,7 @@ Config Manager - 管理 CCB 配置文件（settings.json、skills、agents）
 """
 import json
 import os
+import shutil
 from pathlib import Path
 from typing import Any
 import re
@@ -270,34 +271,74 @@ def delete_env_profile(name: str):
         )
 
 
+def _parse_skill_dir(skill_dir: Path, include_content: bool = False) -> dict[str, str]:
+    """解析单个 skill 目录。"""
+    skill_file = skill_dir / "SKILL.md"
+    content = skill_file.read_text(encoding="utf-8")
+    name = skill_dir.name
+    description = ""
+    if content.startswith("---"):
+        parts = content.split("---", 2)
+        if len(parts) >= 3:
+            for line in parts[1].strip().split("\n"):
+                if line.startswith("name:"):
+                    name = line.split(":", 1)[1].strip().strip('"\'')
+                elif line.startswith("description:"):
+                    description = line.split(":", 1)[1].strip().strip('"\'')
+    skill = {
+        "name": name,
+        "dir": skill_dir.name,
+        "description": description,
+    }
+    if include_content:
+        skill["content"] = content
+    return skill
+
+
+def _skill_dir_path(skill_dir_name: str) -> Path:
+    """获取并校验 skill 目录，防止越权删除。"""
+    name = str(skill_dir_name or "").strip()
+    if not name or "/" in name or "\\" in name or name in {".", ".."}:
+        raise ValueError("invalid skill dir")
+    try:
+        base = SKILLS_DIR.resolve()
+        target = (SKILLS_DIR / name).resolve()
+    except (OSError, RuntimeError):
+        raise ValueError("invalid skill dir")
+    if target != base and base not in target.parents:
+        raise ValueError("invalid skill dir")
+    return target
+
+
 def list_skills() -> list[dict[str, str]]:
     """列出所有已安装的 skills"""
     skills = []
     if not SKILLS_DIR.exists():
         return skills
 
-    for skill_dir in SKILLS_DIR.iterdir():
+    for skill_dir in sorted(SKILLS_DIR.iterdir(), key=lambda p: p.name.lower()):
         if skill_dir.is_dir():
             skill_file = skill_dir / "SKILL.md"
             if skill_file.exists():
-                content = skill_file.read_text(encoding="utf-8")
-                # 解析 frontmatter
-                name = skill_dir.name
-                description = ""
-                if content.startswith("---"):
-                    parts = content.split("---", 2)
-                    if len(parts) >= 3:
-                        for line in parts[1].strip().split("\n"):
-                            if line.startswith("name:"):
-                                name = line.split(":", 1)[1].strip().strip('"\'')
-                            elif line.startswith("description:"):
-                                description = line.split(":", 1)[1].strip().strip('"\'')
-                skills.append({
-                    "name": name,
-                    "dir": skill_dir.name,
-                    "description": description,
-                })
+                skills.append(_parse_skill_dir(skill_dir))
     return skills
+
+
+def get_skill(skill_dir_name: str) -> dict[str, str] | None:
+    """读取单个 skill 的完整内容。"""
+    skill_dir = _skill_dir_path(skill_dir_name)
+    skill_file = skill_dir / "SKILL.md"
+    if not skill_dir.is_dir() or not skill_file.exists():
+        return None
+    return _parse_skill_dir(skill_dir, include_content=True)
+
+
+def delete_skill(skill_dir_name: str):
+    """卸载 skill：删除 ~/.claude/skills/<dir> 整个目录。"""
+    skill_dir = _skill_dir_path(skill_dir_name)
+    if not skill_dir.is_dir() or not (skill_dir / "SKILL.md").exists():
+        raise ValueError("skill not found")
+    shutil.rmtree(skill_dir)
 
 
 AGENT_FRONTMATTER_FIELDS = ["name", "description", "tools", "disallowedTools", "model",
