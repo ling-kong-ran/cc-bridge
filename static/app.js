@@ -203,6 +203,14 @@ function initSessionWorkspace() {
   renderWorkspace();
 }
 
+function sanitizeWorkspaceSnapshotHtml(html) {
+  if (!html) return '';
+  const template = document.createElement('template');
+  template.innerHTML = html;
+  template.content.querySelectorAll('.message.assistant.streaming').forEach(el => el.classList.remove('streaming'));
+  return template.innerHTML;
+}
+
 function saveWorkspaceState() {
   const sessions = Array.from(workspaceSessions.values())
     .filter(s => s.sessionId && !s.sessionId.startsWith('pending-'))
@@ -218,7 +226,7 @@ function saveWorkspaceState() {
       status: s.status === 'running' || s.status === 'tool' ? 'idle' : (s.status || 'idle'),
       phase: '',
       runId: '',
-      snapshotHtml: s.snapshotHtml || '',
+      snapshotHtml: sanitizeWorkspaceSnapshotHtml(s.snapshotHtml || ''),
     }));
   try {
     localStorage.setItem(WORKSPACE_STORAGE_KEY, JSON.stringify({
@@ -265,7 +273,7 @@ function workspaceSessionFromMeta(sessionId, meta = {}) {
     startedAt: meta.startedAt || existing.startedAt || 0,
     updatedAt: Date.now(),
     runId: meta.runId || existing.runId || '',
-    snapshotHtml: meta.snapshotHtml || existing.snapshotHtml || '',
+    snapshotHtml: sanitizeWorkspaceSnapshotHtml(meta.snapshotHtml || existing.snapshotHtml || ''),
   };
 }
 
@@ -282,7 +290,7 @@ function captureActiveWorkspaceSnapshot() {
   if (!activeWorkspaceSessionId || !messagesEl) return;
   const session = workspaceSessions.get(activeWorkspaceSessionId);
   if (session) {
-    session.snapshotHtml = messagesEl.innerHTML;
+    session.snapshotHtml = sanitizeWorkspaceSnapshotHtml(messagesEl.innerHTML);
     saveWorkspaceState();
   }
 }
@@ -3129,12 +3137,12 @@ function handleResult(data) {
       cost: totalCost,
       tokens: totalTokens,
       status: data.is_error ? 'error' : 'done',
-      snapshotHtml: messagesEl.innerHTML,
+      snapshotHtml: sanitizeWorkspaceSnapshotHtml(messagesEl.innerHTML),
     });
     if (session) {
       session.cost = totalCost;
       session.tokens = totalTokens;
-      session.snapshotHtml = messagesEl.innerHTML;
+      session.snapshotHtml = sanitizeWorkspaceSnapshotHtml(messagesEl.innerHTML);
     }
   }
 
