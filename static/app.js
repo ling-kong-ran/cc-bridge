@@ -3033,7 +3033,14 @@ function handleAssistantFinal(data) {
   if (previewText) setWorkspaceSessionPreview(currentSessionId, previewText);
 
   const messageId = message.id || data.uuid || '';
-  if (!currentAssistantEl || (currentAssistantMessageId && messageId && currentAssistantMessageId !== messageId)) {
+  if (currentAssistantEl && currentAssistantMessageId && messageId && currentAssistantMessageId !== messageId) {
+    finalizeCurrentAssistantMarkdown();
+    finishAssistantStreaming(currentAssistantEl);
+    currentAssistantEl = null;
+    currentContent = [];
+    streamBlocks = {};
+  }
+  if (!currentAssistantEl) {
     currentAssistantEl = createAssistantBubble();
     currentContent = [];
     streamBlocks = {};
@@ -3390,8 +3397,8 @@ function createAssistantBubble(streaming = true) {
   return el;
 }
 
-function finishAssistantStreaming() {
-  if (currentAssistantEl) currentAssistantEl.classList.remove('streaming');
+function finishAssistantStreaming(el = currentAssistantEl) {
+  if (el) el.classList.remove('streaming');
 }
 
 function removePendingAssistantBubble(keepBubble) {
