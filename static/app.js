@@ -614,14 +614,11 @@ function applyWorkspacePaneWidth(pane, sessionId) {
     pane.style.flexBasis = `${savedWidth}px`;
     return;
   }
-  if (workspaceSessions.size === 2) {
-    pane.style.flex = '1 1 0';
-    pane.style.flexBasis = '0';
-    return;
-  }
-  const width = 420;
-  pane.style.flex = `0 0 ${width}px`;
-  pane.style.flexBasis = `${width}px`;
+  const sessionCount = Math.max(1, workspaceSessions.size);
+  const gapTotal = Math.max(0, sessionCount - 1) * 8;
+  const width = `calc((100% - ${gapTotal}px) / ${sessionCount})`;
+  pane.style.flex = `1 1 ${width}`;
+  pane.style.flexBasis = width;
 }
 
 function startWorkspaceResize(event, sessionId, pane) {
@@ -2335,7 +2332,7 @@ function bindSSEEvents() {
         currentSessionId = data.session_id;
         currentRunId = data.run_id || currentRunId;
         ensureWorkspaceSession(data.session_id, {
-          title: data.title || t('newChat'),
+          title: data.title || undefined,
           cwd: data.cwd || cwdInput.value.trim() || '',
           model: data.model || modelSelect.value || '',
           cli: data.cli || document.getElementById('cli-select')?.value || '',
@@ -5755,11 +5752,52 @@ function hideMentionPopup() {
 }
 
 // ─── 会话管理 ─────────────────────────────────────────────────
+function syncWorkspaceSessionsFromRecords(sessions) {
+  let changed = false;
+  for (const record of (sessions || [])) {
+    const sessionId = record.session_id || '';
+    const session = sessionId ? workspaceSessions.get(sessionId) : null;
+    if (!session) continue;
+    if (record.title && session.title !== record.title) {
+      session.title = record.title;
+      changed = true;
+    }
+    if (record.cwd && session.cwd !== record.cwd) {
+      session.cwd = record.cwd;
+      changed = true;
+    }
+    if (record.model && session.model !== record.model) {
+      session.model = record.model;
+      changed = true;
+    }
+    if ((record.cli || '') !== (session.cli || '')) {
+      session.cli = record.cli || '';
+      changed = true;
+    }
+    if ((record.remote_target_id || '') !== (session.remoteTargetId || '')) {
+      session.remoteTargetId = record.remote_target_id || '';
+      changed = true;
+    }
+    const cost = Number(record.total_cost_usd || 0);
+    if (Number.isFinite(cost) && session.cost !== cost) {
+      session.cost = cost;
+      changed = true;
+    }
+    const tokens = normalizeTokenUsage(record.total_tokens);
+    if (JSON.stringify(session.tokens || null) !== JSON.stringify(tokens)) {
+      session.tokens = tokens;
+      changed = true;
+    }
+  }
+  if (changed) renderWorkspace();
+}
+
 async function loadSessions() {
   try {
     const resp = await fetch(`/api/sessions?offset=0&limit=${SESSION_PAGE_SIZE}`);
     const data = await resp.json();
     cachedSessions = data.sessions || [];
+    syncWorkspaceSessionsFromRecords(cachedSessions);
     sessionOffset = cachedSessions.length;
     sessionTotal = data.total || 0;
     sessionsLoaded = true;
@@ -5778,6 +5816,7 @@ async function loadMoreSessions() {
     const data = await resp.json();
     const more = data.sessions || [];
     cachedSessions = cachedSessions.concat(more);
+    syncWorkspaceSessionsFromRecords(more);
     sessionOffset = cachedSessions.length;
     sessionTotal = data.total || 0;
     renderSessionList(cachedSessions);
