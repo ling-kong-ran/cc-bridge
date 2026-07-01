@@ -2104,16 +2104,16 @@ body.pane-right-collapsed .chat-sidebar {
 .workspace-close-btn {
   min-width: 18px;
   height: 18px;
-  padding: 0 4px;
+  padding: 0;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  color: var(--text-muted);
-  border-color: rgba(255, 92, 92, 0.30);
-  background: rgba(255, 92, 92, 0.08);
-  font-size: 13px;
+  color: var(--text-ghost);
+  border-color: transparent;
+  background: transparent;
+  font-size: 14px;
   line-height: 1;
-  opacity: 0.86;
+  opacity: 0.62;
   text-align: center;
 }
 
@@ -2121,7 +2121,7 @@ body.pane-right-collapsed .chat-sidebar {
 .workspace-tab:hover .workspace-close-btn,
 .workspace-tab:focus-visible .workspace-close-btn,
 .workspace-close-btn:focus-visible {
-  opacity: 1;
+  opacity: 0.9;
 }
 
 .workspace-tab:hover .workspace-rename-btn,
@@ -2143,8 +2143,9 @@ body.pane-right-collapsed .chat-sidebar {
 .workspace-close-btn:hover,
 .workspace-close-btn:focus-visible {
   color: var(--danger);
-  border-color: rgba(255, 92, 92, 0.42);
-  background: rgba(255, 92, 92, 0.10);
+  border-color: rgba(255, 92, 92, 0.22);
+  background: rgba(255, 92, 92, 0.08);
+  opacity: 1;
 }
 
 .workspace-tab-meta {
