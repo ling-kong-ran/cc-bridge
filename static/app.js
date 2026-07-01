@@ -386,24 +386,51 @@ function renderWorkspacePanes() {
   if (statusEl) statusEl.textContent = getWorkspaceStatusLabel(activeSession?.status || (sessionActive ? 'idle' : 'idle'));
   applyWorkspacePaneWidth(workspaceLivePane, activeWorkspaceSessionId);
 
-  workspacePanesEl.querySelectorAll('.workspace-snapshot-pane').forEach(el => el.remove());
   ensureLivePaneResizer();
-  if (workspaceMode !== 'grid') return;
+  if (workspaceMode !== 'grid') {
+    workspacePanesEl.querySelectorAll('.workspace-snapshot-pane').forEach(el => el.remove());
+    return;
+  }
+
+  const inactiveSessionIds = new Set(
+    Array.from(workspaceSessions.values())
+      .filter(session => session.sessionId !== activeWorkspaceSessionId)
+      .map(session => session.sessionId)
+  );
+  workspacePanesEl.querySelectorAll('.workspace-snapshot-pane').forEach(el => {
+    if (!inactiveSessionIds.has(el.dataset.sessionId)) el.remove();
+  });
+
   for (const session of workspaceSessions.values()) {
     if (session.sessionId === activeWorkspaceSessionId) continue;
-    const pane = document.createElement('section');
+    let pane = Array.from(workspacePanesEl.querySelectorAll('.workspace-snapshot-pane'))
+      .find(el => el.dataset.sessionId === session.sessionId);
+    if (!pane) {
+      pane = document.createElement('section');
+      pane.className = 'workspace-pane workspace-snapshot-pane';
+      pane.dataset.sessionId = session.sessionId;
+      pane.innerHTML = `
+        <div class="workspace-pane-head">
+          <div class="workspace-pane-title"></div>
+          <div class="workspace-pane-status"></div>
+        </div>
+        <div class="messages workspace-snapshot-messages"></div>
+        <div class="workspace-pane-resizer" title="${esc(t('workspaceResize'))}"></div>
+      `;
+      pane.querySelector('.workspace-pane-head')?.addEventListener('click', () => activateWorkspaceSession(session.sessionId));
+      pane.querySelector('.workspace-pane-resizer')?.addEventListener('pointerdown', (e) => startWorkspaceResize(e, session.sessionId, pane));
+    }
     pane.className = `workspace-pane workspace-snapshot-pane status-${session.status || 'idle'}`;
-    pane.dataset.sessionId = session.sessionId;
-    pane.innerHTML = `
-      <div class="workspace-pane-head">
-        <div class="workspace-pane-title">${esc(session.title || t('newChat'))}</div>
-        <div class="workspace-pane-status">${esc(getWorkspaceStatusLabel(session.status))}</div>
-      </div>
-      <div class="messages workspace-snapshot-messages">${session.snapshotHtml || `<div class="workspace-snapshot-empty">${esc(t('workspaceOpenSession'))}</div>`}</div>
-      <div class="workspace-pane-resizer" title="${esc(t('workspaceResize'))}"></div>
-    `;
-    pane.querySelector('.workspace-pane-head')?.addEventListener('click', () => activateWorkspaceSession(session.sessionId));
-    pane.querySelector('.workspace-pane-resizer')?.addEventListener('pointerdown', (e) => startWorkspaceResize(e, session.sessionId, pane));
+    const paneTitle = pane.querySelector('.workspace-pane-title');
+    const paneStatus = pane.querySelector('.workspace-pane-status');
+    const paneMessages = pane.querySelector('.workspace-snapshot-messages');
+    if (paneTitle) paneTitle.textContent = session.title || t('newChat');
+    if (paneStatus) paneStatus.textContent = getWorkspaceStatusLabel(session.status);
+    const snapshotHtml = session.snapshotHtml || `<div class="workspace-snapshot-empty">${esc(t('workspaceOpenSession'))}</div>`;
+    if (paneMessages && paneMessages.dataset.snapshotHtml !== snapshotHtml) {
+      paneMessages.innerHTML = snapshotHtml;
+      paneMessages.dataset.snapshotHtml = snapshotHtml;
+    }
     applyWorkspacePaneWidth(pane, session.sessionId);
     workspacePanesEl.appendChild(pane);
   }
