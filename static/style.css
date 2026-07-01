@@ -2098,21 +2098,35 @@ body.pane-right-collapsed .chat-sidebar {
   font-size: 8px;
   letter-spacing: 0.04em;
   opacity: 0;
-  transition: opacity var(--t-fast), color var(--t-fast), border-color var(--t-fast), background var(--t-fast);
+  transition: opacity var(--t-fast), color var(--t-fast), border-color var(--t-fast), background var(--t-fast), box-shadow var(--t-fast);
 }
 
 .workspace-close-btn {
-  min-width: 15px;
-  padding: 1px 3px;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 4px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-muted);
+  border-color: rgba(255, 92, 92, 0.30);
+  background: rgba(255, 92, 92, 0.08);
+  font-size: 13px;
+  line-height: 1;
+  opacity: 0.86;
   text-align: center;
 }
 
-.workspace-tab:hover .workspace-rename-btn,
+.workspace-tab.active .workspace-close-btn,
 .workspace-tab:hover .workspace-close-btn,
-.workspace-tab:focus-visible .workspace-rename-btn,
 .workspace-tab:focus-visible .workspace-close-btn,
-.workspace-rename-btn:focus-visible,
 .workspace-close-btn:focus-visible {
+  opacity: 1;
+}
+
+.workspace-tab:hover .workspace-rename-btn,
+.workspace-tab:focus-visible .workspace-rename-btn,
+.workspace-rename-btn:focus-visible {
   opacity: 1;
 }
 
