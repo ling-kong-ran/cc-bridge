@@ -36,6 +36,8 @@ let skillsCache = [];
 let currentSkillDir = '';
 let sidebarCollapsed = false;
 const WORKSPACE_STORAGE_KEY = 'ccb_workspace_state_v1';
+const WORKSPACE_PREVIEW_MAX_CHARS = 3000;
+let workspacePreviewRenderScheduled = false;
 let workspaceMode = 'focus';
 let activeWorkspaceSessionId = '';
 const workspaceSessions = new Map();
@@ -203,14 +205,6 @@ function initSessionWorkspace() {
   renderWorkspace();
 }
 
-function sanitizeWorkspaceSnapshotHtml(html) {
-  if (!html) return '';
-  const template = document.createElement('template');
-  template.innerHTML = html;
-  template.content.querySelectorAll('.message.assistant.streaming').forEach(el => el.classList.remove('streaming'));
-  return template.innerHTML;
-}
-
 function saveWorkspaceState() {
   const sessions = Array.from(workspaceSessions.values())
     .filter(s => s.sessionId && !s.sessionId.startsWith('pending-'))
@@ -225,8 +219,7 @@ function saveWorkspaceState() {
       tokens: s.tokens || null,
       status: s.status === 'running' || s.status === 'tool' ? 'idle' : (s.status || 'idle'),
       phase: '',
-      runId: '',
-      snapshotHtml: sanitizeWorkspaceSnapshotHtml(s.snapshotHtml || ''),
+      runId: s.status === 'running' || s.status === 'tool' ? (s.runId || '') : '',
     }));
   try {
     localStorage.setItem(WORKSPACE_STORAGE_KEY, JSON.stringify({
@@ -273,7 +266,8 @@ function workspaceSessionFromMeta(sessionId, meta = {}) {
     startedAt: meta.startedAt || existing.startedAt || 0,
     updatedAt: Date.now(),
     runId: meta.runId || existing.runId || '',
-    snapshotHtml: sanitizeWorkspaceSnapshotHtml(meta.snapshotHtml || existing.snapshotHtml || ''),
+    released: Boolean(meta.released ?? existing.released),
+    previewText: meta.previewText || existing.previewText || '',
   };
 }
 
@@ -287,12 +281,52 @@ function ensureWorkspaceSession(sessionId, meta = {}) {
 }
 
 function captureActiveWorkspaceSnapshot() {
-  if (!activeWorkspaceSessionId || !messagesEl) return;
-  const session = workspaceSessions.get(activeWorkspaceSessionId);
-  if (session) {
-    session.snapshotHtml = sanitizeWorkspaceSnapshotHtml(messagesEl.innerHTML);
-    saveWorkspaceState();
-  }
+  // 会话子页签只保留元数据和小体积文本预览，历史内容在切换时通过 resume/history 重新加载。
+  // 不缓存 messagesEl.innerHTML，避免多个页签把整段聊天 DOM/HTML 复制到内存和 localStorage。
+}
+
+function getWorkspaceSessionPreview(session) {
+  if (!session) return '';
+  return (session.previewText || '').slice(-WORKSPACE_PREVIEW_MAX_CHARS);
+}
+
+function appendWorkspaceSessionPreview(sessionId, text) {
+  if (!sessionId || !text) return;
+  const session = workspaceSessions.get(sessionId);
+  if (!session) return;
+  session.previewText = `${session.previewText || ''}${text}`.slice(-WORKSPACE_PREVIEW_MAX_CHARS);
+  scheduleWorkspacePreviewRender();
+}
+
+function setWorkspaceSessionPreview(sessionId, text) {
+  if (!sessionId) return;
+  const session = workspaceSessions.get(sessionId);
+  if (!session) return;
+  session.previewText = (text || '').slice(-WORKSPACE_PREVIEW_MAX_CHARS);
+  scheduleWorkspacePreviewRender();
+}
+
+function scheduleWorkspacePreviewRender() {
+  if (workspacePreviewRenderScheduled || workspaceMode !== 'grid') return;
+  workspacePreviewRenderScheduled = true;
+  requestAnimationFrame(() => {
+    workspacePreviewRenderScheduled = false;
+    renderWorkspacePanes();
+  });
+}
+
+function releaseWorkspaceSession(sessionId) {
+  const session = workspaceSessions.get(sessionId);
+  if (!session) return;
+  if (session.status === 'running' || session.status === 'tool') return;
+  if (session.released) return;
+  session.released = true;
+  sendAction('release_session', { session_id: sessionId, run_id: session.runId || '' });
+}
+
+function releaseInactiveWorkspaceSession(sessionId) {
+  if (!sessionId || sessionId === activeWorkspaceSessionId) return;
+  releaseWorkspaceSession(sessionId);
 }
 
 function activateWorkspaceSession(sessionId, opts = {}) {
@@ -301,10 +335,13 @@ function activateWorkspaceSession(sessionId, opts = {}) {
     return;
   }
   captureActiveWorkspaceSnapshot();
+  const previousSessionId = activeWorkspaceSessionId;
   activeWorkspaceSessionId = sessionId;
+  releaseInactiveWorkspaceSession(previousSessionId);
   const session = workspaceSessions.get(sessionId);
   if (session) {
-    if (session.snapshotHtml && messagesEl) messagesEl.innerHTML = session.snapshotHtml;
+    session.released = false;
+    messagesEl.innerHTML = '';
     if (opts.resume !== false) {
       resumeSession(session.sessionId, session.cwd, session.model, session.cost || 0, session.remoteTargetId || '', session.tokens || null, session.cli || '');
     }
@@ -335,8 +372,14 @@ function updateWorkspaceSessionStatus(sessionId, status, phase = '') {
   session.status = status || session.status || 'idle';
   session.phase = phase || session.phase || '';
   session.updatedAt = Date.now();
-  if (status === 'running' || status === 'tool') session.startedAt = session.startedAt || Date.now();
-  if (status === 'done' || status === 'error' || status === 'idle') session.startedAt = 0;
+  if (status === 'running' || status === 'tool') {
+    session.released = false;
+    session.startedAt = session.startedAt || Date.now();
+  }
+  if (status === 'done' || status === 'error' || status === 'idle') {
+    session.startedAt = 0;
+    releaseInactiveWorkspaceSession(sessionId);
+  }
   renderWorkspace();
 }
 
@@ -364,12 +407,44 @@ function getWorkspaceTabSessionId(target) {
   return target?.closest?.('.workspace-tab')?.dataset.sessionId || '';
 }
 
+function closeWorkspaceSession(sessionId) {
+  if (!sessionId || !workspaceSessions.has(sessionId)) return;
+  const sessionIds = Array.from(workspaceSessions.keys());
+  const closingActive = sessionId === activeWorkspaceSessionId;
+  const closingIndex = sessionIds.indexOf(sessionId);
+  releaseWorkspaceSession(sessionId);
+  workspaceSessions.delete(sessionId);
+  workspacePaneWidths.delete(sessionId);
+  if (closingActive) {
+    const nextSessionId = sessionIds[closingIndex + 1] || sessionIds[closingIndex - 1] || '';
+    if (nextSessionId && workspaceSessions.has(nextSessionId)) {
+      activeWorkspaceSessionId = '';
+      activateWorkspaceSession(nextSessionId);
+      return;
+    }
+    activeWorkspaceSessionId = '';
+    resetSessionViewState();
+    sessionActive = false;
+    isResponding = false;
+    isViewer = false;
+    updateUI();
+  }
+  renderWorkspace();
+}
+
 function ensureWorkspaceTabsEvents() {
   if (!workspaceTabsEl || workspaceTabsEl.dataset.eventsBound === '1') return;
   workspaceTabsEl.dataset.eventsBound = '1';
   workspaceTabsEl.addEventListener('click', (e) => {
     if (e.target.closest('.workspace-new-session')) {
       startNewSession();
+      return;
+    }
+    const closeBtn = e.target.closest('.workspace-close-btn');
+    if (closeBtn) {
+      e.preventDefault();
+      e.stopPropagation();
+      closeWorkspaceSession(getWorkspaceTabSessionId(closeBtn));
       return;
     }
     const renameBtn = e.target.closest('.workspace-rename-btn');
@@ -383,7 +458,7 @@ function ensureWorkspaceTabsEvents() {
     if (sessionId) activateWorkspaceSession(sessionId);
   });
   workspaceTabsEl.addEventListener('dblclick', (e) => {
-    if (e.target.closest('.workspace-rename-btn')) return;
+    if (e.target.closest('.workspace-rename-btn, .workspace-close-btn')) return;
     const sessionId = getWorkspaceTabSessionId(e.target);
     if (!sessionId) return;
     e.preventDefault();
@@ -391,6 +466,13 @@ function ensureWorkspaceTabsEvents() {
   });
   workspaceTabsEl.addEventListener('keydown', (e) => {
     if (e.key !== 'Enter' && e.key !== ' ') return;
+    const closeBtn = e.target.closest('.workspace-close-btn');
+    if (closeBtn) {
+      e.preventDefault();
+      e.stopPropagation();
+      closeWorkspaceSession(getWorkspaceTabSessionId(closeBtn));
+      return;
+    }
     const renameBtn = e.target.closest('.workspace-rename-btn');
     if (renameBtn) {
       e.preventDefault();
@@ -419,7 +501,10 @@ function renderWorkspaceTabs() {
     <div class="workspace-tab ${s.sessionId === activeWorkspaceSessionId ? 'active' : ''} status-${esc(s.status || 'idle')}" role="tab" tabindex="0" data-session-id="${esc(s.sessionId)}">
       <span class="workspace-tab-title-row">
         <span class="workspace-tab-title">${esc(s.title || t('newChat'))}</span>
-        <span class="workspace-rename-btn" role="button" tabindex="0" title="${esc(t('rename'))}" aria-label="${esc(t('rename'))}">EDIT</span>
+        <span class="workspace-tab-actions">
+          <span class="workspace-rename-btn" role="button" tabindex="0" title="${esc(t('rename'))}" aria-label="${esc(t('rename'))}">EDIT</span>
+          <span class="workspace-close-btn" role="button" tabindex="0" title="${esc(t('close'))}" aria-label="${esc(t('close'))}">×</span>
+        </span>
       </span>
       <span class="workspace-tab-meta">${esc(getWorkspaceStatusLabel(s.status))}${s.phase ? ` · ${esc(s.phase)}` : ''}</span>
     </div>
@@ -479,10 +564,20 @@ function renderWorkspacePanes() {
     const paneMessages = pane.querySelector('.workspace-snapshot-messages');
     if (paneTitle) paneTitle.textContent = session.title || t('newChat');
     if (paneStatus) paneStatus.textContent = getWorkspaceStatusLabel(session.status);
-    const snapshotHtml = session.snapshotHtml || `<div class="workspace-snapshot-empty">${esc(t('workspaceOpenSession'))}</div>`;
-    if (paneMessages && paneMessages.dataset.snapshotHtml !== snapshotHtml) {
-      paneMessages.innerHTML = snapshotHtml;
-      paneMessages.dataset.snapshotHtml = snapshotHtml;
+    const previewText = getWorkspaceSessionPreview(session);
+    releaseInactiveWorkspaceSession(session.sessionId);
+    if (paneMessages && paneMessages.dataset.previewText !== previewText) {
+      paneMessages.dataset.previewText = previewText;
+      if (previewText) {
+        let previewEl = paneMessages.querySelector('.workspace-live-preview');
+        if (!previewEl) {
+          paneMessages.innerHTML = '<div class="workspace-live-preview"></div>';
+          previewEl = paneMessages.querySelector('.workspace-live-preview');
+        }
+        previewEl.textContent = previewText;
+      } else {
+        paneMessages.innerHTML = `<div class="workspace-snapshot-empty">${esc(t('workspaceOpenSession'))}</div>`;
+      }
     }
     applyWorkspacePaneWidth(pane, session.sessionId);
     workspacePanesEl.appendChild(pane);
@@ -2159,8 +2254,49 @@ function isEventForCurrentSession(data = {}) {
 function noteBackgroundSessionEvent(data = {}) {
   if (!data.session_id || !currentSessionId || data.session_id === currentSessionId) return false;
   if (data.run_id && currentRunId && data.run_id === currentRunId) return false;
+  updateBackgroundWorkspacePreview(data);
   scheduleCompletionHistorySync(data.session_id);
   return true;
+}
+
+function updateBackgroundWorkspacePreview(data = {}) {
+  const sessionId = data.session_id;
+  if (!sessionId || !workspaceSessions.has(sessionId)) return;
+  if (data.event) {
+    appendWorkspacePreviewEvent(sessionId, data.event);
+    return;
+  }
+  const message = data.message;
+  if (message?.content) {
+    const text = extractMessagePreviewText(message);
+    if (text) setWorkspaceSessionPreview(sessionId, text);
+  }
+}
+
+function appendWorkspacePreviewEvent(sessionId, evt) {
+  if (!evt) return;
+  if (evt.type === 'message_start') {
+    setWorkspaceSessionPreview(sessionId, '');
+    return;
+  }
+  if (evt.type === 'content_block_delta') {
+    const text = evt.delta?.text || evt.delta?.thinking || evt.delta?.partial_json || '';
+    if (text) appendWorkspaceSessionPreview(sessionId, text);
+    return;
+  }
+  if (evt.type === 'content_block_start' && evt.content_block?.type === 'tool_use') {
+    appendWorkspaceSessionPreview(sessionId, `\n> ${evt.content_block.name || t('tool')}\n`);
+  }
+}
+
+function extractMessagePreviewText(message) {
+  let text = '';
+  for (const block of (message.content || [])) {
+    if (block.type === 'text' && block.text) text += block.text;
+    else if (block.type === 'thinking' && block.thinking) text += block.thinking;
+    else if (block.type === 'tool_use' && block.name) text += `\n> ${block.name}\n`;
+  }
+  return text;
 }
 
 function bindSSEEvents() {
@@ -2321,12 +2457,8 @@ function bindSSEEvents() {
     currentSessionId = data.session_id;
     currentRunId = data.run_id || currentRunId;
     if (activeWorkspaceSessionId && activeWorkspaceSessionId.startsWith('pending-') && activeWorkspaceSessionId !== data.session_id) {
-      const pending = workspaceSessions.get(activeWorkspaceSessionId);
       workspaceSessions.delete(activeWorkspaceSessionId);
       activeWorkspaceSessionId = data.session_id;
-      if (pending?.snapshotHtml && !workspaceSessions.get(data.session_id)?.snapshotHtml) {
-        ensureWorkspaceSession(data.session_id, { snapshotHtml: pending.snapshotHtml });
-      }
     }
     ensureWorkspaceSession(data.session_id, {
       cwd: cwdInput.value.trim() || '',
@@ -2530,6 +2662,11 @@ function handleStreamEvent(data) {
   const evt = data.event;
   if (!evt) return;
 
+  if (evt.type === 'message_start') setWorkspaceSessionPreview(currentSessionId, '');
+  if (evt.type === 'content_block_start' && evt.content_block?.type === 'tool_use') {
+    appendWorkspaceSessionPreview(currentSessionId, `\n> ${evt.content_block.name || t('tool')}\n`);
+  }
+
   isResponding = true;
   currentTurnHasAssistantOutput = true;
   updateWorkspaceSessionStatus(currentSessionId, evt.type === 'content_block_start' && evt.content_block?.type === 'tool_use' ? 'tool' : 'running', evt.type === 'content_block_start' && evt.content_block?.type === 'tool_use' ? t('tool') : t('streamingReply'));
@@ -2558,10 +2695,13 @@ function handleStreamEvent(data) {
       if (!block) break;
       if (evt.delta?.type === 'text_delta') {
         block.text += evt.delta.text || '';
+        appendWorkspaceSessionPreview(currentSessionId, evt.delta.text || '');
       } else if (evt.delta?.type === 'thinking_delta') {
         block.thinking += evt.delta.thinking || '';
+        appendWorkspaceSessionPreview(currentSessionId, evt.delta.thinking || '');
       } else if (evt.delta?.type === 'input_json_delta') {
         block.input += evt.delta.partial_json || '';
+        appendWorkspaceSessionPreview(currentSessionId, evt.delta.partial_json || '');
       }
       scheduleRender();
       break;
@@ -2889,6 +3029,8 @@ function handleAssistantFinal(data) {
 
   const message = data.message;
   if (!message || !message.content) return;
+  const previewText = extractMessagePreviewText(message);
+  if (previewText) setWorkspaceSessionPreview(currentSessionId, previewText);
 
   const messageId = message.id || data.uuid || '';
   if (!currentAssistantEl || (currentAssistantMessageId && messageId && currentAssistantMessageId !== messageId)) {
@@ -3217,12 +3359,10 @@ function handleResult(data) {
       cost: totalCost,
       tokens: totalTokens,
       status: data.is_error ? 'error' : 'done',
-      snapshotHtml: sanitizeWorkspaceSnapshotHtml(messagesEl.innerHTML),
     });
     if (session) {
       session.cost = totalCost;
       session.tokens = totalTokens;
-      session.snapshotHtml = sanitizeWorkspaceSnapshotHtml(messagesEl.innerHTML);
     }
   }
 

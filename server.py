@@ -2179,6 +2179,20 @@ async def handle_action(body: bytes, writer: asyncio.StreamWriter):
         await push_event(client_id, "session_stopped", {"session_id": sid, "run_id": run_id})
         await send_response(writer, 200, "application/json", b'{"ok":true}')
 
+    elif action == "release_session":
+        sid = data.get("session_id") or client_session_ids.get(client_id, "")
+        run_id = data.get("run_id") or (session_run_ids.get(sid, "") if sid else "")
+        session = session_manager.get_session_by_run_id(run_id) if run_id else session_manager.get_session_by_native_id(sid)
+        released = False
+        if session and not session.current_generation_state().get("running"):
+            released = await session.release_idle()
+            await release_session_lock_for_session(sid, client_id)
+            if sid and session_run_ids.get(sid) == run_id:
+                session_run_ids.pop(sid, None)
+            if run_id:
+                session_manager.finish_run(run_id)
+        await send_response(writer, 200, "application/json", json.dumps({"ok": True, "released": released}, ensure_ascii=False).encode("utf-8"))
+
     elif action == "interrupt":
         sid = data.get("session_id") or client_session_ids.get(client_id, "")
         run_id = data.get("run_id") or (session_run_ids.get(sid, "") if sid else "")

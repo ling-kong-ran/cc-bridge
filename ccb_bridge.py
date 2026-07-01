@@ -601,6 +601,23 @@ class CCBSession:
                 pass
             self._mcp_config_path = None
 
+    async def release_idle(self) -> bool:
+        """释放空闲会话持有的 CLI 子进程，保留历史会话本身。"""
+        if self._message_owner_id:
+            return False
+        self.is_running = False
+        self._message_started_at = None
+        self._message_prompt = ""
+        self._message_has_output = False
+        await self._kill_proc()
+        if self._mcp_config_path:
+            try:
+                self._mcp_config_path.unlink()
+            except OSError:
+                pass
+            self._mcp_config_path = None
+        return True
+
     async def interrupt(self, requester_id: str = ""):
         """仅终止当前回复生成，保留逻辑会话以便继续补充。
         requester_id 非空时需与 _message_owner_id 匹配才允许中断。
