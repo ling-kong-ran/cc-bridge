@@ -252,6 +252,8 @@ function loadWorkspaceState() {
 
 function workspaceSessionFromMeta(sessionId, meta = {}) {
   const existing = workspaceSessions.get(sessionId) || {};
+  const nextStatus = meta.status || existing.status || 'idle';
+  const rawPhase = Object.prototype.hasOwnProperty.call(meta, 'phase') ? meta.phase : existing.phase;
   return {
     sessionId,
     title: meta.title || existing.title || t('newChat'),
@@ -261,8 +263,8 @@ function workspaceSessionFromMeta(sessionId, meta = {}) {
     remoteTargetId: meta.remoteTargetId || existing.remoteTargetId || '',
     cost: Number.isFinite(meta.cost) ? meta.cost : (existing.cost || 0),
     tokens: meta.tokens || existing.tokens || null,
-    status: meta.status || existing.status || 'idle',
-    phase: meta.phase || existing.phase || '',
+    status: nextStatus,
+    phase: nextStatus === 'running' || nextStatus === 'tool' ? (rawPhase || '') : '',
     startedAt: meta.startedAt || existing.startedAt || 0,
     updatedAt: Date.now(),
     runId: meta.runId || existing.runId || '',
@@ -508,7 +510,7 @@ function renderWorkspaceTabs() {
           <span class="workspace-close-btn" role="button" tabindex="0" title="${esc(t('close'))}" aria-label="${esc(t('close'))}">×</span>
         </span>
       </span>
-      <span class="workspace-tab-meta">${esc(getWorkspaceStatusLabel(s.status))}${s.phase ? ` · ${esc(s.phase)}` : ''}</span>
+      <span class="workspace-tab-meta">${esc(getWorkspaceStatusLabel(s.status))}${(s.status === 'running' || s.status === 'tool') && s.phase ? ` · ${esc(s.phase)}` : ''}</span>
     </div>
   `).join('') + newButton;
 }
@@ -2531,6 +2533,7 @@ function bindSSEEvents() {
     isResponding = !!data.locked;
     if (!isResponding && wasResponding) {
       finishCurrentTurnFromProcess();
+      updateWorkspaceSessionStatus(data.session_id || currentSessionId, 'done');
       scheduleCompletionHistorySync(data.session_id || currentSessionId);
     }
     updateUI();
