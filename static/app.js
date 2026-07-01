@@ -1490,7 +1490,7 @@ function showPage(page) {
   if (target) target.classList.add('active');
   // 更新全局 titlebar
   const pageLabel = document.getElementById('titlebar-page-label');
-  const pageKey = page === 'home' ? 'home' : page === 'config' ? 'settings' : page === 'artifacts' ? 'artifacts' : page === 'scheduled' ? 'scheduledTasks' : page === 'sessions' ? 'sessions' : page === 'skills' ? 'skills' : 'chat';
+  const pageKey = page === 'home' ? 'home' : page === 'config' ? 'settings' : page === 'artifacts' ? 'artifacts' : page === 'scheduled' ? 'scheduledTasks' : page === 'sessions' ? 'sessions' : page === 'skills' ? 'skills' : page === 'integrations' ? 'integrations' : page === 'memory' ? 'memory' : 'chat';
   if (pageLabel) pageLabel.textContent = t(pageKey);
   const isChatPage = page === 'chat';
   const backBtn = document.getElementById('btn-titlebar-back');
@@ -1517,6 +1517,10 @@ function showPage(page) {
     loadArtifacts();
   } else if (page === 'skills') {
     loadSkills();
+  } else if (page === 'integrations') {
+    loadIntegrations();
+  } else if (page === 'memory') {
+    loadMemoryFiles();
   } else if (page === 'scheduled') {
     loadScheduledTasks();
   }
@@ -2336,8 +2340,9 @@ function formatToolBody(block) {
 function renderToolCard(block, opts = {}) {
   const info = formatToolSummary(block);
   const bodyHtml = formatToolBody(block);
-  const isRunning = opts.isRunning || false;
-  if (block.id && !toolStartTimes.has(block.id) && !toolResults.has(block.id)) {
+  const isHistory = !!opts.history;
+  const isRunning = !isHistory && (opts.isRunning || false);
+  if (!isHistory && block.id && !toolStartTimes.has(block.id) && !toolResults.has(block.id)) {
     toolStartTimes.set(block.id, Date.now());
   }
   const runningBadge = isRunning
@@ -3617,12 +3622,6 @@ async function loadConfig() {
     renderEnvEditor(env);
     renderEnvPasteSection();
     loadEnvProfiles();
-    loadSkills();
-    const agents = await (await fetch('/api/agents')).json();
-    agentsCache = agents;
-    renderAgents(agents);
-    loadMcpServers();
-    loadMemoryFiles();
   } catch (e) {
     console.error('配置加载失败:', e);
   }
@@ -3881,6 +3880,18 @@ async function loadMcpServers() {
     renderMcpServers(servers);
   } catch (e) {
     renderMcpServers([]);
+  }
+}
+
+async function loadIntegrations() {
+  loadMcpServers();
+  try {
+    const agents = await (await fetch('/api/agents')).json();
+    agentsCache = agents;
+    renderAgents(agents);
+  } catch (e) {
+    agentsCache = [];
+    renderAgents([]);
   }
 }
 
@@ -5592,6 +5603,7 @@ async function resumeSession(sessionId, cwd, model, savedCost = 0, remoteTargetI
   currentContent = [];
   streamBlocks = {};
   currentSessionId = sessionId;
+  resetAssistantStreamState();
   totalCost = Number.isFinite(savedCost) ? savedCost : 0;
   totalTokens = normalizeTokenUsage(savedTokens);
   renderTopbarMeta(model || modelSelect.value);
@@ -5631,7 +5643,7 @@ async function resumeSession(sessionId, cwd, model, savedCost = 0, remoteTargetI
     });
     const history = await resp.json();
     if (history && history.length > 0) {
-      renderHistory(history);
+      renderStaticHistory(history);
     }
   } catch(e) {
     console.error('历史消息加载失败:', e);
@@ -5685,6 +5697,26 @@ async function resumeSession(sessionId, cwd, model, savedCost = 0, remoteTargetI
   loadSessions();
 }
 
+function resetAssistantStreamState() {
+  currentAssistantEl = null;
+  currentAssistantMessageId = null;
+  currentContent = [];
+  streamBlocks = {};
+}
+
+function renderStaticHistory(history) {
+  const previousAssistantEl = currentAssistantEl;
+  const previousAssistantMessageId = currentAssistantMessageId;
+  const previousContent = currentContent;
+  const previousStreamBlocks = streamBlocks;
+  resetAssistantStreamState();
+  renderHistory(history);
+  currentAssistantEl = previousAssistantEl;
+  currentAssistantMessageId = previousAssistantMessageId;
+  currentContent = previousContent;
+  streamBlocks = previousStreamBlocks;
+}
+
 async function loadSessionHistory(sessionId, cwd) {
   try {
     const resp = await fetch('/api/sessions/history', {
@@ -5694,7 +5726,7 @@ async function loadSessionHistory(sessionId, cwd) {
     });
     const history = await resp.json();
     if (history && history.length > 0) {
-      renderHistory(history);
+      renderStaticHistory(history);
     }
   } catch(e) {
     console.error('History load failed:', e);
@@ -5715,12 +5747,10 @@ async function reloadSessionHistory(sessionId, cwd) {
       isError: el.classList.contains('error'),
     }));
     messagesEl.innerHTML = '';
-    currentAssistantEl = null;
-    currentContent = [];
-    streamBlocks = {};
+    resetAssistantStreamState();
     toolResults.clear();
     toolStartTimes.clear();
-    renderHistory(history);
+    renderStaticHistory(history);
     for (const msg of systemMessages) {
       if (msg.text) addSystemMsg(msg.text, msg.isError);
     }
@@ -5760,7 +5790,7 @@ function renderHistoryToolCard(block) {
       is_error: !!block.result.is_error,
     });
   }
-  return renderToolCard(block);
+  return renderToolCard(block, { history: true });
 }
 
 function formatTime(isoStr) {

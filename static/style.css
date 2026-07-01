@@ -3559,7 +3559,211 @@ body.pane-right-collapsed .chat-sidebar {
   text-overflow: ellipsis; font-weight: 500;
 }
 
-/* ─── Memory ─────────────────────────────────────────────────── */
+/* ─── Integrations / Memory Pages ───────────────────────────── */
+.integrations-page,
+.memory-page {
+  display: none;
+  flex-direction: column;
+  overflow: hidden;
+}
+.integrations-page.active,
+.memory-page.active { display: flex; }
+
+.integrations-shell,
+.memory-shell {
+  flex: 1;
+  overflow-y: auto;
+  width: 100%;
+  max-width: 1180px;
+  margin: 0 auto;
+  padding: 28px 36px;
+  box-sizing: border-box;
+}
+
+.integrations-header,
+.memory-header {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 18px;
+  margin-bottom: 18px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--border-dim);
+}
+
+.integrations-kicker,
+.memory-kicker {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--green-dim);
+  margin-bottom: 5px;
+}
+
+.integrations-header h2,
+.memory-header h2 {
+  margin: 0;
+  font-family: var(--font-retro);
+  font-size: 30px;
+  line-height: 1;
+  letter-spacing: 0.08em;
+  color: var(--text-bright);
+}
+
+.integrations-header p,
+.memory-header p,
+.integration-panel-head p,
+.memory-side-panel p {
+  margin: 6px 0 0;
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.integrations-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1.1fr) minmax(0, 0.9fr);
+  gap: 14px;
+  align-items: start;
+}
+
+.integration-panel,
+.memory-list-panel,
+.memory-side-panel {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-dim);
+  border-radius: var(--radius-lg);
+  padding: 14px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.12);
+}
+
+.integration-panel-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+  margin-bottom: 12px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--border-dim);
+}
+
+.integration-panel-head h3,
+.memory-side-title {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: 13px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--green);
+}
+
+.integration-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.integration-list .mcp-item,
+.integration-list .agent-item {
+  margin-top: 0;
+  padding: 10px 12px;
+  background: var(--bg-deep);
+}
+
+.integration-form-panel {
+  margin-top: 14px;
+}
+
+.integration-form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px 12px;
+}
+
+.integration-form-grid .span-all { grid-column: 1 / -1; }
+.integration-form-grid .input,
+.integration-form-grid .select { width: 100%; }
+
+.memory-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 280px;
+  gap: 14px;
+  align-items: start;
+}
+
+.memory-toolbar {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+.memory-toolbar .input { flex: 1; }
+
+.memory-file-list {
+  display: flex;
+  flex-direction: column;
+}
+
+.memory-file-list .memory-file-item {
+  padding: 10px 0;
+}
+
+.memory-side-panel {
+  position: sticky;
+  top: 0;
+}
+
+.memory-side-panel .memory-actions {
+  flex-direction: column;
+  align-items: stretch;
+  margin-top: 14px;
+}
+
+.memory-side-panel .memory-actions button {
+  width: 100%;
+  justify-content: center;
+}
+
+html.light-theme .integration-panel,
+html.light-theme .memory-list-panel,
+html.light-theme .memory-side-panel {
+  box-shadow: 0 10px 28px rgba(38, 76, 104, 0.07);
+}
+
+html.light-theme .integrations-header,
+html.light-theme .memory-header {
+  border-bottom-color: rgba(var(--accent-rgb), 0.16);
+}
+
+html.light-theme .integration-list .mcp-item,
+html.light-theme .integration-list .agent-item,
+html.light-theme .memory-file-snippet {
+  background: linear-gradient(135deg, #f8fbfd, #f2f7fb);
+}
+
+@media (max-width: 980px) {
+  .integrations-shell,
+  .memory-shell {
+    padding: 20px;
+  }
+
+  .integrations-header,
+  .memory-header {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .integrations-layout,
+  .memory-layout,
+  .integration-form-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .memory-side-panel {
+    position: static;
+  }
+}
+
 .memory-search-row {
   display: flex; gap: 8px; margin-bottom: 12px; align-items: center;
 }
