@@ -367,16 +367,18 @@ function getWorkspaceStatusLabel(status) {
 
 function updateWorkspaceSessionStatus(sessionId, status, phase = '') {
   if (!sessionId) return;
-  const session = ensureWorkspaceSession(sessionId, { status, phase });
+  const nextStatus = status || 'idle';
+  const nextPhase = nextStatus === 'running' || nextStatus === 'tool' ? phase : '';
+  const session = ensureWorkspaceSession(sessionId, { status: nextStatus, phase: nextPhase });
   if (!session) return;
-  session.status = status || session.status || 'idle';
-  session.phase = phase || session.phase || '';
+  session.status = nextStatus || session.status || 'idle';
+  session.phase = nextPhase;
   session.updatedAt = Date.now();
-  if (status === 'running' || status === 'tool') {
+  if (nextStatus === 'running' || nextStatus === 'tool') {
     session.released = false;
     session.startedAt = session.startedAt || Date.now();
   }
-  if (status === 'done' || status === 'error' || status === 'idle') {
+  if (nextStatus === 'done' || nextStatus === 'error' || nextStatus === 'idle') {
     session.startedAt = 0;
     releaseInactiveWorkspaceSession(sessionId);
   }
