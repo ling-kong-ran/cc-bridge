@@ -351,6 +351,15 @@ function renderWorkspace() {
   saveWorkspaceState();
 }
 
+async function renameWorkspaceSession(sessionId) {
+  const session = workspaceSessions.get(sessionId) || cachedSessions.find(s => s.session_id === sessionId);
+  if (!session) return;
+  await promptRenameSession({
+    session_id: sessionId,
+    title: session.title || t('newChat'),
+  });
+}
+
 function renderWorkspaceTabs() {
   const sessions = Array.from(workspaceSessions.values());
   const newButton = `
@@ -362,13 +371,37 @@ function renderWorkspaceTabs() {
     return;
   }
   workspaceTabsEl.innerHTML = sessions.map(s => `
-    <button class="workspace-tab ${s.sessionId === activeWorkspaceSessionId ? 'active' : ''} status-${esc(s.status || 'idle')}" type="button" role="tab" data-session-id="${esc(s.sessionId)}">
-      <span class="workspace-tab-title">${esc(s.title || t('newChat'))}</span>
+    <div class="workspace-tab ${s.sessionId === activeWorkspaceSessionId ? 'active' : ''} status-${esc(s.status || 'idle')}" role="tab" tabindex="0" data-session-id="${esc(s.sessionId)}">
+      <span class="workspace-tab-title-row">
+        <span class="workspace-tab-title">${esc(s.title || t('newChat'))}</span>
+        <span class="workspace-rename-btn" role="button" tabindex="0" title="${esc(t('rename'))}" aria-label="${esc(t('rename'))}">EDIT</span>
+      </span>
       <span class="workspace-tab-meta">${esc(getWorkspaceStatusLabel(s.status))}${s.phase ? ` · ${esc(s.phase)}` : ''}</span>
-    </button>
+    </div>
   `).join('') + newButton;
   workspaceTabsEl.querySelectorAll('.workspace-tab').forEach(tab => {
     tab.addEventListener('click', () => activateWorkspaceSession(tab.dataset.sessionId));
+    tab.addEventListener('dblclick', (e) => {
+      e.preventDefault();
+      renameWorkspaceSession(tab.dataset.sessionId);
+    });
+    tab.addEventListener('keydown', (e) => {
+      if (e.key !== 'Enter' && e.key !== ' ') return;
+      e.preventDefault();
+      activateWorkspaceSession(tab.dataset.sessionId);
+    });
+  });
+  workspaceTabsEl.querySelectorAll('.workspace-rename-btn').forEach(btn => {
+    const rename = (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      renameWorkspaceSession(btn.closest('.workspace-tab')?.dataset.sessionId);
+    };
+    btn.addEventListener('click', rename);
+    btn.addEventListener('keydown', (e) => {
+      if (e.key !== 'Enter' && e.key !== ' ') return;
+      rename(e);
+    });
   });
   workspaceTabsEl.querySelector('.workspace-new-session')?.addEventListener('click', startNewSession);
 }
@@ -5925,6 +5958,12 @@ async function renameSession(sessionId, title) {
     });
     const data = await resp.json();
     if (!data.ok) throw new Error(data.error || 'renameFailed');
+    const session = workspaceSessions.get(sessionId);
+    if (session) {
+      session.title = title;
+      saveWorkspaceState();
+      renderWorkspace();
+    }
     await loadSessions();
   } catch (e) {
     addSystemMsg(t(e.message || 'renameFailed') || t('renameFailed'), true);

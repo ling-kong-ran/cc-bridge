@@ -2056,7 +2056,7 @@ body.pane-right-collapsed .chat-sidebar {
   box-shadow: 0 0 0 1px rgba(var(--accent-rgb), 0.10), var(--green-glow);
 }
 
-.workspace-tab-title,
+.workspace-tab-title-row,
 .workspace-tab-meta {
   max-width: 100%;
   overflow: hidden;
@@ -2064,10 +2064,47 @@ body.pane-right-collapsed .chat-sidebar {
   text-overflow: ellipsis;
 }
 
+.workspace-tab-title-row {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
 .workspace-tab-title {
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
   font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.03em;
+}
+
+.workspace-rename-btn {
+  flex: none;
+  padding: 1px 4px;
+  border: 1px solid var(--border-dim);
+  border-radius: 999px;
+  color: var(--text-ghost);
+  font-size: 8px;
+  letter-spacing: 0.04em;
+  opacity: 0;
+  transition: opacity var(--t-fast), color var(--t-fast), border-color var(--t-fast), background var(--t-fast);
+}
+
+.workspace-tab:hover .workspace-rename-btn,
+.workspace-tab:focus-visible .workspace-rename-btn,
+.workspace-rename-btn:focus-visible {
+  opacity: 1;
+}
+
+.workspace-rename-btn:hover,
+.workspace-rename-btn:focus-visible {
+  color: var(--green);
+  border-color: rgba(var(--accent-rgb), 0.32);
+  background: var(--green-faint);
+  outline: none;
 }
 
 .workspace-tab-meta {
@@ -5049,6 +5086,14 @@ html.light-theme .agent-status-bar {
     height: 1px;
     background: currentColor;
     box-shadow: 0 0 6px rgba(var(--accent-rgb), 0.35);
+  }
+
+  .workspace-rename-btn {
+    opacity: 1;
+  }
+
+  .workspace-tab {
+    flex-basis: 170px;
   }
 
   .sidebar {
