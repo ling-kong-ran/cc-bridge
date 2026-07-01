@@ -25,6 +25,8 @@ let currentTurnAttachmentCount = 0;
 let completionHistorySyncTimer = null;
 let lastFocusConfigReloadAt = 0;
 let cachedSessions = [];
+let sessionsLoaded = false;
+let chatNavAutoOpening = false;
 let sessionOffset = 0;
 let sessionTotal = 0;
 const SESSION_PAGE_SIZE = 50;
@@ -1516,9 +1518,45 @@ function showPage(page) {
   hideMentionPopup();
 }
 
+async function openLatestOrNewChatSession() {
+  if (sessionActive || currentSessionId) {
+    showPage('chat');
+    return;
+  }
+  if (!clientId) {
+    showPage('chat');
+    addSystemMsg(t('notConnected'), true);
+    return;
+  }
+  if (!sessionsLoaded) {
+    await loadSessions();
+  }
+  const latest = (cachedSessions || [])
+    .slice()
+    .sort((a, b) => String(b.updated_at || '').localeCompare(String(a.updated_at || '')))[0];
+  showPage('chat');
+  if (latest?.session_id) {
+    resumeSession(
+      latest.session_id,
+      latest.cwd || '',
+      latest.model || '',
+      Number(latest.total_cost_usd || 0),
+      latest.remote_target_id || '',
+      latest.total_tokens || null,
+      latest.cli || '',
+    );
+    return;
+  }
+  createNewSession('');
+}
+
 function initNavigation() {
   document.querySelectorAll('.nav-btn').forEach(btn => {
     btn.addEventListener('click', () => {
+      if (btn.dataset.page === 'chat') {
+        openLatestOrNewChatSession();
+        return;
+      }
       showPage(btn.dataset.page);
     });
   });
@@ -5000,6 +5038,7 @@ async function loadSessions() {
     cachedSessions = data.sessions || [];
     sessionOffset = cachedSessions.length;
     sessionTotal = data.total || 0;
+    sessionsLoaded = true;
     renderSessionList(cachedSessions);
     renderWelcomeSessions(cachedSessions);
     renderWelcomeRuntime();
