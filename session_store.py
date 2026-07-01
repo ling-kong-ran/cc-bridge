@@ -653,6 +653,7 @@ def load_session_history(session_id: str, cwd: str, max_messages: int = 50) -> l
         return []
 
     messages = []
+    current_assistant_msg: dict | None = None
     tool_blocks_by_id: dict[str, dict] = {}
     pending_results: dict[str, dict] = {}
     try:
@@ -678,13 +679,17 @@ def load_session_history(session_id: str, cwd: str, max_messages: int = 50) -> l
                             pending_results[tool_id] = result
                     text = _extract_user_text(obj)
                     if text:
+                        current_assistant_msg = None
                         messages.append({"role": "user", "text": text})
 
                 elif msg_type == "assistant":
                     if obj.get("parent_tool_use_id"):
                         continue
                     content = obj.get("message", {}).get("content", [])
-                    blocks = []
+                    blocks = current_assistant_msg["blocks"] if current_assistant_msg else []
+                    if current_assistant_msg is None:
+                        current_assistant_msg = {"role": "assistant", "blocks": blocks}
+                    before_count = len(blocks)
                     if isinstance(content, list):
                         for block in content:
                             if block.get("type") == "text" and block.get("text"):
@@ -704,8 +709,8 @@ def load_session_history(session_id: str, cwd: str, max_messages: int = 50) -> l
                                     if tool_id in pending_results:
                                         item["result"] = pending_results.pop(tool_id)
                                 blocks.append(item)
-                    if blocks:
-                        messages.append({"role": "assistant", "blocks": blocks})
+                    if len(blocks) > before_count and current_assistant_msg not in messages:
+                        messages.append(current_assistant_msg)
 
     except OSError:
         return []

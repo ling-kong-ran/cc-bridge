@@ -35,9 +35,20 @@ let scheduledTasks = [];
 let skillsCache = [];
 let currentSkillDir = '';
 let sidebarCollapsed = false;
+let workspaceMode = 'focus';
+let activeWorkspaceSessionId = '';
+const workspaceSessions = new Map();
+let workspaceResizeState = null;
+const workspacePaneWidths = new Map();
 
 // ─── DOM ─────────────────────────────────────────────────────
 const messagesEl = document.getElementById('messages');
+const workspaceEl = document.getElementById('session-workspace');
+const workspaceTabsEl = document.getElementById('workspace-tabs');
+const workspacePanesEl = document.getElementById('workspace-panes');
+const workspaceLivePane = document.getElementById('workspace-live-pane');
+const workspaceFocusBtn = document.getElementById('workspace-focus-mode');
+const workspaceGridBtn = document.getElementById('workspace-grid-mode');
 const inputEl = document.getElementById('message-input');
 const btnSend = document.getElementById('btn-send');
 const btnStop = document.getElementById('btn-stop');
@@ -140,6 +151,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   initMemoryUI();
   initArtifactsUI();
   initScheduledTasksUI();
+  initSessionWorkspace();
   loadDefaultCwd();
   loadClis();
   loadModels();
@@ -176,6 +188,222 @@ document.addEventListener('DOMContentLoaded', async () => {
   showPage('home');
   if (autoUpdateEnabled) setTimeout(() => checkForUpdate(), 3000);
 });
+
+function initSessionWorkspace() {
+  if (!workspaceEl || !workspaceTabsEl || !workspacePanesEl || !workspaceLivePane) return;
+  workspaceFocusBtn?.addEventListener('click', () => setWorkspaceMode('focus'));
+  workspaceGridBtn?.addEventListener('click', () => setWorkspaceMode('grid'));
+  workspaceLivePane.querySelector('.workspace-pane-head')?.addEventListener('click', () => {
+    if (activeWorkspaceSessionId) activateWorkspaceSession(activeWorkspaceSessionId, { resume: false });
+  });
+  document.addEventListener('pointermove', handleWorkspaceResizeMove);
+  document.addEventListener('pointerup', stopWorkspaceResize);
+  renderWorkspace();
+}
+
+function workspaceSessionFromMeta(sessionId, meta = {}) {
+  const existing = workspaceSessions.get(sessionId) || {};
+  return {
+    sessionId,
+    title: meta.title || existing.title || t('newChat'),
+    cwd: meta.cwd || existing.cwd || '',
+    model: meta.model || existing.model || '',
+    cli: meta.cli || existing.cli || '',
+    remoteTargetId: meta.remoteTargetId || existing.remoteTargetId || '',
+    cost: Number.isFinite(meta.cost) ? meta.cost : (existing.cost || 0),
+    tokens: meta.tokens || existing.tokens || null,
+    status: meta.status || existing.status || 'idle',
+    phase: meta.phase || existing.phase || '',
+    startedAt: meta.startedAt || existing.startedAt || 0,
+    updatedAt: Date.now(),
+    runId: meta.runId || existing.runId || '',
+    snapshotHtml: meta.snapshotHtml || existing.snapshotHtml || '',
+  };
+}
+
+function ensureWorkspaceSession(sessionId, meta = {}) {
+  if (!sessionId) return null;
+  const session = workspaceSessionFromMeta(sessionId, meta);
+  workspaceSessions.set(sessionId, session);
+  if (!activeWorkspaceSessionId) activeWorkspaceSessionId = sessionId;
+  renderWorkspace();
+  return session;
+}
+
+function captureActiveWorkspaceSnapshot() {
+  if (!activeWorkspaceSessionId || !messagesEl) return;
+  const session = workspaceSessions.get(activeWorkspaceSessionId);
+  if (session) session.snapshotHtml = messagesEl.innerHTML;
+}
+
+function activateWorkspaceSession(sessionId, opts = {}) {
+  if (!sessionId || sessionId === activeWorkspaceSessionId) {
+    renderWorkspace();
+    return;
+  }
+  captureActiveWorkspaceSnapshot();
+  activeWorkspaceSessionId = sessionId;
+  const session = workspaceSessions.get(sessionId);
+  if (session) {
+    if (session.snapshotHtml && messagesEl) messagesEl.innerHTML = session.snapshotHtml;
+    if (opts.resume !== false) {
+      resumeSession(session.sessionId, session.cwd, session.model, session.cost || 0, session.remoteTargetId || '', session.tokens || null, session.cli || '');
+    }
+  }
+  renderWorkspace();
+}
+
+function setWorkspaceMode(mode) {
+  workspaceMode = mode === 'grid' ? 'grid' : 'focus';
+  renderWorkspace();
+}
+
+function getWorkspaceStatusLabel(status) {
+  const key = {
+    idle: 'workspaceIdle',
+    running: 'workspaceRunning',
+    tool: 'workspaceTool',
+    done: 'workspaceDone',
+    error: 'workspaceError',
+  }[status || 'idle'] || 'workspaceIdle';
+  return t(key);
+}
+
+function updateWorkspaceSessionStatus(sessionId, status, phase = '') {
+  if (!sessionId) return;
+  const session = ensureWorkspaceSession(sessionId, { status, phase });
+  if (!session) return;
+  session.status = status || session.status || 'idle';
+  session.phase = phase || session.phase || '';
+  session.updatedAt = Date.now();
+  if (status === 'running' || status === 'tool') session.startedAt = session.startedAt || Date.now();
+  if (status === 'done' || status === 'error' || status === 'idle') session.startedAt = 0;
+  renderWorkspace();
+}
+
+function renderWorkspace() {
+  if (!workspaceTabsEl || !workspacePanesEl || !workspaceLivePane) return;
+  renderWorkspaceTabs();
+  renderWorkspacePanes();
+  workspacePanesEl.classList.toggle('workspace-grid', workspaceMode === 'grid');
+  workspacePanesEl.classList.toggle('workspace-focus', workspaceMode !== 'grid');
+  workspaceFocusBtn?.classList.toggle('active', workspaceMode !== 'grid');
+  workspaceGridBtn?.classList.toggle('active', workspaceMode === 'grid');
+}
+
+function renderWorkspaceTabs() {
+  const sessions = Array.from(workspaceSessions.values());
+  const newButton = `
+    <button class="workspace-new-session" type="button" title="${esc(t('newSession'))}" aria-label="${esc(t('newSession'))}">+</button>
+  `;
+  if (!sessions.length) {
+    workspaceTabsEl.innerHTML = `<div class="workspace-tabs-empty">${esc(t('workspaceNoTabs'))}</div>${newButton}`;
+    workspaceTabsEl.querySelector('.workspace-new-session')?.addEventListener('click', startNewSession);
+    return;
+  }
+  workspaceTabsEl.innerHTML = sessions.map(s => `
+    <button class="workspace-tab ${s.sessionId === activeWorkspaceSessionId ? 'active' : ''} status-${esc(s.status || 'idle')}" type="button" role="tab" data-session-id="${esc(s.sessionId)}">
+      <span class="workspace-tab-title">${esc(s.title || t('newChat'))}</span>
+      <span class="workspace-tab-meta">${esc(getWorkspaceStatusLabel(s.status))}${s.phase ? ` · ${esc(s.phase)}` : ''}</span>
+    </button>
+  `).join('') + newButton;
+  workspaceTabsEl.querySelectorAll('.workspace-tab').forEach(tab => {
+    tab.addEventListener('click', () => activateWorkspaceSession(tab.dataset.sessionId));
+  });
+  workspaceTabsEl.querySelector('.workspace-new-session')?.addEventListener('click', startNewSession);
+}
+
+function renderWorkspacePanes() {
+  const activeSession = workspaceSessions.get(activeWorkspaceSessionId);
+  workspaceLivePane.dataset.sessionId = activeWorkspaceSessionId || '';
+  workspaceLivePane.classList.toggle('active', true);
+  workspaceLivePane.className = `workspace-pane active status-${activeSession?.status || 'idle'}`;
+  const titleEl = workspaceLivePane.querySelector('.workspace-pane-title');
+  const statusEl = workspaceLivePane.querySelector('.workspace-pane-status');
+  if (titleEl) {
+    titleEl.innerHTML = `${activeSession?.title ? esc(activeSession.title) : esc(t('chat'))}<span class="workspace-input-target">${esc(t('workspaceInputTarget'))}</span>`;
+  }
+  if (statusEl) statusEl.textContent = getWorkspaceStatusLabel(activeSession?.status || (sessionActive ? 'idle' : 'idle'));
+  applyWorkspacePaneWidth(workspaceLivePane, activeWorkspaceSessionId);
+
+  workspacePanesEl.querySelectorAll('.workspace-snapshot-pane').forEach(el => el.remove());
+  ensureLivePaneResizer();
+  if (workspaceMode !== 'grid') return;
+  for (const session of workspaceSessions.values()) {
+    if (session.sessionId === activeWorkspaceSessionId) continue;
+    const pane = document.createElement('section');
+    pane.className = `workspace-pane workspace-snapshot-pane status-${session.status || 'idle'}`;
+    pane.dataset.sessionId = session.sessionId;
+    pane.innerHTML = `
+      <div class="workspace-pane-head">
+        <div class="workspace-pane-title">${esc(session.title || t('newChat'))}</div>
+        <div class="workspace-pane-status">${esc(getWorkspaceStatusLabel(session.status))}</div>
+      </div>
+      <div class="messages workspace-snapshot-messages">${session.snapshotHtml || `<div class="workspace-snapshot-empty">${esc(t('workspaceOpenSession'))}</div>`}</div>
+      <div class="workspace-pane-resizer" title="${esc(t('workspaceResize'))}"></div>
+    `;
+    pane.querySelector('.workspace-pane-head')?.addEventListener('click', () => activateWorkspaceSession(session.sessionId));
+    pane.querySelector('.workspace-pane-resizer')?.addEventListener('pointerdown', (e) => startWorkspaceResize(e, session.sessionId, pane));
+    applyWorkspacePaneWidth(pane, session.sessionId);
+    workspacePanesEl.appendChild(pane);
+  }
+  ensureLivePaneResizer();
+}
+
+function ensureLivePaneResizer() {
+  let resizer = workspaceLivePane.querySelector('.workspace-pane-resizer');
+  if (workspaceMode !== 'grid') {
+    if (resizer) resizer.remove();
+    return;
+  }
+  if (!resizer) {
+    resizer = document.createElement('div');
+    resizer.className = 'workspace-pane-resizer';
+    workspaceLivePane.appendChild(resizer);
+  }
+  resizer.title = t('workspaceResize');
+  resizer.onpointerdown = (e) => startWorkspaceResize(e, activeWorkspaceSessionId, workspaceLivePane);
+}
+
+function applyWorkspacePaneWidth(pane, sessionId) {
+  if (!pane || workspaceMode !== 'grid') {
+    if (pane) {
+      pane.style.flex = '';
+      pane.style.flexBasis = '';
+    }
+    return;
+  }
+  const width = workspacePaneWidths.get(sessionId) || 420;
+  pane.style.flex = `0 0 ${width}px`;
+  pane.style.flexBasis = `${width}px`;
+}
+
+function startWorkspaceResize(event, sessionId, pane) {
+  if (!sessionId || !pane) return;
+  event.preventDefault();
+  workspaceResizeState = {
+    sessionId,
+    pane,
+    startX: event.clientX,
+    startWidth: pane.getBoundingClientRect().width,
+  };
+  document.body.classList.add('resizing-workspace-pane');
+  pane.setPointerCapture?.(event.pointerId);
+}
+
+function handleWorkspaceResizeMove(event) {
+  if (!workspaceResizeState) return;
+  const nextWidth = Math.max(260, Math.min(900, workspaceResizeState.startWidth + event.clientX - workspaceResizeState.startX));
+  workspacePaneWidths.set(workspaceResizeState.sessionId, nextWidth);
+  applyWorkspacePaneWidth(workspaceResizeState.pane, workspaceResizeState.sessionId);
+}
+
+function stopWorkspaceResize() {
+  if (!workspaceResizeState) return;
+  workspaceResizeState = null;
+  document.body.classList.remove('resizing-workspace-pane');
+}
+
 
 async function loadDefaultCwd() {
   try {
@@ -1804,6 +2032,15 @@ function bindSSEEvents() {
       if (data.session_id) {
         currentSessionId = data.session_id;
         currentRunId = data.run_id || currentRunId;
+        ensureWorkspaceSession(data.session_id, {
+          title: data.title || t('newChat'),
+          cwd: data.cwd || cwdInput.value.trim() || '',
+          model: data.model || modelSelect.value || '',
+          cli: data.cli || document.getElementById('cli-select')?.value || '',
+          status: data.running === false ? 'idle' : 'running',
+          runId: data.run_id || '',
+        });
+        activeWorkspaceSessionId = data.session_id;
         if (data.cwd) {
           cwdInput.value = data.cwd;
           updateRuntimeSummary();
@@ -1868,6 +2105,7 @@ function bindSSEEvents() {
     currentTurnStartedAt = data.started_at ? data.started_at * 1000 : Date.now() - Number(data.elapsed_ms || 0);
     currentTurnContent = data.prompt || currentTurnContent || '';
     currentTurnHasAssistantOutput = !!data.has_output;
+    updateWorkspaceSessionStatus(currentSessionId, 'running', t('streamingReply'));
     if (currentTurnHasAssistantOutput) {
       if (!currentAssistantEl) {
         currentAssistantEl = createAssistantBubble();
@@ -1916,6 +2154,22 @@ function bindSSEEvents() {
     }
     currentSessionId = data.session_id;
     currentRunId = data.run_id || currentRunId;
+    if (activeWorkspaceSessionId && activeWorkspaceSessionId.startsWith('pending-') && activeWorkspaceSessionId !== data.session_id) {
+      const pending = workspaceSessions.get(activeWorkspaceSessionId);
+      workspaceSessions.delete(activeWorkspaceSessionId);
+      activeWorkspaceSessionId = data.session_id;
+      if (pending?.snapshotHtml && !workspaceSessions.get(data.session_id)?.snapshotHtml) {
+        ensureWorkspaceSession(data.session_id, { snapshotHtml: pending.snapshotHtml });
+      }
+    }
+    ensureWorkspaceSession(data.session_id, {
+      cwd: cwdInput.value.trim() || '',
+      model: modelSelect.value || '',
+      cli: document.getElementById('cli-select')?.value || '',
+      status: 'running',
+      runId: currentRunId || '',
+    });
+    activeWorkspaceSessionId = data.session_id;
     renderTopbarMeta();
     loadSessions();
   });
@@ -1928,7 +2182,10 @@ function bindSSEEvents() {
       updateRuntimeSummary();
       slashCommands = [];
       closeSlashCommandPanel();
-        loadSessions();
+      loadSessions();
+      if (data.session_id) {
+        updateWorkspaceSessionStatus(data.session_id, 'idle');
+      }
       if (!isViewer) {
         addSystemMsg(t('cwdChanged', { path: data.cwd }));
       }
@@ -1940,6 +2197,10 @@ function bindSSEEvents() {
     if (!isEventForCurrentSession(data)) return;
     const modelLabel = getDisplayModelName(data.model || '');
     renderTopbarMeta(data.model || '');
+    if (data.session_id) {
+      const session = ensureWorkspaceSession(data.session_id, { model: data.model || '', status: 'idle' });
+      if (session && data.model) session.model = data.model;
+    }
     if (data.model && modelSelect) { modelSelect.value = data.model; }
     renderModelPill();
     renderWelcomeRuntime();
@@ -1961,6 +2222,7 @@ function bindSSEEvents() {
         toolResults.set(r.tool_use_id, r);
         updateToolResult(r.tool_use_id, r.content, r.is_error);
       }
+      updateWorkspaceSessionStatus(currentSessionId, 'running', t('streamingReply'));
     }
     finishTasks(data.results ? data.results.map(r => r.tool_use_id) : []);
   });
@@ -1982,6 +2244,7 @@ function bindSSEEvents() {
     const data = JSON.parse(e.data || '{}');
     if (noteBackgroundSessionEvent(data)) return;
     const finishedTurn = finishCurrentTurnFromProcess();
+    updateWorkspaceSessionStatus(data.session_id || currentSessionId, Number(data.exit_code || 0) === 0 ? 'done' : 'error');
     if (isSlashCommand(finishedTurn.prompt) && !finishedTurn.hadAssistantOutput) {
       const command = getSlashCommandName(finishedTurn.prompt);
       if (Number(data.exit_code || 0) === 0) {
@@ -2007,6 +2270,7 @@ function bindSSEEvents() {
     currentAssistantEl = null;
     currentAssistantMessageId = null;
     currentRunId = null;
+    updateWorkspaceSessionStatus(data.session_id || currentSessionId, 'idle');
     clearRunningTasks({ keepFinished: true });
     clearSubagentBubbles();
     updateUI();
@@ -2047,6 +2311,7 @@ function bindSSEEvents() {
       currentAssistantEl = null;
       currentAssistantMessageId = null;
       currentRunId = null;
+      updateWorkspaceSessionStatus(data.session_id || currentSessionId, 'error');
       updateUI();
       notifyComplete('process');
     }
@@ -2101,6 +2366,7 @@ function handleStreamEvent(data) {
 
   isResponding = true;
   currentTurnHasAssistantOutput = true;
+  updateWorkspaceSessionStatus(currentSessionId, evt.type === 'content_block_start' && evt.content_block?.type === 'tool_use' ? 'tool' : 'running', evt.type === 'content_block_start' && evt.content_block?.type === 'tool_use' ? t('tool') : t('streamingReply'));
   updateUI();
 
   switch (evt.type) {
@@ -3468,6 +3734,7 @@ async function sendMessage() {
     currentTurnStartedAt = Date.now();
     currentTurnHasAssistantOutput = false;
     isResponding = true;
+    updateWorkspaceSessionStatus(currentSessionId, 'running', t('streamingReply'));
     currentAssistantEl = createAssistantBubble();
     currentAssistantMessageId = null;
     currentContent = [];
@@ -3551,6 +3818,15 @@ function startNewSession() {
 
 function createNewSession(cwd) {
   resetSessionViewState();
+  const pendingSessionId = `pending-${Date.now()}`;
+  activeWorkspaceSessionId = pendingSessionId;
+  ensureWorkspaceSession(pendingSessionId, {
+    title: t('newChat'),
+    cwd: cwd || cwdInput.value.trim() || '',
+    model: modelSelect.value || '',
+    cli: document.getElementById('cli-select')?.value || '',
+    status: 'idle',
+  });
 
   if (cwd) {
     cwdInput.value = cwd;
@@ -5230,8 +5506,19 @@ function renderWelcomeSessions(sessions) {
   el.querySelectorAll('.welcome-session-item').forEach(item => {
     item.addEventListener('click', () => {
       const tokens = safeJsonParse(item.dataset.tokens, null);
+      const sid = item.dataset.sid;
+      ensureWorkspaceSession(sid, {
+        title: item.querySelector('.welcome-session-item-title')?.textContent?.trim() || t('newChat'),
+        cwd: item.dataset.cwd || '',
+        model: item.dataset.model || '',
+        cli: item.dataset.cli || '',
+        cost: Number(item.dataset.cost || 0),
+        tokens,
+        remoteTargetId: item.dataset.remoteTarget || '',
+        status: item.classList.contains('active') ? 'running' : 'idle',
+      });
       showPage('chat');
-      resumeSession(item.dataset.sid, item.dataset.cwd, item.dataset.model, Number(item.dataset.cost || 0), item.dataset.remoteTarget || '', tokens, item.dataset.cli || '');
+      resumeSession(sid, item.dataset.cwd, item.dataset.model, Number(item.dataset.cost || 0), item.dataset.remoteTarget || '', tokens, item.dataset.cli || '');
     });
   });
 }
@@ -5315,8 +5602,19 @@ function renderSessionList(sessions) {
   el.querySelectorAll('.session-item').forEach(item => {
     item.addEventListener('click', () => {
       const tokens = safeJsonParse(item.dataset.tokens, null);
+      const sid = item.dataset.sid;
+      ensureWorkspaceSession(sid, {
+        title: item.querySelector('.session-item-title')?.textContent?.trim() || t('newChat'),
+        cwd: item.dataset.cwd || '',
+        model: item.dataset.model || '',
+        cli: item.dataset.cli || '',
+        cost: Number(item.dataset.cost || 0),
+        tokens,
+        remoteTargetId: item.dataset.remoteTarget || '',
+        status: item.classList.contains('active') ? 'running' : 'idle',
+      });
       showPage('chat');
-      resumeSession(item.dataset.sid, item.dataset.cwd, item.dataset.model, Number(item.dataset.cost || 0), item.dataset.remoteTarget || '', tokens, item.dataset.cli || '');
+      resumeSession(sid, item.dataset.cwd, item.dataset.model, Number(item.dataset.cost || 0), item.dataset.remoteTarget || '', tokens, item.dataset.cli || '');
     });
   });
   el.querySelectorAll('.session-action').forEach(btn => {

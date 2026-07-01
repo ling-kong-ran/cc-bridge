@@ -156,7 +156,24 @@
       <!-- 对话页 -->
       <div id="page-chat" class="page">
         <div class="chat-main">
-          <div id="messages" class="messages"></div>
+          <div id="session-workspace" class="session-workspace">
+            <div class="workspace-tabs-shell">
+              <div id="workspace-tabs" class="workspace-tabs" role="tablist"></div>
+              <div class="workspace-actions">
+                <button id="workspace-focus-mode" class="workspace-mode active" type="button" data-i18n="workspaceFocus">Focus</button>
+                <button id="workspace-grid-mode" class="workspace-mode" type="button" data-i18n="workspaceGrid">Grid</button>
+              </div>
+            </div>
+            <div id="workspace-panes" class="workspace-panes workspace-focus">
+              <section id="workspace-live-pane" class="workspace-pane active" data-session-id="">
+                <div class="workspace-pane-head">
+                  <div class="workspace-pane-title" data-i18n="chat">Chat</div>
+                  <div class="workspace-pane-status" data-i18n="workspaceIdle">Idle</div>
+                </div>
+                <div id="messages" class="messages"></div>
+              </section>
+            </div>
+          </div>
           <div id="file-preview-panel" class="file-preview-panel" style="display:none" aria-live="polite">
             <div class="file-preview-header">
               <div class="file-preview-title-wrap">
