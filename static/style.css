@@ -2108,12 +2108,12 @@ body.pane-right-collapsed .chat-sidebar {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  color: var(--text-ghost);
-  border-color: transparent;
-  background: transparent;
+  color: var(--text-muted);
+  border-color: rgba(var(--accent-rgb), 0.18);
+  background: color-mix(in srgb, var(--bg-raised) 78%, var(--green-faint));
   font-size: 14px;
   line-height: 1;
-  opacity: 0.62;
+  opacity: 0.9;
   text-align: center;
 }
 
@@ -2121,7 +2121,10 @@ body.pane-right-collapsed .chat-sidebar {
 .workspace-tab:hover .workspace-close-btn,
 .workspace-tab:focus-visible .workspace-close-btn,
 .workspace-close-btn:focus-visible {
-  opacity: 0.9;
+  color: var(--text-bright);
+  border-color: rgba(var(--accent-rgb), 0.30);
+  background: var(--green-faint);
+  opacity: 1;
 }
 
 .workspace-tab:hover .workspace-rename-btn,
