@@ -5189,6 +5189,54 @@ html.light-theme .agent-status-bar {
   text-overflow: ellipsis;
 }
 
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  background: rgba(2, 5, 15, 0.74);
+  backdrop-filter: blur(8px);
+  animation: fadeIn var(--t-fast) ease both;
+}
+
+.modal {
+  background: var(--bg-surface);
+  color: var(--text-base);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-xl);
+  box-shadow: 0 24px 80px rgba(0,0,0,0.66), 0 0 0 1px rgba(var(--accent-rgb),0.05);
+  animation: modalIn var(--t-base) var(--ease-spring) both;
+}
+
+.modal-title {
+  margin: 0;
+  color: var(--text-bright);
+  font-family: var(--font-mono);
+  font-size: 18px;
+}
+
+.close-btn {
+  flex: 0 0 auto;
+  width: 30px;
+  height: 30px;
+  border: 1px solid var(--border-dim);
+  border-radius: var(--radius-xs);
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 20px;
+  line-height: 1;
+}
+
+.close-btn:hover {
+  color: var(--text-base);
+  border-color: var(--border);
+  background: var(--bg-hover);
+}
+
 .skill-modal {
   width: min(760px, calc(100vw - 32px));
   max-height: min(760px, calc(100dvh - 32px));
