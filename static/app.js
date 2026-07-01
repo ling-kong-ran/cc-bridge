@@ -360,14 +360,59 @@ async function renameWorkspaceSession(sessionId) {
   });
 }
 
+function getWorkspaceTabSessionId(target) {
+  return target?.closest?.('.workspace-tab')?.dataset.sessionId || '';
+}
+
+function ensureWorkspaceTabsEvents() {
+  if (!workspaceTabsEl || workspaceTabsEl.dataset.eventsBound === '1') return;
+  workspaceTabsEl.dataset.eventsBound = '1';
+  workspaceTabsEl.addEventListener('click', (e) => {
+    if (e.target.closest('.workspace-new-session')) {
+      startNewSession();
+      return;
+    }
+    const renameBtn = e.target.closest('.workspace-rename-btn');
+    if (renameBtn) {
+      e.preventDefault();
+      e.stopPropagation();
+      renameWorkspaceSession(getWorkspaceTabSessionId(renameBtn));
+      return;
+    }
+    const sessionId = getWorkspaceTabSessionId(e.target);
+    if (sessionId) activateWorkspaceSession(sessionId);
+  });
+  workspaceTabsEl.addEventListener('dblclick', (e) => {
+    if (e.target.closest('.workspace-rename-btn')) return;
+    const sessionId = getWorkspaceTabSessionId(e.target);
+    if (!sessionId) return;
+    e.preventDefault();
+    renameWorkspaceSession(sessionId);
+  });
+  workspaceTabsEl.addEventListener('keydown', (e) => {
+    if (e.key !== 'Enter' && e.key !== ' ') return;
+    const renameBtn = e.target.closest('.workspace-rename-btn');
+    if (renameBtn) {
+      e.preventDefault();
+      e.stopPropagation();
+      renameWorkspaceSession(getWorkspaceTabSessionId(renameBtn));
+      return;
+    }
+    const sessionId = getWorkspaceTabSessionId(e.target);
+    if (!sessionId) return;
+    e.preventDefault();
+    activateWorkspaceSession(sessionId);
+  });
+}
+
 function renderWorkspaceTabs() {
+  ensureWorkspaceTabsEvents();
   const sessions = Array.from(workspaceSessions.values());
   const newButton = `
     <button class="workspace-new-session" type="button" title="${esc(t('newSession'))}" aria-label="${esc(t('newSession'))}">+</button>
   `;
   if (!sessions.length) {
     workspaceTabsEl.innerHTML = `<div class="workspace-tabs-empty">${esc(t('workspaceNoTabs'))}</div>${newButton}`;
-    workspaceTabsEl.querySelector('.workspace-new-session')?.addEventListener('click', startNewSession);
     return;
   }
   workspaceTabsEl.innerHTML = sessions.map(s => `
@@ -379,31 +424,6 @@ function renderWorkspaceTabs() {
       <span class="workspace-tab-meta">${esc(getWorkspaceStatusLabel(s.status))}${s.phase ? ` · ${esc(s.phase)}` : ''}</span>
     </div>
   `).join('') + newButton;
-  workspaceTabsEl.querySelectorAll('.workspace-tab').forEach(tab => {
-    tab.addEventListener('click', () => activateWorkspaceSession(tab.dataset.sessionId));
-    tab.addEventListener('dblclick', (e) => {
-      e.preventDefault();
-      renameWorkspaceSession(tab.dataset.sessionId);
-    });
-    tab.addEventListener('keydown', (e) => {
-      if (e.key !== 'Enter' && e.key !== ' ') return;
-      e.preventDefault();
-      activateWorkspaceSession(tab.dataset.sessionId);
-    });
-  });
-  workspaceTabsEl.querySelectorAll('.workspace-rename-btn').forEach(btn => {
-    const rename = (e) => {
-      e.preventDefault();
-      e.stopPropagation();
-      renameWorkspaceSession(btn.closest('.workspace-tab')?.dataset.sessionId);
-    };
-    btn.addEventListener('click', rename);
-    btn.addEventListener('keydown', (e) => {
-      if (e.key !== 'Enter' && e.key !== ' ') return;
-      rename(e);
-    });
-  });
-  workspaceTabsEl.querySelector('.workspace-new-session')?.addEventListener('click', startNewSession);
 }
 
 function renderWorkspacePanes() {
