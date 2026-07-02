@@ -761,6 +761,9 @@ html.light-theme .select {
 }
 
 .sessions-shell {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
   width: 100%;
   max-width: 1180px;
   margin: 0 auto;
@@ -768,7 +771,6 @@ html.light-theme .select {
   display: flex;
   flex-direction: column;
   gap: 18px;
-  min-height: 0;
 }
 
 .sessions-header {
