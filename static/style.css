@@ -5320,6 +5320,10 @@ html.light-theme .agent-status-bar {
     box-shadow: 0 0 6px rgba(var(--accent-rgb), 0.35);
   }
 
+  .workspace-tabs-shell {
+    display: none;
+  }
+
   .workspace-rename-btn {
     opacity: 1;
   }
