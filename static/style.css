@@ -6297,14 +6297,9 @@ html.light-theme .btn-danger {
 }
 
 .artifacts-toolbar {
-  min-height: auto;
   display: flex;
   flex-direction: column;
   gap: 6px;
-  padding: 8px 10px;
-  border: 1px solid var(--border-dim);
-  border-radius: var(--radius-sm);
-  background: color-mix(in srgb, var(--bg-surface) 76%, transparent);
 }
 .artifacts-toolbar-top {
   display: flex;

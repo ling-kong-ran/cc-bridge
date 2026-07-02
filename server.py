@@ -1982,10 +1982,13 @@ async def handle_action(body: bytes, writer: asyncio.StreamWriter):
                 if not _notified:
                     _notified = True
                     platforms = (client_meta.get(client_id, {}) or {}).get("notify_platforms", [])
+                    print(f"[CC Bridge] notify resume-result cid={client_id} platforms={platforms} meta_keys={list((client_meta.get(client_id) or {}).keys())}")
                     if platforms:
                         title = client_last_msg.get(client_id, "")
                         prompt, s, elapsed = _notify_summary(client_id)
                         asyncio.create_task(_notify_gui_complete(title, model, platforms, summary=s, prompt=prompt, elapsed=elapsed))
+                    else:
+                        print(f"[CC Bridge] notify skipped resume: platforms empty cid={client_id}")
             elif evt_type == "user":
                 results = extract_tool_results(event)
                 if results:
@@ -2004,6 +2007,7 @@ async def handle_action(body: bytes, writer: asyncio.StreamWriter):
                 if not _notified:
                     _notified = True
                     platforms = (client_meta.get(client_id, {}) or {}).get("notify_platforms", [])
+                    print(f"[CC Bridge] notify resume-ended cid={client_id} platforms={platforms}")
                     if platforms:
                         title = client_last_msg.get(client_id, "")
                         prompt, s, elapsed = _notify_summary(client_id)
@@ -2017,6 +2021,7 @@ async def handle_action(body: bytes, writer: asyncio.StreamWriter):
                 if not _notified:
                     _notified = True
                     platforms = (client_meta.get(client_id, {}) or {}).get("notify_platforms", [])
+                    print(f"[CC Bridge] notify resume-error cid={client_id} platforms={platforms}")
                     if platforms:
                         title = client_last_msg.get(client_id, "")
                         err_msg = event.get("message", "")
@@ -2444,10 +2449,13 @@ def make_owner_event_handler(client_id: str, run_id: str, session, model: str, c
             if not _notified:
                 _notified = True
                 platforms = (client_meta.get(client_id, {}) or {}).get("notify_platforms", [])
+                print(f"[CC Bridge] notify result cid={client_id} platforms={platforms} meta_keys={list((client_meta.get(client_id) or {}).keys())}")
                 if platforms:
                     title = client_last_msg.get(client_id, default_title)
                     prompt, summary, elapsed = _notify_summary(client_id)
                     asyncio.create_task(_notify_gui_complete(title, model, platforms, summary=summary, prompt=prompt, elapsed=elapsed))
+                else:
+                    print(f"[CC Bridge] notify skipped: platforms empty for cid={client_id}")
         elif evt_type == "user":
             results = extract_tool_results(event)
             if results:
@@ -2467,6 +2475,7 @@ def make_owner_event_handler(client_id: str, run_id: str, session, model: str, c
             if not _notified:
                 _notified = True
                 platforms = (client_meta.get(client_id, {}) or {}).get("notify_platforms", [])
+                print(f"[CC Bridge] notify process_ended cid={client_id} platforms={platforms}")
                 if platforms:
                     title = client_last_msg.get(client_id, default_title)
                     prompt, summary, elapsed = _notify_summary(client_id)
@@ -2480,6 +2489,7 @@ def make_owner_event_handler(client_id: str, run_id: str, session, model: str, c
             if not _notified:
                 _notified = True
                 platforms = (client_meta.get(client_id, {}) or {}).get("notify_platforms", [])
+                print(f"[CC Bridge] notify error cid={client_id} platforms={platforms}")
                 if platforms:
                     title = client_last_msg.get(client_id, default_title)
                     err_msg = event.get("message", "")
@@ -2523,8 +2533,8 @@ async def _notify_gui_complete(title: str, model: str, platforms: list, error: s
             lang = get_gui_settings().get("language", "zh")
             print(f"[CC Bridge] notify lang={lang} title={title[:30]} prompt_len={len(prompt)} summary_len={len(summary)} elapsed={elapsed:.1f}s")
             await gw.notify_session_complete(title, summary[:800] if summary else "", model, prompt=prompt[:800] if prompt else "", lang=lang, elapsed=elapsed)
-        except Exception:
-            pass  # 通知失败不影响主流程
+        except Exception as exc:
+            print(f"[CC Bridge] notify failed: {exc}")
 
 
 # ─── REST API ──────────────────────────────────────────────
