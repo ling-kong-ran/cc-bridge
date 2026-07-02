@@ -6673,6 +6673,17 @@ html.light-theme .btn-danger {
 .feishu-scan-links a:hover,
 .feishu-scan-links .link-btn:hover { color: var(--green); }
 
+/* ── 扫码创建 Bot ── */
+.feishu-onboard-area { text-align: center; padding: 8px 0; }
+.feishu-onboard-area .btn { margin: 6px 3px; }
+.feishu-onboard-progress { display: flex; align-items: center; justify-content: center; gap: 8px; color: var(--text-secondary); margin: 10px 0; }
+.feishu-onboard-progress .spin {
+  display: inline-block; width: 14px; height: 14px;
+  border: 2px solid var(--text-secondary); border-top-color: var(--green);
+  border-radius: 50%; animation: spin .8s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
 .feishu-manual-url-row { margin: 14px 0 16px; }
 
 .feishu-gateway-status-card,

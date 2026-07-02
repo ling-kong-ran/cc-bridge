@@ -553,5 +553,14 @@
   "scheduledTaskSaved": "定时任务已保存",
   "scheduledTaskDeleted": "定时任务已删除",
   "scheduledTaskStarted": "定时任务已开始运行",
-  "scheduledConfirmDelete": "确定删除定时任务「{name}」吗？"
+  "scheduledConfirmDelete": "确定删除定时任务「{name}」吗？",
+  "feishuOnboardStart": "扫码创建 Bot",
+  "feishuOnboardScanHint": "使用飞书 App 扫描二维码授权创建 Bot",
+  "feishuOnboardConnecting": "正在连接飞书注册服务...",
+  "feishuOnboardWaiting": "等待扫码授权...",
+  "feishuOnboardSuccess": "Bot 创建成功！",
+  "feishuOnboardFailed": "注册失败：",
+  "feishuConnectionMode": "连接模式",
+  "feishuConnectionWs": "WebSocket（推荐，无需公网 IP）",
+  "feishuConnectionWebhook": "Webhook（需要公网可达的 HTTP 端点）"
 }

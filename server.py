@@ -47,8 +47,39 @@ from config_manager import (
 from session_store import list_sessions, save_session, add_session_usage, delete_session, load_session_history, rename_session, update_session_cwd, toggle_pin
 from artifact_store import list_artifacts as list_artifact_records
 from memory_index import list_memory_files, search_memory, get_memory_file, delete_memory_file, save_memory_file, index_memory, get_memory_tree, get_memory_graph
-from feishu_gateway import FeishuGateway, FEISHU_GATEWAY_AVAILABLE, FEISHU_GATEWAY_UNAVAILABLE_REASON
-from feishu_gateway_store import get_feishu_gateway_config, update_feishu_gateway_config, list_scopes as list_feishu_scopes
+# 飞书模块延迟加载 — 避免 lark_oapi SDK 拖慢 server 启动
+class _LazyFeishu:
+    """延迟导入飞书相关模块。首次访问任意属性时自动触发 import。"""
+    _loaded = False
+    def __getattr__(self, name: str):
+        if not self._loaded:
+            self._load()
+        return object.__getattribute__(self, name)
+    def _load(self):
+        from feishu_gateway import FeishuGateway as _FeishuGateway
+        from feishu_gateway import FEISHU_GATEWAY_AVAILABLE as _A, FEISHU_GATEWAY_UNAVAILABLE_REASON as _R
+        from feishu_gateway import FEISHU_WS_AVAILABLE as _WS, set_feishu_ws_event_callback as _set_cb
+        from feishu_gateway import ws_log as _ws_log
+        from feishu_gateway_store import get_feishu_gateway_config as _get_config
+        from feishu_gateway_store import update_feishu_gateway_config as _update_config
+        from feishu_gateway_store import list_scopes as _list_scopes
+        from feishu_onboard import api_begin_onboard as _begin, api_poll_onboard as _poll
+        from feishu_onboard import RegistrationError as _RegError
+        self.FeishuGateway = _FeishuGateway
+        self.FEISHU_GATEWAY_AVAILABLE = _A
+        self.FEISHU_GATEWAY_UNAVAILABLE_REASON = _R
+        self.FEISHU_WS_AVAILABLE = _WS
+        self.set_feishu_ws_event_callback = _set_cb
+        self.ws_log = _ws_log
+        self.get_feishu_gateway_config = _get_config
+        self.update_feishu_gateway_config = _update_config
+        self.list_feishu_scopes = _list_scopes
+        self.api_begin_onboard = _begin
+        self.api_poll_onboard = _poll
+        self.OnboardRegistrationError = _RegError
+        self._loaded = True
+
+_f = _LazyFeishu()
 
 try:
     import qrcode
@@ -378,7 +409,7 @@ client_session_agents: dict[str, list] = {}
 scheduled_runner: ScheduledTaskRunner | None = None
 
 # 飞书消息网关
-feishu_gateway: FeishuGateway | None = None
+feishu_gateway = None
 
 # 会话共享：记录哪个 client_id 拥有哪个 session_id（owner），以及谁是 viewer
 session_owner: dict[str, str] = {}  # session_id → owner_client_id
@@ -662,10 +693,10 @@ def get_default_model() -> str:
     return models[0] if models else "claude-sonnet-4-6"
 
 
-def get_feishu_gateway() -> FeishuGateway:
+def get_feishu_gateway():
     global feishu_gateway
     if feishu_gateway is None:
-        feishu_gateway = FeishuGateway(session_manager, DEFAULT_CWD, get_default_model)
+        feishu_gateway = _f.FeishuGateway(session_manager, DEFAULT_CWD, get_default_model)
     return feishu_gateway
 
 
@@ -2390,12 +2421,14 @@ async def handle_api_get(path: str, writer: asyncio.StreamWriter, query: dict = 
     elif path == "/api/scheduled-tasks":
         data = {"tasks": scheduled_task_store.list_tasks()}
     elif path == "/api/feishu-gateway/config":
-        data = get_feishu_gateway_config(redact=True)
-        data["available"] = FEISHU_GATEWAY_AVAILABLE
-        data["unavailable_reason"] = FEISHU_GATEWAY_UNAVAILABLE_REASON
+        data = _f.get_feishu_gateway_config(redact=True)
+        data["available"] = _f.FEISHU_GATEWAY_AVAILABLE
+        data["unavailable_reason"] = _f.FEISHU_GATEWAY_UNAVAILABLE_REASON
         data["qrcode_available"] = QRCODE_AVAILABLE
+        data["lan_ips"] = get_lan_ips()
+        data["ws_available"] = _f.FEISHU_WS_AVAILABLE
     elif path == "/api/feishu-gateway/scopes":
-        data = {"scopes": list_feishu_scopes()}
+        data = {"scopes": _f.list_feishu_scopes()}
     elif path == "/api/feishu-gateway/qr":
         if not QRCODE_AVAILABLE:
             await send_response(writer, 503, "application/json; charset=utf-8", b'{"error":"QR code library not installed"}')
@@ -2496,16 +2529,23 @@ async def handle_api_post(path: str, body: bytes, writer: asyncio.StreamWriter):
     elif path == "/api/env":
         update_env_config(data)
     elif path == "/api/feishu-gateway/config":
-        result = update_feishu_gateway_config(data)
-        result["available"] = FEISHU_GATEWAY_AVAILABLE
-        result["unavailable_reason"] = FEISHU_GATEWAY_UNAVAILABLE_REASON
+        result = _f.update_feishu_gateway_config(data)
+        result["available"] = _f.FEISHU_GATEWAY_AVAILABLE
+        result["unavailable_reason"] = _f.FEISHU_GATEWAY_UNAVAILABLE_REASON
         result["qrcode_available"] = QRCODE_AVAILABLE
+        result["ws_available"] = _f.FEISHU_WS_AVAILABLE
+        # 如果启用了 WebSocket 模式，尝试启动连接
+        _f.ws_log(f"server.py: 配置已保存，connection_mode={result.get('connection_mode')} enabled={result.get('enabled')}")
+        if result.get("connection_mode") == "websocket" and result.get("enabled"):
+            get_feishu_gateway().ensure_ws_running()
+        else:
+            get_feishu_gateway().stop_ws()
         resp = json.dumps(result, ensure_ascii=False).encode("utf-8")
         await send_response(writer, 200, "application/json; charset=utf-8", resp)
         return
     elif path == "/api/feishu-gateway/events":
-        if not FEISHU_GATEWAY_AVAILABLE:
-            resp = json.dumps({"ok": False, "error": FEISHU_GATEWAY_UNAVAILABLE_REASON}, ensure_ascii=False).encode("utf-8")
+        if not _f.FEISHU_GATEWAY_AVAILABLE:
+            resp = json.dumps({"ok": False, "error": _f.FEISHU_GATEWAY_UNAVAILABLE_REASON}, ensure_ascii=False).encode("utf-8")
             await send_response(writer, 503, "application/json; charset=utf-8", resp)
             return
         result = await get_feishu_gateway().handle_event(data)
@@ -2535,6 +2575,26 @@ async def handle_api_post(path: str, body: bytes, writer: asyncio.StreamWriter):
             return
         ok = await get_feishu_gateway().stop_scope(chat_id)
         resp = json.dumps({"ok": ok}, ensure_ascii=False).encode("utf-8")
+        await send_response(writer, 200, "application/json; charset=utf-8", resp)
+        return
+    elif path == "/api/feishu-gateway/onboard/begin":
+        domain = str(data.get("domain") or "feishu").strip()
+        try:
+            result = _f.api_begin_onboard(domain)
+        except _f.OnboardRegistrationError as exc:
+            resp = json.dumps({"ok": False, "error": str(exc)}, ensure_ascii=False).encode("utf-8")
+            await send_response(writer, 400, "application/json; charset=utf-8", resp)
+            return
+        resp = json.dumps({"ok": True, **result}, ensure_ascii=False).encode("utf-8")
+        await send_response(writer, 200, "application/json; charset=utf-8", resp)
+        return
+    elif path == "/api/feishu-gateway/onboard/poll":
+        device_code = str(data.get("device_code") or "").strip()
+        if not device_code:
+            await send_response(writer, 400, "application/json", b'{"error":"device_code required"}')
+            return
+        result = _f.api_poll_onboard(device_code)
+        resp = json.dumps(result, ensure_ascii=False).encode("utf-8")
         await send_response(writer, 200, "application/json; charset=utf-8", resp)
         return
     elif path == "/api/mcp-servers":
@@ -2900,6 +2960,10 @@ async def run_server(port: int = DEFAULT_PORT, cleanup_old_servers: bool = True)
         set_current_cli(saved_cli)
 
     server = await asyncio.start_server(handle_http, HOST, port)
+
+    # 如果之前已启用飞书 WebSocket 模式，启动时自动重连（延迟到 server 就绪后执行）
+    _f.ws_log("server.py: 启动时调用 ensure_ws_running()")
+    get_feishu_gateway().ensure_ws_running()
 
     local_url = f"http://{BROWSER_HOST}:{port}"
     lan_urls = [f"http://{ip}:{port}" for ip in get_lan_ips()]

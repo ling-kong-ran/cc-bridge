@@ -1119,8 +1119,12 @@ async function runScheduledTask(task) {
 // ─── 飞书消息网关 ────────────────────────────────────────────────
 function initFeishuGatewayUI() {
   document.getElementById('btn-feishu-gateway-refresh')?.addEventListener('click', loadFeishuGateway);
-  document.getElementById('btn-feishu-gateway-save')?.addEventListener('click', saveFeishuGatewayConfig);
+  document.getElementById('btn-feishu-gateway-save')?.addEventListener('click', () => saveFeishuGatewayConfig());
   document.getElementById('btn-feishu-copy-url')?.addEventListener('click', copyFeishuEventUrl);
+  document.getElementById('btn-feishu-onboard-start')?.addEventListener('click', beginFeishuOnboard);
+  document.getElementById('btn-feishu-onboard-cancel')?.addEventListener('click', () => cancelFeishuOnboard(false));
+  // 开关自动保存（不弹 toast）
+  document.getElementById('feishu-gateway-enabled')?.addEventListener('change', () => saveFeishuGatewayConfig({ silent: true }));
   document.getElementById('btn-feishu-platform-config')?.addEventListener('click', () => {
     document.getElementById('gateway-platform-detail-feishu')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   });
@@ -1129,6 +1133,15 @@ function initFeishuGatewayUI() {
 async function loadFeishuGateway() {
   await Promise.all([loadFeishuGatewayConfig(), loadFeishuGatewayScopes()]);
   updateFeishuQR();
+}
+
+function getFeishuEventUrl() {
+  // 优先使用 LAN IP，手机扫码后可以在同一局域网内访问
+  const lanIps = feishuGatewayConfig?.lan_ips || [];
+  if (lanIps.length > 0) {
+    return `http://${lanIps[0]}:${location.port}/api/feishu-gateway/events`;
+  }
+  return `${location.origin}/api/feishu-gateway/events`;
 }
 
 function updateFeishuQR() {
@@ -1141,9 +1154,177 @@ function updateFeishuQR() {
   img.style.display = '';
   const eventUrlInput = document.getElementById('feishu-event-url');
   const fullUrl = eventUrlInput?.value || '/api/feishu-gateway/events';
-  const absoluteUrl = fullUrl.startsWith('http') ? fullUrl : location.origin + fullUrl;
+  const absoluteUrl = fullUrl.startsWith('http') ? fullUrl : getFeishuEventUrl();
   img.src = `/api/feishu-gateway/qr?url=${encodeURIComponent(absoluteUrl)}`;
 }
+
+// ── 扫码创建 Bot ──────────────────────────────────────────────────────────
+
+let feishuOnboardState = null; // { device_code, timer, domain }
+
+function updateFeishuUIState(config) {
+  const hasCredentials = !!(config?.app_id && config?.app_secret);
+  const onboardArea = document.getElementById('feishu-onboard-area');
+  const eventQrArea = document.getElementById('feishu-event-qr-area');
+
+  if (onboardArea) onboardArea.style.display = hasCredentials ? 'none' : '';
+  if (eventQrArea) eventQrArea.style.display = hasCredentials ? '' : 'none';
+
+  if (!hasCredentials) {
+    // 未配置：显示扫码创建按钮
+    updateFeishuOnboardQR();
+  } else {
+    updateFeishuQR();
+  }
+}
+
+function updateFeishuOnboardQR() {
+  if (!feishuOnboardState?.qr_url) return;
+  const img = document.getElementById('feishu-onboard-qr-image');
+  const box = document.getElementById('feishu-onboard-qr-box');
+  if (!img || !box) return;
+  img.src = `/api/feishu-gateway/qr?url=${encodeURIComponent(feishuOnboardState.qr_url)}`;
+  box.style.display = '';
+}
+
+async function beginFeishuOnboard() {
+  const startBtn = document.getElementById('btn-feishu-onboard-start');
+  const cancelBtn = document.getElementById('btn-feishu-onboard-cancel');
+  const progress = document.getElementById('feishu-onboard-progress');
+  const status = document.getElementById('feishu-onboard-status');
+
+  if (startBtn) startBtn.style.display = 'none';
+  if (cancelBtn) cancelBtn.style.display = '';
+  if (progress) progress.style.display = '';
+  if (status) status.textContent = t('feishuOnboardConnecting') || 'Connecting to Feishu...';
+
+  try {
+    const resp = await fetch('/api/feishu-gateway/onboard/begin', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ domain: 'feishu' }),
+    });
+    const data = await resp.json();
+    if (!resp.ok || !data.ok) throw new Error(data.error || resp.statusText);
+
+    feishuOnboardState = {
+      device_code: data.device_code,
+      qr_url: data.qr_url,
+      user_code: data.user_code,
+      expire_in: data.expire_in,
+    };
+    updateFeishuOnboardQR();
+
+    if (status) {
+      if (data.user_code) {
+        status.textContent = (t('feishuOnboardScanHint') || 'Scan QR with Feishu app. Code:') + ' ' + data.user_code;
+      } else {
+        status.textContent = t('feishuOnboardScanHint') || 'Scan the QR code with Feishu app to authorize.';
+      }
+    }
+
+    // 开始轮询
+    pollFeishuOnboard();
+  } catch (e) {
+    if (status) status.textContent = (t('feishuOnboardFailed') || 'Failed: ') + (e.message || t('unknownError'));
+    cancelFeishuOnboard(true);
+  }
+}
+
+async function pollFeishuOnboard() {
+  if (!feishuOnboardState) return;
+  var deviceCode = feishuOnboardState.device_code;
+
+  try {
+    var resp = await fetch('/api/feishu-gateway/onboard/poll', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ device_code: deviceCode }),
+    });
+    var data = await resp.json();
+  } catch (e) { data = { status: 'error', error: e.message }; }
+
+  if (data.status === 'completed') {
+    handleOnboardSuccess(data);
+    return;
+  }
+  if (data.status === 'failed') {
+    var status = document.getElementById('feishu-onboard-status');
+    if (status) status.textContent = (t('feishuOnboardFailed') || 'Registration failed: ') + (data.error || '');
+    cancelFeishuOnboard(true);
+    return;
+  }
+  // pending — 继续轮询
+  feishuOnboardState.timer = setTimeout(pollFeishuOnboard, 3000);
+}
+
+function handleOnboardSuccess(data) {
+  // 自动填充凭据
+  var appId = document.getElementById('feishu-app-id');
+  var appSecret = document.getElementById('feishu-app-secret');
+  var connMode = document.getElementById('feishu-connection-mode');
+  if (appId) appId.value = data.app_id || '';
+  if (appSecret) appSecret.value = data.app_secret || '';
+  if (connMode) connMode.value = 'websocket'; // QR 创建的默认用 WebSocket
+
+  // 自动将注册者的 open_id 加入白名单
+  if (data.open_id) {
+    var allowedUsers = document.getElementById('feishu-allowed-users');
+    if (allowedUsers) allowedUsers.value = data.open_id;
+  }
+
+  // 自动启用网关开关
+  var enabledToggle = document.getElementById('feishu-gateway-enabled');
+  if (enabledToggle) enabledToggle.checked = true;
+
+  // 更新 UI
+  var status = document.getElementById('feishu-onboard-status');
+  var botName = data.bot_name || '';
+  if (status) {
+    status.textContent = (t('feishuOnboardSuccess') || 'Bot created successfully!') +
+      (botName ? ' (' + botName + ')' : '');
+  }
+
+  // 隐藏 onboard UI
+  cancelFeishuOnboard();
+  var onboardArea = document.getElementById('feishu-onboard-area');
+  if (onboardArea) {
+    var startBtn = document.getElementById('btn-feishu-onboard-start');
+    var progress = document.getElementById('feishu-onboard-progress');
+    var cancelBtn = document.getElementById('btn-feishu-onboard-cancel');
+    var qrBox = document.getElementById('feishu-onboard-qr-box');
+    if (startBtn) startBtn.style.display = 'none';
+    if (progress) progress.style.display = 'none';
+    if (cancelBtn) cancelBtn.style.display = 'none';
+    if (qrBox) qrBox.style.display = 'none';
+  }
+
+  // 显示 event QR area
+  var eventQrArea = document.getElementById('feishu-event-qr-area');
+  if (eventQrArea) eventQrArea.style.display = '';
+
+  // 自动保存
+  saveFeishuGatewayConfig();
+}
+
+function cancelFeishuOnboard(keepStatus) {
+  if (feishuOnboardState?.timer) clearTimeout(feishuOnboardState.timer);
+  feishuOnboardState = null;
+
+  var startBtn = document.getElementById('btn-feishu-onboard-start');
+  var cancelBtn = document.getElementById('btn-feishu-onboard-cancel');
+  var progress = document.getElementById('feishu-onboard-progress');
+  var qrBox = document.getElementById('feishu-onboard-qr-box');
+
+  if (!keepStatus) {
+    if (startBtn) startBtn.style.display = '';
+    if (progress) progress.style.display = 'none';
+  }
+  if (cancelBtn) cancelBtn.style.display = 'none';
+  if (qrBox) qrBox.style.display = 'none';
+}
+
+// ── 加载飞书网关配置 ──────────────────────────────────────────────────────
 
 async function loadFeishuGatewayConfig() {
   const status = document.getElementById('feishu-gateway-form-status');
@@ -1196,8 +1377,11 @@ function fillFeishuGatewayConfig(config) {
   if (allowedUsers) allowedUsers.value = listToLines(config.allowed_users);
   const allowedChats = get('feishu-allowed-chats');
   if (allowedChats) allowedChats.value = listToLines(config.allowed_chats);
+  const connMode = get('feishu-connection-mode');
+  if (connMode) connMode.value = config.connection_mode === 'webhook' ? 'webhook' : 'websocket';
   const eventUrl = get('feishu-event-url');
-  if (eventUrl) eventUrl.value = config.event_url || `${location.origin}/api/feishu-gateway/events`;
+  if (eventUrl) eventUrl.value = config.event_url || getFeishuEventUrl();
+  updateFeishuUIState(config);
 }
 
 function readFeishuGatewayConfig() {
@@ -1206,13 +1390,15 @@ function readFeishuGatewayConfig() {
     app_id: document.getElementById('feishu-app-id')?.value.trim() || '',
     app_secret: document.getElementById('feishu-app-secret')?.value || '',
     verification_token: document.getElementById('feishu-verification-token')?.value || '',
+    connection_mode: document.getElementById('feishu-connection-mode')?.value || 'websocket',
     busy_mode: document.getElementById('feishu-busy-mode')?.value === 'reject' ? 'reject' : 'queue',
     allowed_users: readDelimitedList(document.getElementById('feishu-allowed-users')?.value || ''),
     allowed_chats: readDelimitedList(document.getElementById('feishu-allowed-chats')?.value || ''),
   };
 }
 
-async function saveFeishuGatewayConfig() {
+async function saveFeishuGatewayConfig(opts) {
+  var silent = opts && opts.silent;
   const payload = readFeishuGatewayConfig();
   const status = document.getElementById('feishu-gateway-form-status');
   try {
@@ -1228,9 +1414,9 @@ async function saveFeishuGatewayConfig() {
     renderFeishuGatewayStatus(feishuGatewayConfig);
     if (status) {
       status.textContent = t('feishuGatewaySaved');
-      status.style.display = '';
+      status.style.display = silent ? 'none' : '';
     }
-    showToast(t('feishuGatewaySaved'), 'success');
+    if (!silent) showToast(t('feishuGatewaySaved'), 'success');
   } catch (e) {
     if (status) {
       status.textContent = t('feishuGatewaySaveFailed', { message: e.message || t('unknownError') });
@@ -1357,7 +1543,7 @@ async function postFeishuScopeAction(url, scopeKey, successMessage) {
 }
 
 async function copyFeishuEventUrl() {
-  const value = document.getElementById('feishu-event-url')?.value || `${location.origin}/api/feishu-gateway/events`;
+  const value = document.getElementById('feishu-event-url')?.value || getFeishuEventUrl();
   try {
     await navigator.clipboard.writeText(value);
     showToast(t('copied'), 'success');

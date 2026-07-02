@@ -1,6 +1,7 @@
-"""项目虚拟环境准备。"""
+"""项目 Python 环境检测与准备。"""
 from __future__ import annotations
 
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -9,24 +10,35 @@ from .probe import REPO_ROOT, venv_python_path
 from .state import log
 
 
-def ensure_venv() -> Path:
-    """确保项目 .venv 存在并安装依赖，返回 venv Python 路径。"""
-    venv_dir = REPO_ROOT / ".venv"
-    python = venv_python_path(venv_dir)
-    if python.exists():
-        log(f"已找到虚拟环境：{python}")
-    else:
-        log(f"创建虚拟环境：{venv_dir}")
-        subprocess.run([sys.executable, "-m", "venv", str(venv_dir)], check=True)
-        if not python.exists():
-            raise RuntimeError(f"虚拟环境创建失败，未找到 Python：{python}")
+def find_server_python() -> Path:
+    """查找可用的 Python 解释器，优先 .venv 其次系统 Python。
 
-    _install_deps(python)
-    return python
+    优先级：.venv Python > 系统 python3/python > 当前进程 Python
+    如果使用 .venv，自动安装依赖；如果用系统 Python，尝试安装。
+    """
+    # 1. 项目 .venv
+    venv_python = venv_python_path()
+    if venv_python.exists():
+        log(f"使用虚拟环境：{venv_python}")
+        _install_deps(venv_python)
+        return venv_python
+
+    # 2. 系统 python3 / python
+    for cmd in ("python3", "python"):
+        found = shutil.which(cmd)
+        if found:
+            log(f"使用系统 Python：{found}")
+            _install_deps(Path(found))
+            return Path(found)
+
+    # 3. 当前进程 Python
+    log(f"使用当前 Python：{sys.executable}")
+    _install_deps(Path(sys.executable))
+    return Path(sys.executable)
 
 
 def _install_deps(python: Path) -> None:
-    """将 requirements.txt 安装到 venv 中（失败不阻止启动）。"""
+    """将 requirements.txt 安装到 Python 环境中（失败不阻止启动）。"""
     req_file = REPO_ROOT / "requirements.txt"
     if not req_file.exists():
         return

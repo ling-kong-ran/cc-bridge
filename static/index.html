@@ -16,11 +16,10 @@
       }
     } catch (e) {}
   </script>
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700;800&family=Syne+Mono&family=VT323&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/static/fonts.css">
   <link rel="stylesheet" href="/static/style.css">
-  <link rel="stylesheet" href="/static/artifacts.css">
+  <link rel="stylesheet" href="/static/artifacts.css" media="print" onload="this.onload=null;this.media='all'">
+  <noscript><link rel="stylesheet" href="/static/artifacts.css"></noscript>
 </head>
 <body>
   <div id="mobile-sidebar-backdrop" class="mobile-sidebar-backdrop" aria-hidden="true"></div>
@@ -532,11 +531,27 @@
                   <span id="feishu-quick-status-dot" class="feishu-status-dot"></span>
                   <span id="feishu-quick-status-label" class="feishu-status-label" data-i18n="gatewayQuickConnect">Quick connect</span>
                 </div>
-                <div class="feishu-qr-box" aria-hidden="true">
-                  <img id="feishu-qr-image" class="feishu-qr-image" src="" alt="QR code for event subscription URL">
+                <!-- 扫码创建 Bot 区域（未配置时显示） -->
+                <div id="feishu-onboard-area" class="feishu-onboard-area">
+                  <div id="feishu-onboard-qr-box" class="feishu-qr-box" style="display:none">
+                    <img id="feishu-onboard-qr-image" class="feishu-qr-image" src="" alt="Scan QR to create Feishu Bot">
+                  </div>
+                  <p id="feishu-onboard-status" class="feishu-scan-hint" data-i18n="feishuOnboardHint">Scan the QR code with Feishu to automatically create and bind a Bot.</p>
+                  <button id="btn-feishu-onboard-start" class="btn btn-primary" type="button"><span class="btn-prefix">+</span> <span data-i18n="feishuOnboardStart">Scan QR to create Bot</span></button>
+                  <button id="btn-feishu-onboard-cancel" class="btn" type="button" style="display:none" data-i18n="cancel">Cancel</button>
+                  <div id="feishu-onboard-progress" class="feishu-onboard-progress" style="display:none">
+                    <span class="spin"></span>
+                    <span data-i18n="feishuOnboardWaiting">Waiting for scan...</span>
+                  </div>
                 </div>
-                <h3 data-i18n="feishuGatewayScanTitle">Scan to connect Feishu</h3>
-                <p id="feishu-gateway-status-detail" class="feishu-scan-hint" data-i18n="feishuGatewayScanHint">Scan entry is reserved. Fill required fields to enable message receiving.</p>
+                <!-- 已配置时显示 event URL QR（兼容手动配置/后续查看） -->
+                <div id="feishu-event-qr-area" style="display:none">
+                  <div class="feishu-qr-box" aria-hidden="true">
+                    <img id="feishu-qr-image" class="feishu-qr-image" src="" alt="QR code for event subscription URL">
+                  </div>
+                  <h3 data-i18n="feishuGatewayScanTitle">Event subscription URL</h3>
+                  <p id="feishu-gateway-status-detail" class="feishu-scan-hint" data-i18n="feishuGatewayScanHint">Scan entry is reserved. Fill required fields to enable message receiving.</p>
+                </div>
                 <div class="feishu-scan-links">
                   <button id="btn-feishu-copy-url" class="link-btn" type="button" data-i18n="feishuGatewayCopyEventUrl">Copy event URL</button>
                   <a href="#feishu-manual-config" data-i18n="gatewayAdvancedSettings">Advanced settings</a>
@@ -574,6 +589,13 @@
                 <input class="input" readonly value="/api/feishu-gateway/events" aria-label="Event URL">
               </div>
               <div class="feishu-form-grid">
+                <div class="settings-row span-all">
+                  <label class="field-label" for="feishu-connection-mode" data-i18n="feishuConnectionMode">Connection mode</label>
+                  <select id="feishu-connection-mode" class="select">
+                    <option value="websocket" data-i18n="feishuConnectionWs">WebSocket (recommended, no public URL needed)</option>
+                    <option value="webhook" data-i18n="feishuConnectionWebhook">Webhook (requires reachable HTTP endpoint)</option>
+                  </select>
+                </div>
                 <div class="settings-row span-all">
                   <label class="field-label" for="feishu-verification-token" data-i18n="feishuVerificationToken">Verification Token</label>
                   <input id="feishu-verification-token" class="input" type="password" autocomplete="off" spellcheck="false">

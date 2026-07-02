@@ -84,6 +84,7 @@ def update_feishu_gateway_config(patch: dict[str, Any]) -> dict[str, Any]:
         "app_id",
         "app_secret",
         "verification_token",
+        "connection_mode",
         "default_model",
         "default_cwd",
         "default_cli",

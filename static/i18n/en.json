@@ -553,5 +553,14 @@
   "scheduledTaskSaved": "Scheduled task saved",
   "scheduledTaskDeleted": "Scheduled task deleted",
   "scheduledTaskStarted": "Scheduled task started",
-  "scheduledConfirmDelete": "Delete scheduled task \"{name}\"?"
+  "scheduledConfirmDelete": "Delete scheduled task \"{name}\"?",
+  "feishuOnboardStart": "Scan QR to create Bot",
+  "feishuOnboardScanHint": "Scan the QR code with Feishu app to create a Bot automatically.",
+  "feishuOnboardConnecting": "Connecting to Feishu...",
+  "feishuOnboardWaiting": "Waiting for scan...",
+  "feishuOnboardSuccess": "Bot created successfully!",
+  "feishuOnboardFailed": "Registration failed: ",
+  "feishuConnectionMode": "Connection mode",
+  "feishuConnectionWs": "WebSocket (recommended, no public URL needed)",
+  "feishuConnectionWebhook": "Webhook (requires reachable HTTP endpoint)"
 }

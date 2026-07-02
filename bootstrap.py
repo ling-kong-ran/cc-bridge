@@ -11,7 +11,7 @@ from bootstrap.node_setup import ensure_node
 from bootstrap.probe import get_environment_status
 from bootstrap.python_setup import ensure_python_version
 from bootstrap.state import log, write_state
-from bootstrap.venv_setup import ensure_venv
+from bootstrap.venv_setup import find_server_python
 
 
 def parse_args() -> argparse.Namespace:
@@ -31,7 +31,7 @@ def main() -> int:
             log("环境状态已写入 ~/.ccb/bootstrap_state.json")
             return 0
 
-        python = ensure_venv()
+        python = find_server_python()
         ensure_node(args.yes)
         ensure_claude_cli(args.yes)
         write_state(get_environment_status())
