@@ -328,14 +328,6 @@ async function saveMemoryEdit() {
   }
 }
 
-function dreamSummary() {
-  if (!sessionActive || isResponding) return;
-  const prev = inputEl.value;
-  inputEl.value = '/dream';
-  sendMessage();
-  inputEl.value = prev;
-}
-
 function initMemoryUI() {
   const searchInput = document.getElementById('memory-search-input');
   if (searchInput) {
@@ -347,7 +339,6 @@ function initMemoryUI() {
   }
   document.getElementById('btn-memory-index')?.addEventListener('click', indexMemoryFiles);
   document.getElementById('btn-memory-new')?.addEventListener('click', () => openMemoryEditor());
-  document.getElementById('btn-dream')?.addEventListener('click', dreamSummary);
   document.getElementById('memory-modal-close')?.addEventListener('click', closeMemoryModal);
   document.getElementById('memory-modal-overlay')?.addEventListener('click', (e) => {
     if (e.target === e.currentTarget) closeMemoryModal();

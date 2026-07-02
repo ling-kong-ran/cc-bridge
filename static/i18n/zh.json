@@ -479,8 +479,6 @@
   "migrating": "迁移中",
   "editMemory": "编辑记忆",
   "newMemory": "新建",
-  "dream": "/dream",
-  "dreamHint": "总结对话并保存到记忆",
   "mentionHint": "输入 @ 提及会话成员",
   "mentionAgents": "代理",
   "noSessionAgents": "点击 + 拉入成员",

@@ -479,8 +479,6 @@
   "migrating": "Migrating",
   "editMemory": "Edit Memory",
   "newMemory": "New",
-  "dream": "/dream",
-  "dreamHint": "Summarize conversation and save to memory",
   "mentionHint": "Type @ to mention session members",
   "mentionAgents": "Agents",
   "noSessionAgents": "Click + to add members",
