@@ -796,6 +796,11 @@ html.light-theme .select {
   line-height: 1.2;
 }
 
+.sessions-header .btn-primary {
+  width: auto;
+  flex-shrink: 0;
+}
+
 .sessions-header p {
   margin: 4px 0 0;
   color: var(--text-muted);
