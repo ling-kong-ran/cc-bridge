@@ -37,6 +37,7 @@ from config_manager import (
     delete_skill,
     list_agents,
     get_available_models,
+    get_available_models_with_profiles,
     list_mcp_servers,
     save_mcp_server,
     create_agent,
@@ -2455,7 +2456,7 @@ async def handle_api_get(path: str, writer: asyncio.StreamWriter, query: dict = 
         cwd = query.get("cwd", [""])[0] or ""
         data = list_mcp_servers(cwd)
     elif path == "/api/models":
-        data = get_available_models()
+        data = get_available_models_with_profiles()
     elif path == "/api/slash-commands":
         if not is_request_allowed(writer):
             await send_response(writer, 403, "application/json", b'{"error":"LAN access disabled"}')

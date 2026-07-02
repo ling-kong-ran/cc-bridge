@@ -625,3 +625,38 @@ def get_available_models() -> list[str]:
             seen.add(m)
             unique.append(m)
     return unique
+
+
+def get_available_models_with_profiles() -> list[dict]:
+    """获取可用模型列表，带方案名。（供前端下拉框显示）"""
+    profiles = get_env_profiles().get("profiles", {})
+    result: list[dict] = []  # {value, label, profile}
+    seen = set()
+
+    # 当前活跃配置（无方案名标记）
+    active_env = get_env_config()
+    for key, value in active_env.items():
+        if key.upper().find("MODEL") >= 0 and value:
+            model = str(value).strip()
+            if model and model not in seen:
+                seen.add(model)
+                result.append({"value": model, "label": model, "profile": ""})
+
+    # 已保存的方案
+    for profile_name, profile_data in profiles.items():
+        for key, value in profile_data.get("env", {}).items():
+            if key.upper().find("MODEL") >= 0 and value:
+                model = str(value).strip()
+                if model and model not in seen:
+                    seen.add(model)
+                    result.append({
+                        "value": model,
+                        "label": f"{profile_name} → {model}",
+                        "profile": profile_name,
+                    })
+
+    if not result:
+        for default_model in ["claude-opus-4-6", "claude-sonnet-4-6", "claude-haiku-4-6"]:
+            result.append({"value": default_model, "label": default_model, "profile": ""})
+
+    return result

@@ -2441,19 +2441,22 @@ async function loadModels() {
   const previousModel = modelSelect.value || savedModelPref;
   try {
     const resp = await fetch('/api/models');
-    const models = await resp.json();
-    const availableModels = Array.isArray(models) ? models.filter(Boolean) : [];
+    const raw = await resp.json();
+    // 兼容旧格式（字符串数组）和新格式（{value, label, profile} 数组）
+    const items = Array.isArray(raw) ? raw : [];
+    const availableModels = items.map(item => typeof item === 'string' ? { value: item, label: formatModelName(item), profile: '' } : item);
     if (!availableModels.length) {
       modelSelect.innerHTML = '<option value="claude-sonnet-4-6">Sonnet 4.6</option>';
       renderModelPill();
       renderWelcomeRuntime();
       return;
     }
-    modelSelect.innerHTML = availableModels.map((model, idx) => (
-      `<option value="${esc(model)}" ${(previousModel ? model === previousModel : idx === 0) ? 'selected' : ''}>${esc(formatModelName(model))}</option>`
+    const modelValues = availableModels.map(m => m.value);
+    modelSelect.innerHTML = availableModels.map((m, idx) => (
+      `<option value="${esc(m.value)}" ${(previousModel ? m.value === previousModel : idx === 0) ? 'selected' : ''}>${esc(m.label)}</option>`
     )).join('');
-    if (previousModel && !availableModels.includes(previousModel)) {
-      modelSelect.value = availableModels[0] || '';
+    if (previousModel && !modelValues.includes(previousModel)) {
+      modelSelect.value = availableModels[0]?.value || '';
     }
     renderModelPill();
     renderWelcomeRuntime();
