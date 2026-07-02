@@ -529,6 +529,14 @@ body:not(.has-active-session) .runtime-summary-value {
   grid-column: 2;
 }
 
+/* 网关通知：推到网格下方行，不与 CWD/Remote 控件重叠 */
+.chat-runtime-section .runtime-panel-body .field-label[data-i18n="gatewayNotify"] {
+  grid-row: 3;
+}
+.chat-runtime-section .runtime-panel-body #notify-feishu-row {
+  grid-row: 4;
+}
+
 .chat-runtime-section .runtime-panel-body .cwd-wrapper {
   grid-column: 1;
 }
