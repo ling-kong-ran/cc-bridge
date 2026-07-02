@@ -2399,7 +2399,7 @@ async def handle_api_get(path: str, writer: asyncio.StreamWriter, query: dict = 
         qr = qrcode.QRCode(version=None, error_correction=qrcode.constants.ERROR_CORRECT_M, box_size=5, border=3)
         qr.add_data(url)
         qr.make(fit=True)
-        img = qr.make_image(image_factory=qrcode.image.svg.SvgImage)
+        img = qr.make_image(image_factory=qrcode.image.svg.SvgFillImage)
         resp = img.to_string()
         await send_response(writer, 200, "image/svg+xml; charset=utf-8", resp)
         return
