@@ -3091,6 +3091,10 @@ async def main():
     scheduled_runner = ScheduledTaskRunner(publish_scheduled_event)
     scheduled_task = asyncio.create_task(scheduled_runner.start())
 
+    # 如果之前已启用飞书 WebSocket 模式，启动时自动重连
+    _f.ws_log("server.py: 启动时调用 ensure_ws_running()")
+    get_feishu_gateway().ensure_ws_running()
+
     async with server:
         try:
             await server.serve_forever()
