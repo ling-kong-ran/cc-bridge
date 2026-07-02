@@ -2217,6 +2217,12 @@ function showPage(page) {
   hideMentionPopup();
 }
 
+function compareSessionsByPinAndTime(a, b) {
+  const pinnedDiff = Number(Boolean(b.pinned)) - Number(Boolean(a.pinned));
+  if (pinnedDiff) return pinnedDiff;
+  return String(b.updated_at || '').localeCompare(String(a.updated_at || ''));
+}
+
 async function openLatestOrNewChatSession() {
   if (sessionActive || currentSessionId) {
     showPage('chat');
@@ -2246,7 +2252,7 @@ async function openLatestOrNewChatSession() {
   }
   const latest = (cachedSessions || [])
     .slice()
-    .sort((a, b) => String(b.updated_at || '').localeCompare(String(a.updated_at || '')))[0];
+    .sort(compareSessionsByPinAndTime)[0];
   showPage('chat');
   if (latest?.session_id) {
     resumeSession(
@@ -6171,7 +6177,7 @@ function renderSessionList(sessions) {
   const el = document.getElementById('session-list');
   if (!el) return;
   const allSessions = sessions || [];
-  const filtered = filterSessions(allSessions).sort((a, b) => String(b.updated_at || '').localeCompare(String(a.updated_at || '')));
+  const filtered = filterSessions(allSessions).sort(compareSessionsByPinAndTime);
   if (sessionsCountEl) {
     sessionsCountEl.textContent = filtered.length === allSessions.length
       ? t('sessionsCount', { count: filtered.length })
