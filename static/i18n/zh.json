@@ -356,6 +356,7 @@
   "remoteTarget": "远程目标",
   "remoteTargetNone": "本机（不使用远程目标）",
   "allowRemoteFix": "允许远程写入",
+  "gatewayNotify": "网关通知",
   "remoteDiag": "远程连接",
   "remoteDiagHint": "通过 SSH 以只读 / 读写模式操作远程目标",
   "remoteTargets": "远程目标",

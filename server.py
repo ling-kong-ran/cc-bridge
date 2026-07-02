@@ -2203,6 +2203,9 @@ async def handle_action(body: bytes, writer: asyncio.StreamWriter):
                 meta["remote_target_id"] = (remote_target or {}).get("id", "")
             if "allow_remote_mutate" in data:
                 session.allow_mutate = bool(data.get("allow_remote_mutate"))
+            if "notify_platforms" in data:
+                meta = client_meta.setdefault(client_id, {})
+                meta["notify_platforms"] = data.get("notify_platforms") or []
             # 允许会话中切换 CLI，下一条消息生效
             if data.get("cli"):
                 session.cli = data.get("cli")
@@ -2338,7 +2341,10 @@ async def publish_scheduled_event(event_type: str, data: dict):
 
 
 def make_owner_event_handler(client_id: str, run_id: str, session, model: str, cwd: str, remote_target_id: str, cli: str, default_title: str = "新会话"):
+    _notified = False  # 每个 process 只通知一次
+
     async def on_event(event: dict):
+        nonlocal _notified
         evt_type = event.get("type", "unknown")
         sid = event.get("session_id") or getattr(session, "session_id", None) or client_session_ids.get(client_id, "")
         if sid and "session_id" not in event:
@@ -2376,16 +2382,41 @@ def make_owner_event_handler(client_id: str, run_id: str, session, model: str, c
             session_manager.finish_run(run_id)
             if sid and session_run_ids.get(sid) == run_id:
                 session_run_ids.pop(sid, None)
+            # 按会话设定的通知平台发送通知
+            if not _notified:
+                _notified = True
+                platforms = (client_meta.get(client_id, {}) or {}).get("notify_platforms", [])
+                if platforms:
+                    title = client_last_msg.get(client_id, default_title)
+                    asyncio.create_task(_notify_gui_complete(title, model, platforms))
         elif evt_type == "error":
             await push_event(client_id, evt_type, event)
             await release_session_lock_for_session(sid, client_id)
             session_manager.finish_run(run_id)
             if sid and session_run_ids.get(sid) == run_id:
                 session_run_ids.pop(sid, None)
+            if not _notified:
+                _notified = True
+                platforms = (client_meta.get(client_id, {}) or {}).get("notify_platforms", [])
+                if platforms:
+                    title = client_last_msg.get(client_id, default_title)
+                    err_msg = event.get("message", "")
+                    asyncio.create_task(_notify_gui_complete(title, model, platforms, error=err_msg))
         elif evt_type in ("assistant", "stream_event", "system", "model_changed"):
             await push_event(client_id, evt_type, event)
 
     return on_event
+
+
+async def _notify_gui_complete(title: str, model: str, platforms: list, error: str = ""):
+    """按平台列表发送 GUI 会话完成通知。"""
+    if "feishu" in platforms:
+        try:
+            gw = get_feishu_gateway()
+            summary = f"执行失败：{error[:150]}" if error else ""
+            await gw.notify_session_complete(title, summary, model)
+        except Exception:
+            pass  # 通知失败不影响主流程
 
 
 # ─── REST API ──────────────────────────────────────────────

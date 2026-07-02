@@ -356,6 +356,7 @@
   "remoteTarget": "Remote Target",
   "remoteTargetNone": "Local machine (no remote target)",
   "allowRemoteFix": "Allow remote writes",
+  "gatewayNotify": "Gateway notify",
   "remoteDiag": "Remote Access",
   "remoteDiagHint": "Use SSH in read-only / read-write mode against a remote target",
   "remoteTargets": "Remote Targets",

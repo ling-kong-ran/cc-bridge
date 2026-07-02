@@ -25,6 +25,7 @@ def _default_config() -> dict[str, Any]:
         "busy_mode": "queue",
         "allowed_users": [],
         "allowed_chats": [],
+        "complete_notify": True,
         "scopes": {},
         "processed_events": {},
         "updated_at": "",
@@ -92,6 +93,7 @@ def update_feishu_gateway_config(patch: dict[str, Any]) -> dict[str, Any]:
         "busy_mode",
         "allowed_users",
         "allowed_chats",
+        "complete_notify",
     }
     for key, value in patch.items():
         if key not in allowed:

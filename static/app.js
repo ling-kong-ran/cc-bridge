@@ -157,6 +157,7 @@ const notificationsToggle = document.getElementById('notifications-toggle');
 const notificationsRow = document.getElementById('notifications-row');
 const remoteTargetSelect = document.getElementById('remote-target-select');
 const remoteAllowMutate = document.getElementById('remote-allow-mutate');
+const notifyFeishu = document.getElementById('notify-feishu');
 const remoteMutateRow = document.getElementById('remote-mutate-row');
 const lanAccessToggle = document.getElementById('lan-access-toggle');
 const lanAccessRow = document.getElementById('lan-access-row');
@@ -4608,6 +4609,7 @@ async function sendMessage() {
     cli: document.getElementById('cli-select')?.value || '',
     remote_target_id: remoteTargetSelect?.value || '',
     allow_remote_mutate: !!remoteAllowMutate?.checked,
+    notify_platforms: notifyFeishu?.checked ? ['feishu'] : [],
   });
 
   if (!result?.ok) {

@@ -54,6 +54,7 @@ from feishu_gateway_store import (
     get_scope,
     is_event_processed,
     mark_event_processed,
+    list_scopes,
     reset_scope,
     save_scope,
 )
@@ -121,6 +122,31 @@ class FeishuGateway:
         ws_log(f"handle_event: 已接受，创建后台任务处理消息")
         asyncio.create_task(self._handle_message(config, message))
         return {"ok": True, "accepted": True}
+
+    async def notify_session_complete(self, title: str, summary: str, model: str, cost_usd: float = 0) -> None:
+        """向所有活跃飞书聊天发送 GUI 会话完成通知。"""
+        config = get_feishu_gateway_config(redact=False)
+        if not config.get("enabled") or not config.get("complete_notify", True):
+            return
+        scopes = list_scopes()
+        if not scopes:
+            return
+        cost_info = f" (${cost_usd:.4f})" if cost_usd > 0 else ""
+        text = (
+            f"GUI 会话已完成{cost_info}\n"
+            f"标题：{title[:60]}\n"
+            f"模型：{model}\n"
+            + (f"摘要：{summary[:200]}" if summary else "")
+        ).strip()
+        ws_log(f"notify_session_complete: 发送完成通知到 {len(scopes)} 个聊天")
+        for scope in scopes:
+            chat_id = scope.get("chat_id")
+            if not chat_id:
+                continue
+            try:
+                await self._send_reply(config, chat_id, text)
+            except Exception as exc:
+                ws_log(f"notify_session_complete: 发送到 {chat_id} 失败: {exc}")
 
     async def reset_scope(self, chat_id: str) -> bool:
         scope_key = self._scope_key(chat_id)
