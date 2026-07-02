@@ -48,6 +48,7 @@ from config_manager import (
 from session_store import list_sessions, save_session, add_session_usage, delete_session, load_session_history, rename_session, update_session_cwd, toggle_pin
 from artifact_store import list_artifacts as list_artifact_records
 from memory_index import list_memory_files, search_memory, get_memory_file, delete_memory_file, save_memory_file, index_memory, get_memory_tree, get_memory_graph
+import wiki_store
 # 飞书模块延迟加载 — 避免 lark_oapi SDK 拖慢 server 启动
 class _LazyFeishu:
     """延迟导入飞书相关模块。首次访问任意属性时自动触发 import。"""
@@ -2481,6 +2482,50 @@ async def handle_api_get(path: str, writer: asyncio.StreamWriter, query: dict = 
         query = query or {}
         cwd = query.get("cwd", [DEFAULT_CWD])[0] or DEFAULT_CWD
         data = get_memory_graph(cwd)
+    # ── 全局 Wiki API ─────────────────────────────────────────────────
+    elif path == "/api/wiki/search":
+        query = query or {}
+        q = query.get("q", [""])[0] or ""
+        limit = int(query.get("limit", ["20"])[0])
+        offset = int(query.get("offset", ["0"])[0])
+        mem_type = query.get("type", [""])[0] or ""
+        project = query.get("project", [""])[0] or ""
+        data = wiki_store.search(q, limit=limit, offset=offset, mem_type=mem_type, project=project)
+    elif path == "/api/wiki/node":
+        query = query or {}
+        node_id = query.get("id", [""])[0] or ""
+        if not node_id:
+            data = {"error": "id 参数必填"}
+        else:
+            node = wiki_store.get_node(node_id)
+            data = node if node else {"error": "节点不存在"}
+    elif path == "/api/wiki/neighbors":
+        query = query or {}
+        node_id = query.get("id", [""])[0] or ""
+        depth = int(query.get("depth", ["2"])[0])
+        data = {"neighbors": wiki_store.get_neighbors(node_id, depth=depth)}
+    elif path == "/api/wiki/graph":
+        query = query or {}
+        mem_type = query.get("type", [""])[0] or ""
+        project = query.get("project", [""])[0] or ""
+        limit = int(query.get("limit", ["200"])[0])
+        data = wiki_store.get_graph(mem_type=mem_type, project=project, limit=limit)
+    elif path == "/api/wiki/hot":
+        query = query or {}
+        limit = int(query.get("limit", ["20"])[0])
+        mem_type = query.get("type", [""])[0] or ""
+        data = {"hot": wiki_store.get_hot_nodes(limit=limit, mem_type=mem_type)}
+    elif path == "/api/wiki/stats":
+        data = wiki_store.get_stats()
+    elif path == "/api/wiki/index":
+        count = wiki_store.index_all(force=True)
+        data = {"count": count, "ok": count >= 0}
+    elif path == "/api/wiki/context":
+        query = query or {}
+        q = query.get("q", [""])[0] or ""
+        max_tokens = int(query.get("max_tokens", ["4000"])[0])
+        depth = int(query.get("depth", ["1"])[0])
+        data = {"context": wiki_store.retrieve_context(q, max_tokens=max_tokens, depth=depth)}
     elif path == "/api/scheduled-tasks":
         data = {"tasks": scheduled_task_store.list_tasks()}
     elif path == "/api/feishu-gateway/config":
@@ -3013,43 +3058,6 @@ async def send_response(writer: asyncio.StreamWriter, status: int, content_type:
     await writer.drain()
 
 
-async def run_server(port: int = DEFAULT_PORT, cleanup_old_servers: bool = True):
-    if cleanup_old_servers:
-        cleanup_existing_app_servers()
-
-    # 恢复上次选中的 CLI（启动时 _current_cli 默认是第一个检测到的，这里覆盖为用户上次的选择）
-    saved_cli = get_gui_settings().get("cli_path", "")
-    if saved_cli and saved_cli in [c["path"] for c in get_available_clis()]:
-        set_current_cli(saved_cli)
-
-    server = await asyncio.start_server(handle_http, HOST, port)
-
-    # 如果之前已启用飞书 WebSocket 模式，启动时自动重连（延迟到 server 就绪后执行）
-    _f.ws_log("server.py: 启动时调用 ensure_ws_running()")
-    get_feishu_gateway().ensure_ws_running()
-
-    local_url = f"http://{BROWSER_HOST}:{port}"
-    lan_urls = [f"http://{ip}:{port}" for ip in get_lan_ips()]
-
-    print(f"[CC Bridge] Server running at {local_url}")
-    for lan_url in lan_urls:
-        print(f"[CC Bridge] LAN access: {lan_url}")
-    if not lan_urls:
-        print("[CC Bridge] LAN access: no LAN IPv4 address detected")
-    print(f"[CC Bridge] Press Ctrl+C to stop")
-
-    # 自动打开浏览器（仅当显式设置环境变量时启用）
-    if os.environ.get("CCB_GUI_OPEN_BROWSER") == "1":
-        import webbrowser
-        webbrowser.open(local_url)
-
-    async with server:
-        try:
-            await server.serve_forever()
-        except asyncio.CancelledError:
-            pass
-
-
 async def main():
     global scheduled_runner
     cleanup_existing_app_servers()
@@ -3094,6 +3102,12 @@ async def main():
     # 如果之前已启用飞书 WebSocket 模式，启动时自动重连
     _f.ws_log("server.py: 启动时调用 ensure_ws_running()")
     get_feishu_gateway().ensure_ws_running()
+
+    # 启动时同步全局 wiki 索引
+    wiki_store.init_wiki_db()
+    wiki_indexed = wiki_store.index_all()
+    if wiki_indexed >= 0:
+        print(f"[CC Bridge] Wiki indexed: {wiki_indexed} nodes")
 
     async with server:
         try:
