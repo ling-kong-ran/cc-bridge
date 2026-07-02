@@ -146,6 +146,7 @@
   "feishuGatewaySaved": "Feishu gateway config saved",
   "feishuGatewaySaveFailed": "Failed to save Feishu gateway config: {message}",
   "feishuGatewayUnavailable": "Gateway unavailable: {message}",
+  "feishuQrcodeUnavailable": "QR code library not installed (offline/intranet), use manual config below.",
   "feishuGatewayNoScopes": "No Feishu chat sessions yet",
   "feishuGatewayScope": "Feishu scope",
   "feishuLastActive": "Last active",

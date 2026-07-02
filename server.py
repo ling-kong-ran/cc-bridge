@@ -49,6 +49,13 @@ from artifact_store import list_artifacts as list_artifact_records
 from memory_index import list_memory_files, search_memory, get_memory_file, delete_memory_file, save_memory_file, index_memory, get_memory_tree, get_memory_graph
 from feishu_gateway import FeishuGateway, FEISHU_GATEWAY_AVAILABLE, FEISHU_GATEWAY_UNAVAILABLE_REASON
 from feishu_gateway_store import get_feishu_gateway_config, update_feishu_gateway_config, list_scopes as list_feishu_scopes
+
+try:
+    import qrcode
+    import qrcode.image.svg
+    QRCODE_AVAILABLE = True
+except ImportError:
+    QRCODE_AVAILABLE = False
 import remote_manager
 import scheduled_task_store
 from scheduled_task_runner import ScheduledTaskRunner
@@ -2386,16 +2393,18 @@ async def handle_api_get(path: str, writer: asyncio.StreamWriter, query: dict = 
         data = get_feishu_gateway_config(redact=True)
         data["available"] = FEISHU_GATEWAY_AVAILABLE
         data["unavailable_reason"] = FEISHU_GATEWAY_UNAVAILABLE_REASON
+        data["qrcode_available"] = QRCODE_AVAILABLE
     elif path == "/api/feishu-gateway/scopes":
         data = {"scopes": list_feishu_scopes()}
     elif path == "/api/feishu-gateway/qr":
+        if not QRCODE_AVAILABLE:
+            await send_response(writer, 503, "application/json; charset=utf-8", b'{"error":"QR code library not installed"}')
+            return
         query = query or {}
         url = query.get("url", [""])[0]
         if not url:
             await send_response(writer, 400, "application/json; charset=utf-8", b'{"error":"url query parameter required"}')
             return
-        import qrcode
-        import qrcode.image.svg
         qr = qrcode.QRCode(version=None, error_correction=qrcode.constants.ERROR_CORRECT_M, box_size=5, border=3)
         qr.add_data(url)
         qr.make(fit=True)
@@ -2490,6 +2499,7 @@ async def handle_api_post(path: str, body: bytes, writer: asyncio.StreamWriter):
         result = update_feishu_gateway_config(data)
         result["available"] = FEISHU_GATEWAY_AVAILABLE
         result["unavailable_reason"] = FEISHU_GATEWAY_UNAVAILABLE_REASON
+        result["qrcode_available"] = QRCODE_AVAILABLE
         resp = json.dumps(result, ensure_ascii=False).encode("utf-8")
         await send_response(writer, 200, "application/json; charset=utf-8", resp)
         return

@@ -146,6 +146,7 @@
   "feishuGatewaySaved": "飞书网关配置已保存",
   "feishuGatewaySaveFailed": "飞书网关配置保存失败: {message}",
   "feishuGatewayUnavailable": "网关不可用: {message}",
+  "feishuQrcodeUnavailable": "QR 二维码库未安装（离线/内网环境），请使用下方手动配置。",
   "feishuGatewayNoScopes": "暂无飞书聊天会话",
   "feishuGatewayScope": "飞书 scope",
   "feishuLastActive": "最后活跃",

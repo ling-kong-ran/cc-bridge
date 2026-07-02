@@ -1133,10 +1133,16 @@ async function loadFeishuGateway() {
 
 function updateFeishuQR() {
   const img = document.getElementById('feishu-qr-image');
+  if (!img) return;
+  if (!feishuGatewayConfig?.qrcode_available) {
+    img.style.display = 'none';
+    return;
+  }
+  img.style.display = '';
   const eventUrlInput = document.getElementById('feishu-event-url');
   const fullUrl = eventUrlInput?.value || '/api/feishu-gateway/events';
   const absoluteUrl = fullUrl.startsWith('http') ? fullUrl : location.origin + fullUrl;
-  if (img) img.src = `/api/feishu-gateway/qr?url=${encodeURIComponent(absoluteUrl)}`;
+  img.src = `/api/feishu-gateway/qr?url=${encodeURIComponent(absoluteUrl)}`;
 }
 
 async function loadFeishuGatewayConfig() {
@@ -1266,10 +1272,19 @@ function renderFeishuGatewayStatus(config, error = '') {
   if (label) label.textContent = t(statusKey);
   if (quickLabel) quickLabel.textContent = t(enabled ? 'connected' : 'gatewayQuickConnect');
   if (overallLabel) overallLabel.textContent = t(statusKey);
+  const qrcodeAvailable = !!config?.qrcode_available;
+  const qrBox = document.querySelector('.feishu-qr-box');
+  const scanTitle = document.querySelector('.feishu-scan-card h3');
+  if (qrBox) qrBox.style.display = qrcodeAvailable ? '' : 'none';
+  if (scanTitle) scanTitle.style.display = qrcodeAvailable ? '' : 'none';
   if (detail) {
-    detail.textContent = error
-      ? t(detailKey, { message: error })
-      : t(detailKey);
+    if (!qrcodeAvailable) {
+      detail.textContent = t('feishuQrcodeUnavailable');
+    } else {
+      detail.textContent = error
+        ? t(detailKey, { message: error })
+        : t(detailKey);
+    }
   }
   if (overallDetail) {
     overallDetail.textContent = error
