@@ -773,39 +773,9 @@ html.light-theme .select {
   gap: 18px;
 }
 
-.sessions-header {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 18px;
-  flex-shrink: 0;
-}
-
-.sessions-kicker {
-  font-size: 10px;
-  color: var(--text-ghost);
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-  margin-bottom: 4px;
-}
-
-.sessions-header h2 {
-  margin: 0;
-  color: var(--text-bright);
-  font-size: 22px;
-  line-height: 1.2;
-}
-
 .sessions-header .btn-primary {
   width: auto;
   flex-shrink: 0;
-}
-
-.sessions-header p {
-  margin: 4px 0 0;
-  color: var(--text-muted);
-  font-size: 12px;
-  max-width: 640px;
 }
 
 .sessions-toolbar {
@@ -4052,7 +4022,12 @@ html.light-theme body.resizing-workspace-pane .workspace-pane-resizer::after {
 }
 
 .integrations-header,
-.memory-header {
+.memory-header,
+.sessions-header,
+.skills-header,
+.artifacts-header,
+.scheduled-header,
+.feishu-gateway-header {
   display: flex;
   align-items: flex-end;
   justify-content: space-between;
@@ -4060,10 +4035,16 @@ html.light-theme body.resizing-workspace-pane .workspace-pane-resizer::after {
   margin-bottom: 18px;
   padding-bottom: 14px;
   border-bottom: 1px solid var(--border-dim);
+  flex-shrink: 0;
 }
 
 .integrations-kicker,
-.memory-kicker {
+.memory-kicker,
+.sessions-kicker,
+.skills-kicker,
+.artifacts-kicker,
+.scheduled-kicker,
+.feishu-gateway-kicker {
   font-family: var(--font-mono);
   font-size: 10px;
   letter-spacing: 0.14em;
@@ -4073,7 +4054,12 @@ html.light-theme body.resizing-workspace-pane .workspace-pane-resizer::after {
 }
 
 .integrations-header h2,
-.memory-header h2 {
+.memory-header h2,
+.sessions-header h2,
+.skills-header h2,
+.artifacts-header h2,
+.scheduled-header h2,
+.feishu-gateway-header h2 {
   margin: 0;
   font-family: var(--font-retro);
   font-size: 30px;
@@ -4365,7 +4351,12 @@ html.light-theme .memory-list-panel {
 }
 
 html.light-theme .integrations-header,
-html.light-theme .memory-header {
+html.light-theme .memory-header,
+html.light-theme .sessions-header,
+html.light-theme .skills-header,
+html.light-theme .artifacts-header,
+html.light-theme .scheduled-header,
+html.light-theme .feishu-gateway-header {
   border-bottom-color: rgba(var(--accent-rgb), 0.16);
 }
 
@@ -4382,7 +4373,12 @@ html.light-theme .memory-file-snippet {
   }
 
   .integrations-header,
-  .memory-header {
+  .memory-header,
+  .sessions-header,
+  .skills-header,
+  .artifacts-header,
+  .scheduled-header,
+  .feishu-gateway-header {
     align-items: flex-start;
     flex-direction: column;
   }
@@ -5476,9 +5472,7 @@ html.light-theme .agent-status-bar {
     padding: 18px 12px;
   }
 
-  .sessions-header,
   .sessions-toolbar,
-  .skills-header,
   .skills-toolbar {
     flex-direction: column;
     align-items: stretch;
@@ -5896,35 +5890,6 @@ html.light-theme .agent-status-bar {
   gap: 18px;
 }
 
-.skills-header {
-  min-height: 78px;
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 16px;
-}
-
-.skills-kicker {
-  color: var(--green);
-  font-size: 11px;
-  text-transform: uppercase;
-  letter-spacing: .18em;
-  margin-bottom: 6px;
-}
-
-.skills-header h2 {
-  margin: 0 0 6px;
-  color: var(--text-bright);
-  font-size: 28px;
-  line-height: 1.2;
-}
-
-.skills-header p {
-  margin: 0;
-  color: var(--text-dim);
-  line-height: 1.5;
-  max-width: 680px;
-}
 
 .skills-toolbar {
   min-height: 42px;
@@ -6205,33 +6170,6 @@ html.light-theme .btn-danger {
   flex-direction: column;
   gap: 18px;
 }
-
-.artifacts-header,
-.scheduled-header,
-.feishu-gateway-header {
-  min-height: 78px;
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 16px;
-}
-
-.artifacts-kicker,
-.scheduled-kicker,
-.feishu-gateway-kicker {
-  color: var(--green);
-  font-size: 11px;
-  text-transform: uppercase;
-  letter-spacing: .18em;
-  margin-bottom: 6px;
-}
-
-.artifacts-header h2,
-.scheduled-header h2,
-.feishu-gateway-header h2 { margin: 0 0 6px; font-size: 28px; }
-.artifacts-header p,
-.scheduled-header p,
-.feishu-gateway-header p { margin: 0; color: var(--text-dim); line-height: 1.5; }
 
 .artifacts-toolbar {
   min-height: auto;
@@ -6842,9 +6780,6 @@ html.light-theme .btn-danger {
   .artifacts-shell,
   .scheduled-shell,
   .feishu-gateway-shell { padding: 20px; }
-  .artifacts-header,
-  .scheduled-header,
-  .feishu-gateway-header { min-height: 0; }
   .artifacts-toolbar { align-items: stretch; flex-direction: column; }
   .artifacts-search { max-width: none; }
   .scheduled-layout { grid-template-columns: 1fr; }
