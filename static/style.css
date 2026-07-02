@@ -4010,7 +4010,19 @@ html.light-theme body.resizing-workspace-pane .workspace-pane-resizer::after {
 .integrations-page.active,
 .memory-page.active { display: flex; }
 
-.integrations-shell,
+/* — integrations: fixed-height shell, panels scroll independently — */
+.integrations-shell {
+  flex: 1;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  max-width: 1180px;
+  margin: 0 auto;
+  padding: 28px 36px;
+  box-sizing: border-box;
+}
+
 .memory-shell {
   flex: 1;
   overflow-y: auto;
@@ -4079,13 +4091,27 @@ html.light-theme body.resizing-workspace-pane .workspace-pane-resizer::after {
 }
 
 .integrations-layout {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
   display: grid;
   grid-template-columns: minmax(0, 1.1fr) minmax(0, 0.9fr);
   gap: 14px;
   align-items: stretch;
 }
 
-.integration-panel,
+.integration-panel {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  min-height: 0;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-dim);
+  border-radius: var(--radius-lg);
+  padding: 14px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.12);
+}
+
 .memory-list-panel,
 .memory-side-panel {
   background: var(--bg-surface);
@@ -4103,6 +4129,7 @@ html.light-theme body.resizing-workspace-pane .workspace-pane-resizer::after {
   margin-bottom: 12px;
   padding-bottom: 10px;
   border-bottom: 1px solid var(--border-dim);
+  flex-shrink: 0;
 }
 
 .integration-panel-head h3,
@@ -4119,6 +4146,9 @@ html.light-theme body.resizing-workspace-pane .workspace-pane-resizer::after {
   display: flex;
   flex-direction: column;
   gap: 8px;
+  flex: 1;
+  overflow-y: auto;
+  min-height: 0;
 }
 
 .integration-list .mcp-item,
@@ -4130,6 +4160,7 @@ html.light-theme body.resizing-workspace-pane .workspace-pane-resizer::after {
 
 .integration-form-panel {
   margin-top: 14px;
+  flex-shrink: 0;
 }
 
 .integration-form-grid {
