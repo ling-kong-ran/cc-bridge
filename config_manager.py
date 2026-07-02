@@ -599,21 +599,29 @@ def delete_agent(name: str) -> bool:
 
 
 def get_available_models() -> list[str]:
-    """获取可用模型列表"""
-    env = get_env_config()
+    """获取可用模型列表（聚合当前配置 + 所有已保存方案）。"""
     models = []
 
-    # 从环境变量中提取已配置的模型
-    for key, value in env.items():
-        if "MODEL" in key and value:
-            models.append(str(value).strip())
+    def _collect(env_dict: dict):
+        for key, value in env_dict.items():
+            if key.upper().find("MODEL") >= 0 and value:
+                models.append(str(value).strip())
+
+    # 从当前环境变量中提取
+    _collect(get_env_config())
+
+    # 从所有已保存的方案中提取（跨方案模型选择）
+    for profile in get_env_profiles().get("profiles", {}).values():
+        _collect(profile.get("env", {}))
 
     # 确保有默认模型
     if not models:
         models = ["claude-opus-4-6", "claude-sonnet-4-6", "claude-haiku-4-6"]
 
-    unique_models = []
-    for model in models:
-        if model and model not in unique_models:
-            unique_models.append(model)
-    return unique_models
+    seen = set()
+    unique = []
+    for m in models:
+        if m not in seen:
+            seen.add(m)
+            unique.append(m)
+    return unique
