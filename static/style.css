@@ -6187,11 +6187,24 @@ html.light-theme .btn-danger {
 .feishu-gateway-page { overflow: hidden; }
 
 .artifacts-shell,
-.scheduled-shell,
 .feishu-gateway-shell {
   flex: 1;
   min-height: 0;
   overflow-y: auto;
+  width: 100%;
+  max-width: 1120px;
+  margin: 0 auto;
+  padding: 28px 36px;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.scheduled-shell {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
   width: 100%;
   max-width: 1120px;
   margin: 0 auto;
@@ -6360,6 +6373,9 @@ html.light-theme .btn-danger {
 .artifact-actions { display: flex; flex-wrap: wrap; gap: 6px; justify-content: flex-end; }
 
 .scheduled-layout {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(320px, 420px);
   gap: 18px;
@@ -6367,8 +6383,22 @@ html.light-theme .btn-danger {
 }
 
 .scheduled-list-card,
-.scheduled-form-card { padding: 16px; }
-.scheduled-task-list { display: flex; flex-direction: column; gap: 12px; }
+.scheduled-form-card {
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  min-height: 0;
+}
+.scheduled-form-card { overflow-y: auto; }
+.scheduled-task-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  flex: 1;
+  overflow-y: auto;
+  min-height: 0;
+}
 .scheduled-task-item {
   border: 1px solid var(--border-dim);
   background: var(--bg-deep);
