@@ -2485,6 +2485,7 @@ def make_owner_event_handler(client_id: str, run_id: str, session, model: str, c
                     err_msg = event.get("message", "")
                     asyncio.create_task(_notify_gui_complete(title, model, platforms, error=err_msg))
         elif evt_type in ("assistant", "stream_event", "system", "model_changed"):
+            _track_response_text(event, client_id)
             await push_event(client_id, evt_type, event)
 
     return on_event

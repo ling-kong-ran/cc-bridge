@@ -75,7 +75,7 @@ function initWikiGraph() {
 
   var canvas = document.getElementById("wiki-graph-canvas");
   if (!canvas) {
-    var container = document.querySelector(".memory-list-panel");
+    var container = document.getElementById("memory-graph-panel");
     if (!container) return;
     canvas = document.createElement("canvas");
     canvas.id = "wiki-graph-canvas";

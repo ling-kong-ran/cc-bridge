@@ -660,13 +660,6 @@
           </header>
           <div class="memory-toolbar">
             <div class="memory-toolbar-row memory-toolbar-top">
-              <div class="memory-view-toggle">
-                <button class="view-toggle-btn active" data-view="graph" data-i18n="memoryGraphView">Graph</button>
-                <button class="view-toggle-btn" data-view="list" data-i18n="memoryListView">List</button>
-                <button class="view-toggle-btn" data-view="wiki" data-i18n="memoryWikiView">Wiki Tree</button>
-              </div>
-              <input id="memory-search-input" type="search" class="input" placeholder="Search memory..." data-i18n-placeholder="searchMemory">
-              <button id="btn-memory-index" class="btn-mini" type="button" data-i18n="indexMemory">Index</button>
               <button id="btn-memory-import" class="btn-mini" type="button" data-i18n="importMemory">Import</button>
               <button id="btn-memory-organize" class="btn-mini" type="button" data-i18n="organizeMemory">Organize</button>
               <button id="btn-memory-new" class="btn-mini" type="button">+ <span data-i18n="newMemory">New</span></button>
@@ -683,17 +676,6 @@
                 <button id="btn-graph-reset" class="btn-mini" type="button" data-i18n="resetView">Reset</button>
               </div>
             </div>
-            <aside id="memory-tree-panel" class="memory-tree-panel" style="display:none">
-              <div id="memory-tree" class="memory-tree">
-                <p class="empty-state" data-i18n="loading">Loading...</p>
-              </div>
-            </aside>
-            <section class="memory-list-panel" style="display:none">
-              <div id="memory-list" class="memory-file-list">
-                <p class="empty-state" data-i18n="loading">Loading...</p>
-              </div>
-              <div id="memory-article-view" style="display:none"></div>
-            </section>
           </div>
         </div>
       </div>
