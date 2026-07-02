@@ -1,6 +1,6 @@
 // Memory 浏览与编辑
 let memoryFilesCache = [];
-var currentMemoryView = "list";
+var currentMemoryView = "graph";
 var memoryTreeCache = null;
 
 function currentCwdParam() {
@@ -102,8 +102,12 @@ async function loadMemoryFiles() {
   try {
     const resp = await fetch(`/api/memory/files?${currentCwdParam()}`);
     memoryFilesCache = await resp.json();
-    renderMemoryFiles(memoryFilesCache);
     updateMemoryStatus(memoryFilesCache);
+    if (currentMemoryView !== 'graph') {
+      renderMemoryFiles(memoryFilesCache);
+    } else if (typeof initWikiGraph === 'function') {
+      initWikiGraph();
+    }
   } catch (e) {
     console.error('Memory load failed:', e);
   }
