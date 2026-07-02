@@ -2394,9 +2394,13 @@ async def handle_api_get(path: str, writer: asyncio.StreamWriter, query: dict = 
         if not url:
             await send_response(writer, 400, "application/json; charset=utf-8", b'{"error":"url query parameter required"}')
             return
-        from qrcode_gen import generate_qr_svg
-        svg = generate_qr_svg(url)
-        resp = svg.encode("utf-8")
+        import qrcode
+        import qrcode.image.svg
+        qr = qrcode.QRCode(version=None, error_correction=qrcode.constants.ERROR_CORRECT_M, box_size=5, border=3)
+        qr.add_data(url)
+        qr.make(fit=True)
+        img = qr.make_image(image_factory=qrcode.image.svg.SvgImage)
+        resp = img.to_string()
         await send_response(writer, 200, "image/svg+xml; charset=utf-8", resp)
         return
     elif path == "/api/remote-targets":
