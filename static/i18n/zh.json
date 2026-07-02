@@ -114,7 +114,7 @@
   "feishuGatewayEnabledHint": "消息接收已开启，飞书消息可以进入 Claude Code。",
   "feishuGatewayEnableToggle": "接收飞书消息",
   "feishuGatewayScanTitle": "扫码连接飞书",
-  "feishuGatewayScanHint": "打开飞书扫一扫，完成连接后即可从飞书对话 Claude Code。",
+  "feishuGatewayScanHint": "使用飞书扫码打开事件订阅地址，将其粘贴到飞书应用的事件订阅配置中。",
   "feishuGatewayCopyEventUrl": "复制事件地址",
   "feishuGatewayManualConfig": "手动配置",
   "feishuGatewayManualConfigHint": "无法扫码时，再填写应用凭据和事件订阅地址。",

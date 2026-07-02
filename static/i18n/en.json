@@ -114,7 +114,7 @@
   "feishuGatewayEnabledHint": "Message receiving is on. Feishu messages can now reach Claude Code.",
   "feishuGatewayEnableToggle": "Receive Feishu messages",
   "feishuGatewayScanTitle": "Scan to connect Feishu",
-  "feishuGatewayScanHint": "Open Feishu and scan the code to connect, then chat with Claude Code from Feishu.",
+  "feishuGatewayScanHint": "Scan with Feishu to open the event subscription URL. Paste this URL in your Feishu app's event subscription settings.",
   "feishuGatewayCopyEventUrl": "Copy event URL",
   "feishuGatewayManualConfig": "Manual config",
   "feishuGatewayManualConfigHint": "Use this only when scan connection is unavailable.",

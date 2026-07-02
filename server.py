@@ -2388,6 +2388,17 @@ async def handle_api_get(path: str, writer: asyncio.StreamWriter, query: dict = 
         data["unavailable_reason"] = FEISHU_GATEWAY_UNAVAILABLE_REASON
     elif path == "/api/feishu-gateway/scopes":
         data = {"scopes": list_feishu_scopes()}
+    elif path == "/api/feishu-gateway/qr":
+        query = query or {}
+        url = query.get("url", [""])[0]
+        if not url:
+            await send_response(writer, 400, "application/json; charset=utf-8", b'{"error":"url query parameter required"}')
+            return
+        from qrcode_gen import generate_qr_svg
+        svg = generate_qr_svg(url)
+        resp = svg.encode("utf-8")
+        await send_response(writer, 200, "image/svg+xml; charset=utf-8", resp)
+        return
     elif path == "/api/remote-targets":
         data = {"targets": remote_manager.list_targets(), "password_supported": remote_manager.password_supported()}
     elif path == "/api/sessions":
@@ -2434,6 +2445,14 @@ async def handle_api_get(path: str, writer: asyncio.StreamWriter, query: dict = 
         ct = MIME_TYPES.get(ext, "application/octet-stream")
         await send_response(writer, 200, ct, fp.read_bytes())
         return
+    elif path == "/api/feishu-gateway/events":
+        data = {
+            "ok": True,
+            "endpoint": "Feishu event subscription",
+            "method": "POST",
+            "description": "Configure this URL in your Feishu open platform app's event subscription settings.",
+            "event_types": ["im.message.receive_v1"],
+        }
     else:
         await send_response(writer, 404, "application/json", b'{"error":"not found"}')
         return

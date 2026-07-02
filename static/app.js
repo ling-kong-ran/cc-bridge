@@ -1128,6 +1128,15 @@ function initFeishuGatewayUI() {
 
 async function loadFeishuGateway() {
   await Promise.all([loadFeishuGatewayConfig(), loadFeishuGatewayScopes()]);
+  updateFeishuQR();
+}
+
+function updateFeishuQR() {
+  const img = document.getElementById('feishu-qr-image');
+  const eventUrlInput = document.getElementById('feishu-event-url');
+  const fullUrl = eventUrlInput?.value || '/api/feishu-gateway/events';
+  const absoluteUrl = fullUrl.startsWith('http') ? fullUrl : location.origin + fullUrl;
+  if (img) img.src = `/api/feishu-gateway/qr?url=${encodeURIComponent(absoluteUrl)}`;
 }
 
 async function loadFeishuGatewayConfig() {
