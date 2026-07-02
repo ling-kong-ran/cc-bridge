@@ -260,6 +260,97 @@ def get_memory_file(filename: str, cwd: str) -> dict[str, Any] | None:
     return _parse_memory_file(file_path)
 
 
+def _extract_wikilinks(body: str) -> list[str]:
+    """Extract [[wikilink]] targets from markdown body.
+
+    Supports [[target]] and [[target|alias]] syntax.
+    Returns deduplicated list of link target names (not aliases).
+    """
+    if not body:
+        return []
+    # Match [[...]] with optional |alias
+    pattern = re.compile(r"\[\[([^\[\]]+?)(?:\|([^\[\]]*?))?\]\]")
+    matches = pattern.findall(body)
+    seen = set()
+    result = []
+    for target, _ in matches:
+        target = target.strip()
+        if target and target not in seen:
+            seen.add(target)
+            result.append(target)
+    return result
+
+
+def get_memory_graph(cwd: str) -> dict:
+    """Build a knowledge graph from memory .md files.
+
+    Scans all .md files, parses frontmatter and body,
+    extracts [[wikilinks]] from body, and builds a node/edge structure.
+
+    Returns:
+        {"nodes": [{id, name, title, size, file}], "edges": [{source, target}]}
+    """
+    memory_dir = _get_memory_dir(cwd)
+    if not memory_dir.exists():
+        return {"nodes": [], "edges": []}
+
+    nodes = []
+    stem_to_node = {}
+
+    for md_file in sorted(memory_dir.rglob("*.md")):
+        parsed = _parse_memory_file(md_file)
+        if not parsed:
+            continue
+        node_id = parsed["name"]
+        stem = Path(node_id).stem
+        nodes.append({
+            "id": node_id,
+            "name": node_id,
+            "title": parsed["title"],
+            "size": parsed["size"],
+            "file": parsed["file"],
+        })
+        stem_to_node[stem] = node_id
+
+    edges = []
+    seen_edges = set()
+
+    for md_file in memory_dir.rglob("*.md"):
+        parsed = _parse_memory_file(md_file)
+        if not parsed:
+            continue
+        source_id = parsed["name"]
+        source_stem = Path(source_id).stem
+        wikilinks = _extract_wikilinks(parsed.get("body", ""))
+
+        for target_link in wikilinks:
+            target_stem = Path(target_link).stem
+            target_id = stem_to_node.get(target_stem)
+            if not target_id:
+                target_candidate = target_link if target_link.endswith(".md") else f"{target_link}.md"
+                if target_candidate in stem_to_node.values():
+                    target_id = target_candidate
+
+            if not target_id:
+                for s, nid in stem_to_node.items():
+                    if target_stem.lower() in s.lower() or s.lower() in target_stem.lower():
+                        target_id = nid
+                        break
+
+            if not target_id or target_id == source_id:
+                continue
+
+            edge_key = f"{source_stem}->{Path(target_id).stem}"
+            if edge_key not in seen_edges:
+                seen_edges.add(edge_key)
+                edges.append({
+                    "source": source_id,
+                    "target": target_id,
+                })
+
+    return {"nodes": nodes, "edges": edges}
+
+
 def delete_memory_file(filename: str, cwd: str) -> bool:
     """删除 memory 文件（重命名为 .bak）。"""
     memory_dir = _get_memory_dir(cwd)
@@ -287,6 +378,45 @@ def delete_memory_file(filename: str, cwd: str) -> bool:
         except sqlite3.Error:
             pass
     return True
+
+
+def get_memory_tree(cwd):
+    """Return memory directory tree structure for /api/memory/tree."""
+    memory_dir = _get_memory_dir(cwd)
+    if not memory_dir.exists():
+        return []
+
+    def _build_tree(path):
+        items = []
+        try:
+            entries = sorted(path.iterdir(), key=lambda p: (not p.is_dir(), p.name.lower()))
+        except OSError:
+            return []
+        for entry in entries:
+            if entry.name.startswith(".") or entry.suffix == ".bak":
+                continue
+            if entry.is_dir():
+                children = _build_tree(entry)
+                items.append({
+                    "type": "dir",
+                    "name": entry.name,
+                    "title": entry.name,
+                    "path": str(entry.relative_to(memory_dir).as_posix()),
+                    "children": children,
+                })
+            elif entry.suffix == ".md":
+                parsed = _parse_memory_file(entry)
+                items.append({
+                    "type": "file",
+                    "name": entry.name,
+                    "title": parsed.get("title", entry.stem) if parsed else entry.stem,
+                    "path": str(entry.relative_to(memory_dir).as_posix()),
+                    "updated_at": entry.stat().st_mtime if entry.exists() else 0,
+                    "size": entry.stat().st_size if entry.exists() else 0,
+                })
+        return items
+
+    return _build_tree(memory_dir)
 
 
 def save_memory_file(filename: str, content: str, cwd: str) -> dict[str, Any] | None:

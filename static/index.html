@@ -317,20 +317,24 @@
             <div>
               <div class="artifacts-kicker" data-i18n="artifactsKicker">Session outputs</div>
               <h2 data-i18n="artifacts">Artifacts</h2>
-              <p data-i18n="artifactsSubtitle">Images, files, and links found in recent assistant and tool outputs.</p>
             </div>
             <button id="btn-artifacts-refresh" class="btn-mini" type="button" data-i18n="refresh">Refresh</button>
           </header>
           <div class="artifacts-toolbar">
-            <div class="artifacts-tabs" role="tablist">
-              <button class="artifacts-tab active" data-filter="all" type="button" data-i18n="all">All</button>
-              <button class="artifacts-tab" data-filter="image" type="button" data-i18n="images">Images</button>
-              <button class="artifacts-tab" data-filter="file" type="button" data-i18n="files">Files</button>
-              <button class="artifacts-tab" data-filter="link" type="button" data-i18n="links">Links</button>
+            <div class="artifacts-toolbar-top">
+              <div class="artifacts-tabs" role="tablist">
+                <button class="artifacts-tab active" data-filter="all" type="button" data-i18n="all">All</button>
+                <button class="artifacts-tab" data-filter="image" type="button" data-i18n="images">Images</button>
+                <button class="artifacts-tab" data-filter="file" type="button" data-i18n="files">Files</button>
+                <button class="artifacts-tab" data-filter="link" type="button" data-i18n="links">Links</button>
+              </div>
+              <input id="artifacts-search" class="input artifacts-search" type="search" placeholder="Search artifacts..." data-i18n-placeholder="artifactsSearchPlaceholder">
+              <button id="btn-artifacts-organize" class="btn-mini" type="button" title="整理所有资产到 Wiki">📖 <span data-i18n="organizeToWiki">整理入 Wiki</span></button>
             </div>
-            <input id="artifacts-search" class="input artifacts-search" type="search" placeholder="Search artifacts..." data-i18n-placeholder="artifactsSearchPlaceholder">
+            <div class="artifacts-toolbar-bottom">
+              <span id="artifacts-summary" class="artifacts-summary"></span>
+            </div>
           </div>
-          <div id="artifacts-summary" class="artifacts-summary"></div>
           <div id="artifacts-content" class="artifacts-content"></div>
         </div>
       </div>
@@ -623,24 +627,41 @@
               <p data-i18n="memorySubtitle">Browse, search, and edit the memory files available to Claude Code.</p>
             </div>
           </header>
-          <div class="memory-layout">
-            <section class="memory-list-panel">
-              <div class="memory-toolbar">
-                <input id="memory-search-input" type="search" class="input" placeholder="Search memory..." data-i18n-placeholder="searchMemory">
-                <button id="btn-memory-index" class="btn-mini" type="button" data-i18n="indexMemory">Index</button>
+          <div class="memory-toolbar">
+            <div class="memory-toolbar-row memory-toolbar-top">
+              <div class="memory-view-toggle">
+                <button class="view-toggle-btn active" data-view="list" data-i18n="memoryListView">List</button>
+                <button class="view-toggle-btn" data-view="wiki" data-i18n="memoryWikiView">Wiki Tree</button>
+                <button class="view-toggle-btn" data-view="graph" data-i18n="memoryGraphView">Graph</button>
               </div>
+              <input id="memory-search-input" type="search" class="input" placeholder="Search memory..." data-i18n-placeholder="searchMemory">
+              <button id="btn-memory-index" class="btn-mini" type="button" data-i18n="indexMemory">Index</button>
+              <button id="btn-memory-new" class="btn-mini" type="button">+ <span data-i18n="newMemory">New</span></button>
+              <button id="btn-dream" class="btn-save" type="button"><span class="btn-prefix">&#9733;</span> <span data-i18n="dream">/dream</span></button>
+            </div>
+            <div class="memory-toolbar-row memory-toolbar-status">
+              <span id="memory-status-info" class="memory-status-info"></span>
+            </div>
+          </div>
+          <div class="memory-layout">
+            <aside id="memory-tree-panel" class="memory-tree-panel" style="display:none">
+              <div id="memory-tree" class="memory-tree">
+                <p class="empty-state" data-i18n="loading">Loading...</p>
+              </div>
+            </aside>
+            <section class="memory-list-panel">
               <div id="memory-list" class="memory-file-list">
                 <p class="empty-state" data-i18n="loading">Loading...</p>
               </div>
+              <div id="memory-article-view" style="display:none"></div>
             </section>
-            <aside class="memory-side-panel">
-              <div class="memory-side-title" data-i18n="memoryActionsTitle">Memory actions</div>
-              <p data-i18n="memoryActionsSubtitle">Create a note manually or ask Claude to summarize the current project context.</p>
-              <div class="memory-actions">
-                <button id="btn-memory-new" class="btn-mini" type="button">+ <span data-i18n="newMemory">New</span></button>
-                <button id="btn-dream" class="btn-save" type="button"><span class="btn-prefix">&#9733;</span> <span data-i18n="dream">/dream</span></button>
+            <div id="memory-graph-panel" class="memory-graph-panel" style="display:none">
+              <canvas id="wiki-graph-canvas"></canvas>
+              <div class="graph-controls">
+                <span id="graph-zoom-level">100%</span>
+                <button id="btn-graph-reset" class="btn-mini" type="button" data-i18n="resetView">Reset</button>
               </div>
-            </aside>
+            </div>
           </div>
         </div>
       </div>
@@ -1218,6 +1239,7 @@
   <div id="toast-container" class="toast-container"></div>
   <script src="/static/artifacts.js"></script>
   <script src="/static/memory.js"></script>
+  <script src="/static/wiki-graph.js"></script>
   <script src="/static/app.js"></script>
 </body>
 </html>

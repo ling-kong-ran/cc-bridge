@@ -46,7 +46,7 @@ from config_manager import (
 )
 from session_store import list_sessions, save_session, add_session_usage, delete_session, load_session_history, rename_session, update_session_cwd, toggle_pin
 from artifact_store import list_artifacts as list_artifact_records
-from memory_index import list_memory_files, search_memory, get_memory_file, delete_memory_file, save_memory_file, index_memory
+from memory_index import list_memory_files, search_memory, get_memory_file, delete_memory_file, save_memory_file, index_memory, get_memory_tree, get_memory_graph
 from feishu_gateway import FeishuGateway, FEISHU_GATEWAY_AVAILABLE, FEISHU_GATEWAY_UNAVAILABLE_REASON
 from feishu_gateway_store import get_feishu_gateway_config, update_feishu_gateway_config, list_scopes as list_feishu_scopes
 import remote_manager
@@ -2372,6 +2372,14 @@ async def handle_api_get(path: str, writer: asyncio.StreamWriter, query: dict = 
         cwd = query.get("cwd", [DEFAULT_CWD])[0] or DEFAULT_CWD
         count = index_memory(cwd, force=True)
         data = {"count": count, "ok": count >= 0}
+    elif path == "/api/memory/tree":
+        query = query or {}
+        cwd = query.get("cwd", [DEFAULT_CWD])[0] or DEFAULT_CWD
+        data = {"tree": get_memory_tree(cwd)}
+    elif path == "/api/memory/graph":
+        query = query or {}
+        cwd = query.get("cwd", [DEFAULT_CWD])[0] or DEFAULT_CWD
+        data = get_memory_graph(cwd)
     elif path == "/api/scheduled-tasks":
         data = {"tasks": scheduled_task_store.list_tasks()}
     elif path == "/api/feishu-gateway/config":
