@@ -2212,7 +2212,7 @@ body.pane-right-collapsed .chat-sidebar {
   gap: 4px;
   padding: 3px;
   border: 1px solid var(--border-dim);
-  border-radius: 999px;
+  border-radius: var(--radius-sm);
   background: color-mix(in srgb, var(--bg-deep) 76%, transparent);
 }
 
