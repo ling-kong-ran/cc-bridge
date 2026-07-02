@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this is
 
-A lightweight web GUI that wraps the `ccb` / `claude` Claude Code CLI. The backend is pure Python standard library (no third-party packages, no web framework); the frontend is static HTML/CSS/vanilla JavaScript with no build step. The primary target platform is Windows.
+A lightweight web GUI that wraps the `ccb` / `claude` Claude Code CLI. The backend is mostly Python standard library with a few third-party deps (`qrcode`, `lark-oapi`, `paramiko` in `requirements.txt`) and no web framework; the frontend is static HTML/CSS/vanilla JavaScript with no build step. The primary target platform is Windows.
 
 ## Running
 
