@@ -4082,18 +4082,23 @@ html.light-theme body.resizing-workspace-pane .workspace-pane-resizer::after {
   display: grid;
   grid-template-columns: minmax(0, 1.1fr) minmax(0, 0.9fr);
   gap: 14px;
-  align-items: start;
+  align-items: stretch;
 }
 
-.integration-panel,
-.memory-list-panel,
-.memory-side-panel {
+.integration-panel {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  min-height: 0;
   background: var(--bg-surface);
   border: 1px solid var(--border-dim);
   border-radius: var(--radius-lg);
   padding: 14px;
   box-shadow: 0 2px 8px rgba(0,0,0,0.12);
 }
+
+.memory-list-panel,
+.memory-side-panel {
 
 .integration-panel-head {
   display: flex;
@@ -4103,6 +4108,7 @@ html.light-theme body.resizing-workspace-pane .workspace-pane-resizer::after {
   margin-bottom: 12px;
   padding-bottom: 10px;
   border-bottom: 1px solid var(--border-dim);
+  flex-shrink: 0;
 }
 
 .integration-panel-head h3,
@@ -4119,6 +4125,9 @@ html.light-theme body.resizing-workspace-pane .workspace-pane-resizer::after {
   display: flex;
   flex-direction: column;
   gap: 8px;
+  flex: 1;
+  overflow-y: auto;
+  min-height: 0;
 }
 
 .integration-list .mcp-item,
