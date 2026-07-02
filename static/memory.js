@@ -338,6 +338,8 @@ function initMemoryUI() {
     });
   }
   document.getElementById('btn-memory-index')?.addEventListener('click', indexMemoryFiles);
+  document.getElementById('btn-memory-import')?.addEventListener('click', () => openFilePicker(handleMemoryImport));
+  document.getElementById('btn-memory-organize')?.addEventListener('click', organizeMemoryLinks);
   document.getElementById('btn-memory-new')?.addEventListener('click', () => openMemoryEditor());
   document.getElementById('memory-modal-close')?.addEventListener('click', closeMemoryModal);
   document.getElementById('memory-modal-overlay')?.addEventListener('click', (e) => {
@@ -369,4 +371,73 @@ function initMemoryUI() {
       closeMemoryEditor();
     }
   });
+}
+
+async function handleMemoryImport(selectedItems) {
+  const serverPaths = selectedItems.filter(item => item.source === 'server').map(item => item.path);
+  const clientFiles = selectedItems.filter(item => item.source === 'client' || item.source === 'local');
+
+  let imported = 0;
+  // 服务端文件：发送路径列表
+  if (serverPaths.length > 0) {
+    try {
+      const resp = await fetch('/api/memory/import', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ paths: serverPaths, cwd: cwdInput.value.trim() || '' }),
+      });
+      const data = await resp.json();
+      if (data.ok) imported += data.imported.length;
+    } catch (e) {
+      console.error('Memory import failed:', e);
+    }
+  }
+  // 客户端文件：逐个上传
+  for (const item of clientFiles) {
+    if (item._file) {
+      try {
+        const fd = new FormData();
+        fd.append('file', item._file);
+        fd.append('cwd', cwdInput.value.trim() || '');
+        const resp = await fetch('/api/memory/upload', { method: 'POST', body: fd });
+        const data = await resp.json();
+        if (data.ok) imported++;
+      } catch (e) {
+        console.error('Memory upload failed:', e);
+      }
+    }
+  }
+
+  if (imported > 0) {
+    showToast(t('importMemorySuccess', { count: imported }), 'success');
+    await indexMemoryFiles();
+  } else {
+    showToast(t('importMemoryEmpty'), 'error');
+  }
+}
+
+async function organizeMemoryLinks() {
+  const btn = document.getElementById('btn-memory-organize');
+  if (btn) btn.disabled = true;
+  try {
+    const resp = await fetch('/api/memory/organize', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ cwd: cwdInput.value.trim() || '' }),
+    });
+    const data = await resp.json();
+    if (data.linked > 0) {
+      showToast(t('organizeMemorySuccess', { linked: data.linked }), 'success');
+      await indexMemoryFiles();
+      if (typeof initWikiGraph === 'function') initWikiGraph();
+    } else if (data.skipped > 0) {
+      showToast(t('noMemoryResults'), 'info');
+    } else {
+      showToast(t('noMemoryResults'), 'info');
+    }
+  } catch (e) {
+    console.error('Organize memory failed:', e);
+  } finally {
+    if (btn) btn.disabled = false;
+  }
 }

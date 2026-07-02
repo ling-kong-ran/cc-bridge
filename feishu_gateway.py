@@ -123,21 +123,40 @@ class FeishuGateway:
         asyncio.create_task(self._handle_message(config, message))
         return {"ok": True, "accepted": True}
 
-    async def notify_session_complete(self, title: str, summary: str, model: str, cost_usd: float = 0) -> None:
+    async def notify_session_complete(self, title: str, summary: str, model: str, cost_usd: float = 0, prompt: str = "", lang: str = "zh", elapsed: float = 0) -> None:
         """向所有活跃飞书聊天发送 GUI 会话完成通知。"""
         config = get_feishu_gateway_config(redact=False)
-        if not config.get("enabled") or not config.get("complete_notify", True):
+        if not config.get("enabled"):
+            ws_log("notify_session_complete: 网关未启用，跳过")
+            return
+        if not config.get("complete_notify", True):
+            ws_log("notify_session_complete: complete_notify=false，跳过")
             return
         scopes = list_scopes()
         if not scopes:
+            ws_log("notify_session_complete: scopes 为空，无通知目标")
             return
+        is_en = lang == "en"
+        header = "Notification" if is_en else "通知"
+        q_label = "Q" if is_en else "问"
+        a_label = "A" if is_en else "答"
+        model_label = "Model" if is_en else "模型"
+        elapsed_label = "Duration" if is_en else "耗时"
         cost_info = f" (${cost_usd:.4f})" if cost_usd > 0 else ""
-        text = (
-            f"GUI 会话已完成{cost_info}\n"
-            f"标题：{title[:60]}\n"
-            f"模型：{model}\n"
-            + (f"摘要：{summary[:200]}" if summary else "")
-        ).strip()
+        parts = [f"**{header}**{cost_info}"]
+        if prompt:
+            parts.append(f"\n**{q_label}**\n{prompt}")
+        if summary:
+            parts.append(f"\n**{a_label}**\n{summary}")
+        parts.append(f"\n{model_label}：{model}")
+        if elapsed > 0:
+            if elapsed < 60:
+                parts.append(f"  |  {elapsed_label}：{elapsed:.0f}s")
+            else:
+                m = int(elapsed // 60)
+                s = int(elapsed % 60)
+                parts.append(f"  |  {elapsed_label}：{m}m{s}s")
+        text = "\n".join(parts).strip()
         ws_log(f"notify_session_complete: 发送完成通知到 {len(scopes)} 个聊天")
         for scope in scopes:
             chat_id = scope.get("chat_id")

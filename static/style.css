@@ -3330,6 +3330,14 @@ html.light-theme body.resizing-workspace-pane .workspace-pane-resizer::after {
   white-space: nowrap;
 }
 
+.drag-hint {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--text-ghost);
+  letter-spacing: 0.03em;
+  user-select: none;
+}
+
 .input-status-item::before {
   content: '';
   display: inline-block;
@@ -3430,7 +3438,7 @@ html.light-theme body.resizing-workspace-pane .workspace-pane-resizer::after {
   padding: 10px 13px;
   font-size: 13px; font-family: var(--font-mono);
   color: var(--text-bright); resize: none; outline: none;
-  min-height: 42px; max-height: 200px; line-height: 1.55;
+  min-height: 60px; max-height: 240px; line-height: 1.55;
   transition: all var(--t-fast); letter-spacing: 0.02em;
 }
 
@@ -4482,7 +4490,7 @@ html.light-theme body.resizing-workspace-pane .workspace-pane-resizer::after {
 .memory-graph-panel {
   position: relative;
   width: 100%;
-  min-height: 400px;
+  min-height: 80vh;
   background: var(--bg-deep);
   border: 1px solid var(--border-dim);
   border-radius: var(--radius-lg);
@@ -4494,7 +4502,7 @@ html.light-theme body.resizing-workspace-pane .workspace-pane-resizer::after {
   width: 100%;
   height: 100%;
   cursor: grab;
-  min-height: 400px;
+  min-height: 80vh;
 }
 
 .graph-controls {
@@ -6224,6 +6232,44 @@ html.light-theme .agent-status-bar {
   color: var(--text-base);
   border-color: var(--border);
   background: var(--bg-hover);
+}
+
+/* ─── 通用 Modal 组件 (components.js) ─────────────────────── */
+.modal-content {
+  background: var(--bg-surface);
+  color: var(--text-base);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-xl);
+  box-shadow: 0 24px 80px rgba(0,0,0,0.66);
+  animation: modalIn var(--t-base) var(--ease-spring) both;
+  min-width: 320px;
+  max-width: min(600px, calc(100vw - 32px));
+  overflow: hidden;
+}
+
+.modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--border-dim);
+}
+
+.modal-body { padding: 16px 20px; }
+
+.modal-footer { padding: 12px 20px; border-top: 1px solid var(--border-dim); }
+
+.modal-close {
+  width: 28px; height: 28px; border: 1px solid var(--border-dim);
+  border-radius: var(--radius-xs); background: transparent;
+  color: var(--text-muted); cursor: pointer; font-size: 18px; line-height: 1;
+  display: flex; align-items: center; justify-content: center;
+}
+.modal-close:hover { color: var(--text-base); border-color: var(--border); background: var(--bg-hover); }
+
+/* ─── Toast (components.js) ───────────────────────────────── */
+#cc-toast {
+  box-shadow: 0 4px 24px rgba(0,0,0,0.4);
 }
 
 .skill-modal {

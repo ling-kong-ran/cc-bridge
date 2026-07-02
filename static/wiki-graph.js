@@ -22,6 +22,29 @@ var wikiGraphEdges = [];       // {source, target}
 var wikiGraphSimulation = null; // requestAnimationFrame id
 var wikiGraphIteration = 0;
 var wikiGraphStable = false;
+var _lastGraphNodePositions = {}; // 内存缓存：上次模拟收敛后的节点位置 {id: {x, y}}
+var _graphSaveTimer = 0;       // debounce timer for localStorage save
+
+// ─── 位置持久化（localStorage）────────────────────────────────
+function _graphStorageKey() {
+  var cwd = "";
+  try { cwd = (typeof cwdInput !== "undefined" && cwdInput) ? cwdInput.value.trim() : ""; } catch(e) {}
+  return "ccb_graph_pos_" + (cwd || "default");
+}
+
+function saveGraphPositions() {
+  if (!wikiGraphNodes || !wikiGraphNodes.length) return;
+  var data = {};
+  wikiGraphNodes.forEach(function(n) { data[n.id] = { x: n.x, y: n.y }; });
+  try { localStorage.setItem(_graphStorageKey(), JSON.stringify(data)); } catch(e) {}
+}
+
+function loadGraphPositions() {
+  try {
+    var raw = localStorage.getItem(_graphStorageKey());
+    return raw ? JSON.parse(raw) : {};
+  } catch(e) { return {}; }
+}
 
 // 交互状态
 var wikiGraphHovered = null;      // hover 的节点 index
@@ -40,10 +63,18 @@ var wikiGraphCanvas = null;
 var wikiGraphCtx = null;
 
 // ─── 初始化 ──────────────────────────────────────────────────
+var _wikiGraphReady = false;
+
 function initWikiGraph() {
+  if (_wikiGraphReady) {
+    // 已初始化，只刷新数据，不重复绑定事件
+    var cwd = getCurrentCwdForGraph();
+    fetchWikiGraphData(cwd);
+    return;
+  }
+
   var canvas = document.getElementById("wiki-graph-canvas");
   if (!canvas) {
-    // 若 canvas 还不存在，创建一个并插入到 memory-list-panel
     var container = document.querySelector(".memory-list-panel");
     if (!container) return;
     canvas = document.createElement("canvas");
@@ -57,18 +88,17 @@ function initWikiGraph() {
   wikiGraphCanvas = canvas;
   wikiGraphCtx = canvas.getContext("2d");
 
-  // 尺寸自适应
   resizeWikiGraphCanvas();
   window.addEventListener("resize", resizeWikiGraphCanvas);
 
-  // 鼠标事件
   canvas.addEventListener("mousedown", onWikiGraphMouseDown);
   canvas.addEventListener("mousemove", onWikiGraphMouseMove);
   canvas.addEventListener("mouseup", onWikiGraphMouseUp);
   canvas.addEventListener("mouseleave", onWikiGraphMouseUp);
   canvas.addEventListener("wheel", onWikiGraphWheel, { passive: false });
 
-  // 从 URL 参数读取 cwd
+  _wikiGraphReady = true;
+
   var cwd = getCurrentCwdForGraph();
   fetchWikiGraphData(cwd);
 }
@@ -119,6 +149,9 @@ function renderGraph(data) {
   // 停止旧模拟
   stopWikiGraphSimulation();
 
+  // 确保尺寸正确（面板可能刚被显示，需要重新读布局）
+  resizeWikiGraphCanvas();
+
   // 计算每个节点的度
   var degreeMap = {};
   edges.forEach(function(e) {
@@ -126,7 +159,6 @@ function renderGraph(data) {
     degreeMap[e.target] = (degreeMap[e.target] || 0) + 1;
   });
 
-  // 构建节点列表，计算半径
   var maxDegree = 1;
   nodes.forEach(function(n) {
     n.degree = degreeMap[n.id] || 0;
@@ -136,11 +168,31 @@ function renderGraph(data) {
   var w = wikiGraphCanvas._width || wikiGraphCanvas.width;
   var h = wikiGraphCanvas._height || wikiGraphCanvas.height;
 
+  // 用节点 id 哈希生成确定性初始坐标，避免每次渲染形状不同
+  function hashString(str) {
+    var h = 0;
+    for (var i = 0; i < str.length; i++) {
+      h = ((h << 5) - h + str.charCodeAt(i)) | 0;
+    }
+    return h;
+  }
+
+  // 查缓存位置：localStorage > 内存缓存 > 哈希生成
+  var storedPositions = loadGraphPositions();
+  // 把 localStorage 数据合并进内存缓存，保证新渲染也能用
+  for (var k in storedPositions) {
+    if (!_lastGraphNodePositions[k]) {
+      _lastGraphNodePositions[k] = storedPositions[k];
+    }
+  }
+  var hasCache = Object.keys(_lastGraphNodePositions).length > 0;
+
   wikiGraphNodes = nodes.map(function(n) {
     var radius = NODE_RADIUS_MIN;
     if (maxDegree > 0 && n.degree > 0) {
       radius = NODE_RADIUS_MIN + (n.degree / maxDegree) * (NODE_RADIUS_MAX - NODE_RADIUS_MIN);
     }
+    var cached = hasCache ? _lastGraphNodePositions[n.id] : null;
     return {
       id: n.id,
       name: n.name,
@@ -148,8 +200,8 @@ function renderGraph(data) {
       size: n.size || 0,
       degree: n.degree,
       radius: radius,
-      x: (Math.random() - 0.5) * w * 0.6,
-      y: (Math.random() - 0.5) * h * 0.6,
+      x: cached ? cached.x : (hashString("x:" + n.id) / 2147483647) * w * 0.45,
+      y: cached ? cached.y : (hashString("y:" + n.id) / 2147483647) * h * 0.45,
       vx: 0,
       vy: 0,
       pinned: false,
@@ -171,17 +223,23 @@ function renderGraph(data) {
 
   // 重置状态
   wikiGraphIteration = 0;
-  wikiGraphStable = false;
   wikiGraphHovered = null;
   wikiGraphDragged = null;
-
-  // 偏移使图居中
   wikiGraphOffsetX = w / 2;
   wikiGraphOffsetY = h / 2;
   wikiGraphScale = 1;
 
-  // 启动模拟
-  startWikiGraphSimulation();
+  // 如果所有节点都有缓存位置且节点集合未变，直接跳过模拟
+  var allCached = nodes.length > 0 && wikiGraphNodes.every(function(n) {
+    return !!_lastGraphNodePositions[n.id];
+  });
+  if (allCached && Object.keys(_lastGraphNodePositions).length === nodes.length) {
+    wikiGraphStable = true;
+  } else {
+    wikiGraphStable = false;
+    startWikiGraphSimulation();
+  }
+  drawWikiGraph();
 }
 
 // ─── 力模拟 ──────────────────────────────────────────────────
@@ -253,6 +311,12 @@ function stepWikiGraphSimulation() {
   var avgVelocity = totalVelocity / n;
   if (avgVelocity < VELOCITY_THRESHOLD || wikiGraphIteration >= MAX_ITERATIONS) {
     wikiGraphStable = true;
+    // 缓存最终位置到内存和 localStorage
+    _lastGraphNodePositions = {};
+    nodes.forEach(function(node) {
+      _lastGraphNodePositions[node.id] = { x: node.x, y: node.y };
+    });
+    saveGraphPositions();
   }
 
   drawWikiGraph();
@@ -475,7 +539,6 @@ function onWikiGraphMouseUp(e) {
   if (wikiGraphDragged !== null) {
     wikiGraphDragged = null;
     wikiGraphCanvas.style.cursor = "grab";
-    // 仅当在鼠标按下位置没有发生显著移动时才视为点击打开文件
     if (!wikiGraphDragDidMove) {
       var pos = wikiGraphGetCanvasPos(e);
       var idx = wikiGraphFindNodeAt(pos.x, pos.y);
@@ -485,6 +548,9 @@ function onWikiGraphMouseUp(e) {
           viewMemoryFile(node.name || node.id);
         }
       }
+    } else {
+      // 拖拽结束，保存新位置
+      saveGraphPositions();
     }
     e.preventDefault();
     return;

@@ -566,5 +566,12 @@
   "feishuOnboardFailed": "Registration failed: ",
   "feishuConnectionMode": "Connection mode",
   "feishuConnectionWs": "WebSocket (recommended, no public URL needed)",
-  "feishuConnectionWebhook": "Webhook (requires reachable HTTP endpoint)"
+  "feishuConnectionWebhook": "Webhook (requires reachable HTTP endpoint)",
+  "dragDropHint": "Drag & drop files to attach",
+  "importMemory": "Import",
+  "importMemoryFiles": "Import memory files",
+  "importMemorySuccess": "Imported {count} files",
+  "importMemoryEmpty": "No files selected",
+  "organizeMemory": "Organize",
+  "organizeMemorySuccess": "Linked {linked} node pairs"
 }

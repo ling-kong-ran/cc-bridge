@@ -5,6 +5,7 @@ Memory Index - 为 Claude Code auto memory 提供轻量 SQLite FTS5 全文检索
 """
 import json
 import re
+import shutil
 import sqlite3
 import time
 from pathlib import Path
@@ -351,6 +352,117 @@ def get_memory_graph(cwd: str) -> dict:
     return {"nodes": nodes, "edges": edges}
 
 
+def organize_memory_links(cwd: str) -> dict:
+    """分析 memory 文件内容相似度，自动为相关文件添加 [[wikilink]] 双向链接。
+
+    返回 {linked: N, skipped: M, pairs: [[source, target], ...]}
+    """
+    memory_dir = _get_memory_dir(cwd)
+    if not memory_dir.exists():
+        return {"linked": 0, "skipped": 0, "pairs": []}
+
+    # 读取所有文件，提取关键短语
+    files_data = {}
+    for md_file in sorted(memory_dir.rglob("*.md")):
+        parsed = _parse_memory_file(md_file)
+        if not parsed:
+            continue
+        title = parsed["title"]
+        body = parsed.get("body", "")
+        # 提取已有 wikilinks 的 target stems
+        existing_links = set()
+        for match in re.finditer(r"\[\[([^\[\]]+?)(?:\|[^\[\]]*?)?\]\]", body):
+            existing_links.add(Path(match.group(1).strip()).stem)
+
+        # 提取关键短语——中文用字符 bigram，英文用词级 token
+        text = (title + " " + body).lower()
+        terms = set()
+
+        # 英文/数字词（2+ 字符）
+        for word in re.findall(r"[a-zA-Z0-9_]{2,}", text):
+            terms.add(word)
+
+        # 中文字符 bigram（"飞书消息" → ["飞书", "书消", "消息"]）
+        cjk_chars = re.findall(r"[\u4e00-\u9fff]", text)
+        for k in range(len(cjk_chars) - 1):
+            terms.add(cjk_chars[k] + cjk_chars[k + 1])
+
+        # 文件名中的词也加入（按分隔符拆分）
+        stem = Path(md_file.name).stem
+        for part in re.split(r"[-_\s]+", stem):
+            if len(part) >= 2:
+                terms.add(part.lower())
+
+        files_data[parsed["name"]] = {
+            "path": md_file,
+            "title": title,
+            "body": body,
+            "terms": terms,
+            "existing_links": existing_links,
+        }
+
+    if len(files_data) < 2:
+        return {"linked": 0, "skipped": 0, "pairs": []}
+
+    # 计算文件对之间的相似度
+    file_names = list(files_data.keys())
+    linked = 0
+    skipped = 0
+    pairs = []
+
+    for i in range(len(file_names)):
+        for j in range(i + 1, len(file_names)):
+            name_a = file_names[i]
+            name_b = file_names[j]
+            data_a = files_data[name_a]
+            data_b = files_data[name_b]
+
+            stem_a = Path(name_a).stem
+            stem_b = Path(name_b).stem
+
+            # 已存在双向链接则跳过
+            if stem_b in data_a["existing_links"] and stem_a in data_b["existing_links"]:
+                skipped += 1
+                continue
+
+            # 计算 Jaccard 相似度
+            terms_a = data_a["terms"]
+            terms_b = data_b["terms"]
+            if not terms_a or not terms_b:
+                continue
+            intersection = terms_a & terms_b
+            union = terms_a | terms_b
+            similarity = len(intersection) / len(union) if union else 0
+
+            # 阈值：中文 bigram 粒度细，用更低阈值（~0.06）
+            if similarity < 0.06:
+                continue
+
+            # 添加双向链接
+            modified = False
+            # 在文件 A 末尾添加链接到 B
+            if stem_b not in data_a["existing_links"]:
+                new_content_a = data_a["body"].rstrip() + f"\n\n[[{stem_b}]]\n"
+                data_a["path"].write_text(new_content_a, encoding="utf-8")
+                data_a["body"] = new_content_a
+                data_a["existing_links"].add(stem_b)
+                modified = True
+
+            # 在文件 B 末尾添加链接到 A
+            if stem_a not in data_b["existing_links"]:
+                new_content_b = data_b["body"].rstrip() + f"\n\n[[{stem_a}]]\n"
+                data_b["path"].write_text(new_content_b, encoding="utf-8")
+                data_b["body"] = new_content_b
+                data_b["existing_links"].add(stem_a)
+                modified = True
+
+            if modified:
+                linked += 1
+                pairs.append([name_a, name_b])
+
+    return {"linked": linked, "skipped": skipped, "pairs": pairs}
+
+
 def delete_memory_file(filename: str, cwd: str) -> bool:
     """删除 memory 文件（重命名为 .bak）。"""
     memory_dir = _get_memory_dir(cwd)
@@ -454,3 +566,30 @@ def save_memory_file(filename: str, content: str, cwd: str) -> dict[str, Any] | 
         print(f"Memory index update failed: {e}")
 
     return _parse_memory_file(file_path)
+
+
+def import_memory_files(paths: list[str], cwd: str) -> list[dict[str, Any]]:
+    """导入服务端文件到 memory 目录，返回成功导入的文件列表。"""
+    memory_dir = _get_memory_dir(cwd)
+    memory_dir.mkdir(parents=True, exist_ok=True)
+    imported = []
+    for src_path in paths:
+        src = Path(src_path)
+        if not src.exists() or not src.is_file():
+            continue
+        try:
+            content = src.read_text(encoding="utf-8")
+        except (OSError, UnicodeDecodeError):
+            continue
+        safe_name = src.name
+        if not safe_name.endswith(".md"):
+            safe_name = safe_name + ".md"
+        dest = memory_dir / safe_name
+        suffix = 1
+        while dest.exists():
+            stem = src.stem
+            dest = memory_dir / f"{stem}_{suffix}.md"
+            suffix += 1
+        dest.write_text(content, encoding="utf-8")
+        imported.append({"name": dest.name, "size": len(content), "source": str(src)})
+    return imported

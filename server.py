@@ -379,6 +379,7 @@ async def revoke_lan_clients():
             await session_manager.remove_session(client_id)
         client_meta.pop(client_id, None)
         client_last_msg.pop(client_id, None)
+        client_response_buf.pop(client_id, None)
         client_session_ids.pop(client_id, None)
         client_session_agents.pop(client_id, None)
         owned_sid = {sid for sid, oid in session_owner.items() if oid == client_id}
@@ -395,6 +396,15 @@ sse_clients: dict[str, asyncio.Queue] = {}
 
 # 每个 client 的最后一条用户消息（用于会话标题）
 client_last_msg: dict[str, str] = {}
+
+# 每个 client 当前轮的助手回复文本（用于通知摘要）
+client_response_buf: dict[str, str] = {}
+
+# 每个 client 最后一条完整用户消息（用于通知中的"问"）
+client_last_prompt: dict[str, str] = {}
+
+# 每个 client 当前轮的启动时间（用于通知耗时）
+client_start_time: dict[str, float] = {}
 
 # 每个 client 关联的 ccb session id
 client_session_ids: dict[str, str] = {}
@@ -1896,7 +1906,10 @@ async def handle_action(body: bytes, writer: asyncio.StreamWriter):
         run_id, session = session_manager.create_session(client_id)
         session.session_id = resume_id
 
+        old_notify = data.get("notify_platforms") or (client_meta.get(client_id) or {}).get("notify_platforms", [])
         client_meta[client_id] = {"model": model, "cwd": cwd, "remote_target_id": remote_target_id, "cli": cli}
+        if old_notify:
+            client_meta[client_id]["notify_platforms"] = old_notify
         client_session_ids[client_id] = resume_id
         session_owner[resume_id] = client_id  # 恢复会话时直接设置归属，因为 session_id_captured 不会对已 resume 的 session 重复触发
         session_run_ids[resume_id] = run_id
@@ -1940,7 +1953,10 @@ async def handle_action(body: bytes, writer: asyncio.StreamWriter):
                 "remote_target_id": old_meta.get("remote_target_id", ""),
             })
 
+        _notified = False
+
         async def on_event_resume(event: dict):
+            nonlocal _notified
             evt_type = event.get("type", "unknown")
             sid = event.get("session_id") or resume_id
             if sid and "session_id" not in event:
@@ -1962,6 +1978,14 @@ async def handle_action(body: bytes, writer: asyncio.StreamWriter):
             elif evt_type == "result":
                 await push_event(client_id, evt_type, persist_result_usage(client_id, event))
                 await release_session_lock_for_session(sid, client_id)
+                # 常驻进程模式下 process_ended 不触发，在 result 中发送通知
+                if not _notified:
+                    _notified = True
+                    platforms = (client_meta.get(client_id, {}) or {}).get("notify_platforms", [])
+                    if platforms:
+                        title = client_last_msg.get(client_id, "")
+                        prompt, s, elapsed = _notify_summary(client_id)
+                        asyncio.create_task(_notify_gui_complete(title, model, platforms, summary=s, prompt=prompt, elapsed=elapsed))
             elif evt_type == "user":
                 results = extract_tool_results(event)
                 if results:
@@ -1977,13 +2001,28 @@ async def handle_action(body: bytes, writer: asyncio.StreamWriter):
                 session_manager.finish_run(run_id)
                 if sid and session_run_ids.get(sid) == run_id:
                     session_run_ids.pop(sid, None)
+                if not _notified:
+                    _notified = True
+                    platforms = (client_meta.get(client_id, {}) or {}).get("notify_platforms", [])
+                    if platforms:
+                        title = client_last_msg.get(client_id, "")
+                        prompt, s, elapsed = _notify_summary(client_id)
+                        asyncio.create_task(_notify_gui_complete(title, model, platforms, summary=s, prompt=prompt, elapsed=elapsed))
             elif evt_type == "error":
                 await push_event(client_id, evt_type, event)
                 await release_session_lock_for_session(sid, client_id)
                 session_manager.finish_run(run_id)
                 if sid and session_run_ids.get(sid) == run_id:
                     session_run_ids.pop(sid, None)
+                if not _notified:
+                    _notified = True
+                    platforms = (client_meta.get(client_id, {}) or {}).get("notify_platforms", [])
+                    if platforms:
+                        title = client_last_msg.get(client_id, "")
+                        err_msg = event.get("message", "")
+                        asyncio.create_task(_notify_gui_complete(title, model, platforms, error=err_msg))
             elif evt_type in ("assistant", "stream_event", "system", "model_changed"):
+                _track_response_text(event, client_id)
                 await push_event(client_id, evt_type, event)
             # 其他事件忽略
 
@@ -2051,9 +2090,14 @@ async def handle_action(body: bytes, writer: asyncio.StreamWriter):
                 meta["cli"] = data.get("cli")
             if "remote_target_id" in data:
                 meta["remote_target_id"] = data.get("remote_target_id") or ""
+            if "notify_platforms" in data:
+                meta["notify_platforms"] = data.get("notify_platforms") or []
             client_meta[client_id] = meta
 
+            _notified = False
+
             async def on_takeover_event(event: dict):
+                nonlocal _notified
                 evt_type = event.get("type", "unknown")
                 sid = event.get("session_id") or resume_id
                 if sid and "session_id" not in event:
@@ -2075,6 +2119,14 @@ async def handle_action(body: bytes, writer: asyncio.StreamWriter):
                 elif evt_type == "result":
                     await push_event(client_id, evt_type, persist_result_usage(client_id, event))
                     await release_session_lock_for_session(sid, client_id)
+                    if not _notified:
+                        _notified = True
+                        platforms = (client_meta.get(client_id, {}) or {}).get("notify_platforms", [])
+                        if platforms:
+                            title = client_last_msg.get(client_id, "新会话")
+                            prompt, summary, elapsed = _notify_summary(client_id)
+                            takeover_model = meta.get("model") or requested_model or get_default_model()
+                            asyncio.create_task(_notify_gui_complete(title, takeover_model, platforms, summary=summary, prompt=prompt, elapsed=elapsed))
                 elif evt_type == "user":
                     results = extract_tool_results(event)
                     if results:
@@ -2090,13 +2142,30 @@ async def handle_action(body: bytes, writer: asyncio.StreamWriter):
                     session_manager.finish_run(run_id)
                     if sid and session_run_ids.get(sid) == run_id:
                         session_run_ids.pop(sid, None)
+                    if not _notified:
+                        _notified = True
+                        platforms = (client_meta.get(client_id, {}) or {}).get("notify_platforms", [])
+                        if platforms:
+                            title = client_last_msg.get(client_id, "新会话")
+                            prompt, summary, elapsed = _notify_summary(client_id)
+                            takeover_model = meta.get("model") or requested_model or get_default_model()
+                            asyncio.create_task(_notify_gui_complete(title, takeover_model, platforms, summary=summary, prompt=prompt, elapsed=elapsed))
                 elif evt_type == "error":
                     await push_event(client_id, evt_type, event)
                     await release_session_lock_for_session(sid, client_id)
                     session_manager.finish_run(run_id)
                     if sid and session_run_ids.get(sid) == run_id:
                         session_run_ids.pop(sid, None)
+                    if not _notified:
+                        _notified = True
+                        platforms = (client_meta.get(client_id, {}) or {}).get("notify_platforms", [])
+                        if platforms:
+                            title = client_last_msg.get(client_id, "新会话")
+                            takeover_model = meta.get("model") or requested_model or get_default_model()
+                            err_msg = event.get("message", "")
+                            asyncio.create_task(_notify_gui_complete(title, takeover_model, platforms, error=err_msg))
                 elif evt_type in ("assistant", "stream_event", "system", "model_changed"):
+                    _track_response_text(event, client_id)
                     await push_event(client_id, evt_type, event)
 
             remote_target = remote_manager.get_target(meta.get("remote_target_id") or "")
@@ -2215,6 +2284,9 @@ async def handle_action(body: bytes, writer: asyncio.StreamWriter):
             # 使用最新用户消息作为会话标题
             title = content.strip()[:50]
             client_last_msg[client_id] = title
+            client_last_prompt[client_id] = content.strip()
+            client_start_time[client_id] = time.time()
+            client_response_buf.pop(client_id, None)  # 清除上一轮可能残留的文本
             sid = client_session_ids.get(client_id)
             run_id = session_run_ids.get(sid, "") if sid else ""
             if sid:
@@ -2368,6 +2440,14 @@ def make_owner_event_handler(client_id: str, run_id: str, session, model: str, c
         elif evt_type == "result":
             await push_event(client_id, evt_type, persist_result_usage(client_id, event))
             await release_session_lock_for_session(sid, client_id)
+            # 常驻进程模式下 process_ended 不触发，在 result 中发送通知
+            if not _notified:
+                _notified = True
+                platforms = (client_meta.get(client_id, {}) or {}).get("notify_platforms", [])
+                if platforms:
+                    title = client_last_msg.get(client_id, default_title)
+                    prompt, summary, elapsed = _notify_summary(client_id)
+                    asyncio.create_task(_notify_gui_complete(title, model, platforms, summary=summary, prompt=prompt, elapsed=elapsed))
         elif evt_type == "user":
             results = extract_tool_results(event)
             if results:
@@ -2383,13 +2463,14 @@ def make_owner_event_handler(client_id: str, run_id: str, session, model: str, c
             session_manager.finish_run(run_id)
             if sid and session_run_ids.get(sid) == run_id:
                 session_run_ids.pop(sid, None)
-            # 按会话设定的通知平台发送通知
+            # 通知平台（仅在 result 未触发时生效，作为兜底）
             if not _notified:
                 _notified = True
                 platforms = (client_meta.get(client_id, {}) or {}).get("notify_platforms", [])
                 if platforms:
                     title = client_last_msg.get(client_id, default_title)
-                    asyncio.create_task(_notify_gui_complete(title, model, platforms))
+                    prompt, summary, elapsed = _notify_summary(client_id)
+                    asyncio.create_task(_notify_gui_complete(title, model, platforms, summary=summary, prompt=prompt, elapsed=elapsed))
         elif evt_type == "error":
             await push_event(client_id, evt_type, event)
             await release_session_lock_for_session(sid, client_id)
@@ -2409,13 +2490,38 @@ def make_owner_event_handler(client_id: str, run_id: str, session, model: str, c
     return on_event
 
 
-async def _notify_gui_complete(title: str, model: str, platforms: list, error: str = ""):
+def _track_response_text(event: dict, client_id: str) -> None:
+    """从 stream_event / assistant 事件中提取文本，累积到 client_response_buf。"""
+    inner = event.get("event", event) if isinstance(event.get("event"), dict) else event
+    if inner.get("type") == "content_block_delta":
+        delta = inner.get("delta", {}) if isinstance(inner.get("delta"), dict) else {}
+        t = delta.get("text") or delta.get("thinking") or ""
+        if t:
+            client_response_buf[client_id] = client_response_buf.get(client_id, "") + t
+    elif inner.get("type") == "content_block_start":
+        pass  # 工具调用块开始，跳过
+
+
+def _notify_summary(client_id: str) -> tuple[str, str, float]:
+    """读取并清空 client_response_buf、client_last_prompt 和 client_start_time，返回 (prompt, response, elapsed_seconds)。"""
+    prompt = client_last_prompt.pop(client_id, "")
+    response = client_response_buf.pop(client_id, "").strip()
+    start = client_start_time.pop(client_id, 0)
+    elapsed = time.time() - start if start > 0 else 0
+    return prompt, response, elapsed
+
+
+async def _notify_gui_complete(title: str, model: str, platforms: list, error: str = "", summary: str = "", prompt: str = "", elapsed: float = 0):
     """按平台列表发送 GUI 会话完成通知。"""
     if "feishu" in platforms:
         try:
             gw = get_feishu_gateway()
-            summary = f"执行失败：{error[:150]}" if error else ""
-            await gw.notify_session_complete(title, summary, model)
+            if error:
+                summary = f"执行失败：{error[:200]}"
+                prompt = ""
+            lang = get_gui_settings().get("language", "zh")
+            print(f"[CC Bridge] notify lang={lang} title={title[:30]} prompt_len={len(prompt)} summary_len={len(summary)} elapsed={elapsed:.1f}s")
+            await gw.notify_session_complete(title, summary[:800] if summary else "", model, prompt=prompt[:800] if prompt else "", lang=lang, elapsed=elapsed)
         except Exception:
             pass  # 通知失败不影响主流程
 
@@ -3054,7 +3160,7 @@ async def handle_static(path: str, writer: asyncio.StreamWriter):
     if ext in (".html", ".htm"):
         try:
             text = content.decode("utf-8")
-            for asset in ("app.js", "style.css"):
+            for asset in ("app.js", "style.css", "wiki-graph.js", "memory.js", "components.js"):
                 asset_path = STATIC_DIR / asset
                 if asset_path.exists():
                     ver = int(asset_path.stat().st_mtime)
@@ -3090,9 +3196,9 @@ async def send_response(writer: asyncio.StreamWriter, status: int, content_type:
     await writer.drain()
 
 
-async def main():
+async def main(start_port: int | None = None):
     global scheduled_runner
-    cleanup_existing_app_servers()
+    cleanup_existing_app_servers(start_port=start_port or 17878)
 
     # 恢复上次选中的 CLI（启动时 _current_cli 默认是第一个检测到的，这里覆盖为用户上次的选择）
     saved_cli = get_gui_settings().get("cli_path", "")
@@ -3156,7 +3262,15 @@ async def main():
 
 
 if __name__ == "__main__":
+    import argparse
+    parser = argparse.ArgumentParser(description="CC Bridge Server")
+    parser.add_argument("--port", type=int, default=None, help="指定监听端口（默认从 17878 开始自动选择）")
+    args = parser.parse_args()
+
+    async def _entry():
+        await main(start_port=args.port)
+
     try:
-        asyncio.run(main())
+        asyncio.run(_entry())
     except KeyboardInterrupt:
         print("\n[CC Bridge] Server stopped.")

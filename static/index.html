@@ -253,13 +253,14 @@
                 <button id="btn-attach" class="btn-attach" title="Add File" data-i18n-title="addFile">
                   <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"></path></svg>
                 </button>
-                <textarea id="message-input" placeholder="Type a message... (Enter to send, Shift+Enter for newline)" data-i18n-placeholder="messagePlaceholder" rows="1"></textarea>
+                <textarea id="message-input" placeholder="Type a message... (Enter to send, Shift+Enter for newline)" data-i18n-placeholder="messagePlaceholder" rows="2"></textarea>
                 <div class="input-actions">
                   <button id="btn-send" class="btn-send" disabled data-i18n="send">Send</button>
                   <button id="btn-stop" class="btn-stop" data-i18n="stop">Stop</button>
                 </div>
               </div>
               <div class="input-status-row">
+                <span class="drag-hint" data-i18n="dragDropHint">支持拖拽文件上传</span>
                 <button id="model-pill" class="model-pill" title="Switch Model" data-i18n-title="switchModel"></button>
               </div>
             </div>
@@ -666,6 +667,8 @@
               </div>
               <input id="memory-search-input" type="search" class="input" placeholder="Search memory..." data-i18n-placeholder="searchMemory">
               <button id="btn-memory-index" class="btn-mini" type="button" data-i18n="indexMemory">Index</button>
+              <button id="btn-memory-import" class="btn-mini" type="button" data-i18n="importMemory">Import</button>
+              <button id="btn-memory-organize" class="btn-mini" type="button" data-i18n="organizeMemory">Organize</button>
               <button id="btn-memory-new" class="btn-mini" type="button">+ <span data-i18n="newMemory">New</span></button>
             </div>
             <div class="memory-toolbar-row memory-toolbar-status">
@@ -1266,6 +1269,7 @@
 
   <div id="toast-container" class="toast-container"></div>
   <script src="/static/artifacts.js"></script>
+  <script src="/static/components.js"></script>
   <script src="/static/memory.js"></script>
   <script src="/static/wiki-graph.js"></script>
   <script src="/static/app.js"></script>

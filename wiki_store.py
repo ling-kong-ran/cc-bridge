@@ -264,7 +264,14 @@ def index_all(force: bool = False) -> int:
         # 全量重建
         conn.execute("DELETE FROM wiki_nodes")
         conn.execute("DELETE FROM wiki_links")
-        conn.execute("DELETE FROM wiki_fts")
+        conn.execute("DROP TABLE IF EXISTS wiki_fts")
+        conn.execute("""
+            CREATE VIRTUAL TABLE wiki_fts USING fts5(
+                node_id, title, body, tags,
+                tokenize='unicode61 remove_diacritics 1',
+                content=''
+            )
+        """)
 
         indexed = 0
         for node in nodes:

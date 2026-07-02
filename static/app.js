@@ -846,6 +846,13 @@ function initNotifications() {
       }
     });
   });
+
+  // 网关通知复选框：变化时持久化到 gui_settings
+  if (notifyFeishu) {
+    notifyFeishu.addEventListener('change', () => {
+      applyNotifyFeishuPreference(notifyFeishu.checked, true);
+    });
+  }
 }
 
 function initLanAccessControl() {
@@ -870,6 +877,13 @@ function applyNotificationPreference(enabled, persist = false) {
     notificationsToggle.disabled = !supported;
   }
   if (persist) saveGuiSettings({ notifications_enabled: notificationsEnabled });
+}
+
+function applyNotifyFeishuPreference(enabled, persist = false) {
+  if (notifyFeishu) {
+    notifyFeishu.checked = Boolean(enabled);
+  }
+  if (persist) saveGuiSettings({ notify_feishu: Boolean(enabled) });
 }
 
 function pageIsUnfocused() {
@@ -1959,6 +1973,7 @@ async function loadThemePreference() {
     applyFontSize(size, false);
     await applyLanguage(language, false);
     applyNotificationPreference(Boolean(data.notifications_enabled));
+    applyNotifyFeishuPreference(Boolean(data.notify_feishu));
     accessContext = { isLocalhost: Boolean(data.is_localhost), defaultCwd: data.default_cwd || '' };
     document.body.classList.toggle('pane-right-collapsed', data.right_panel_collapsed === true);
     applyRightPaneWidth(data.right_panel_width);
@@ -1971,6 +1986,7 @@ async function loadThemePreference() {
     applyFontSize(100, false);
     await applyLanguage('en', false);
     applyNotificationPreference(false);
+    applyNotifyFeishuPreference(false);
     applyLanAccessPreference({ is_localhost: false, lan_access_enabled: false });
   }
 }
@@ -4087,6 +4103,16 @@ function initInput() {
   // 附件按钮 —— 打开自定义文件选择器
   btnAttach.addEventListener('click', () => openFilePicker());
   fileInput.addEventListener('change', () => {
+    // 如果在 memory import 模式下，将客户端文件加入待选列表
+    if (filePickerOverlay?.style.display === 'flex' && filePickerCallback) {
+      for (const f of fileInput.files) {
+        const itemPath = `client://${f.name}`;
+        filePickerSelected.set(itemPath, { name: f.name, source: 'client', _file: f });
+      }
+      updateFilePickerCount();
+      fileInput.value = '';
+      return;
+    }
     uploadFiles(fileInput.files);
     fileInput.value = '';
     if (filePickerOverlay?.style.display === 'flex') closeFilePicker();
@@ -4698,6 +4724,7 @@ function createNewSession(cwd) {
     skip_permissions: document.getElementById('skip-permissions').checked,
     remote_target_id: remoteTargetSelect?.value || '',
     allow_remote_mutate: !!remoteAllowMutate?.checked,
+    notify_platforms: notifyFeishu?.checked ? ['feishu'] : [],
   });
   loadSessions();
 }
@@ -7085,6 +7112,7 @@ async function resumeSession(sessionId, cwd, model, savedCost = 0, remoteTargetI
   }
 
   let resumeCwd = cwd || cwdInput.value.trim() || null;
+  const notifyPlatforms = notifyFeishu?.checked ? ['feishu'] : [];
   let result = await sendAction('resume_session', {
     session_id: sessionId,
     model: model || modelSelect.value,
@@ -7093,6 +7121,7 @@ async function resumeSession(sessionId, cwd, model, savedCost = 0, remoteTargetI
     skip_permissions: document.getElementById('skip-permissions').checked,
     remote_target_id: remoteTargetId || '',
     allow_remote_mutate: !!remoteAllowMutate?.checked,
+    notify_platforms: notifyPlatforms,
   });
 
   // 目录无效时，让用户手动指定新目录
@@ -7115,6 +7144,7 @@ async function resumeSession(sessionId, cwd, model, savedCost = 0, remoteTargetI
           skip_permissions: document.getElementById('skip-permissions').checked,
           remote_target_id: remoteTargetId || '',
           allow_remote_mutate: !!remoteAllowMutate?.checked,
+          notify_platforms: notifyPlatforms,
         });
       } else {
         addSystemMsg(t('cwdNotChanged', { message: updateResult.error || t('unknownError') }), true);
@@ -7485,6 +7515,7 @@ let filePickerItems = [];
 let filePickerSearchTimer = null;
 let filePickerSearchSeq = 0;
 let filePickerMode = 'local';
+let filePickerCallback = null;  // 自定义确认回调 (memory import 等)
 
 filePickerClose.addEventListener('click', closeFilePicker);
 filePickerOverlay.addEventListener('click', (e) => {
@@ -7515,12 +7546,16 @@ function getAttachmentSources() {
   return sources;
 }
 
-function openFilePicker() {
+function openFilePicker(callback) {
+  filePickerCallback = callback || null;
   filePickerSelected.clear();
   filePickerSearch.value = '';
   updateFilePickerCount();
   renderFilePickerTabs();
   filePickerOverlay.style.display = 'flex';
+  // 设置 picker 标题
+  const title = filePickerOverlay.querySelector('.picker-title');
+  if (title) title.textContent = callback ? t('importMemoryFiles') : t('chooseAttachment');
   setFilePickerMode(accessContext.isLocalhost ? 'server' : 'client');
 }
 
@@ -7819,6 +7854,14 @@ function getFileIcon(name) {
 
 async function confirmFileSelection() {
   if (filePickerSelected.size === 0) return;
+
+  if (filePickerCallback) {
+    const items = Array.from(filePickerSelected.entries()).map(([path, meta]) => ({ path, ...meta }));
+    await filePickerCallback(items);
+    filePickerCallback = null;
+    closeFilePicker();
+    return;
+  }
 
   for (const [filePath, meta] of filePickerSelected) {
     if (meta.source === 'remote') {

@@ -566,5 +566,12 @@
   "feishuOnboardFailed": "注册失败：",
   "feishuConnectionMode": "连接模式",
   "feishuConnectionWs": "WebSocket（推荐，无需公网 IP）",
-  "feishuConnectionWebhook": "Webhook（需要公网可达的 HTTP 端点）"
+  "feishuConnectionWebhook": "Webhook（需要公网可达的 HTTP 端点）",
+  "dragDropHint": "支持拖拽文件上传",
+  "importMemory": "导入",
+  "importMemoryFiles": "导入记忆文件",
+  "importMemorySuccess": "已导入 {count} 个文件",
+  "importMemoryEmpty": "未选择任何文件",
+  "organizeMemory": "整理",
+  "organizeMemorySuccess": "已为 {linked} 对节点建立链接"
 }
