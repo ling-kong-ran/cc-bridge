@@ -4,6 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>CC Bridge</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%231a1a1a'/%3E%3Ctext x='32' y='40' text-anchor='middle' font-family='Arial,sans-serif' font-size='22' font-weight='700' fill='%23f5f5f5'%3ECC%3C/text%3E%3C/svg%3E">
   <script>
     try {
       var themeCookie = document.cookie.split('; ').find(function (row) {
@@ -29,12 +30,10 @@
       <button class="mobile-menu-toggle" type="button" aria-label="Open menu" aria-expanded="false">
         <span></span><span></span><span></span>
       </button>
-      <button id="btn-sidebar-collapse" class="titlebar-btn" type="button" title="Collapse sidebar" data-i18n-title="collapseSidebar" style="display:none">&lt;</button>
+      <div class="nav-brand titlebar-nav-brand" aria-hidden="true">CC Bridge</div>
       <button id="btn-titlebar-back" class="titlebar-back" type="button" data-i18n="backToChat" style="display:none">← 返回对话</button>
     </div>
     <div id="titlebar-meta" class="titlebar-meta" aria-live="polite" style="display:none">
-      <span class="titlebar-meta-item"><span class="titlebar-meta-key" data-i18n="sessionId">Session</span><button id="topbar-session-id" class="titlebar-meta-value" type="button" title="Copy resume command" data-i18n-title="copyResumeCommand">-</button></span>
-      <span class="titlebar-meta-item"><span class="titlebar-meta-key" data-i18n="cliTool">CLI</span><span id="topbar-cli" class="titlebar-meta-value">-</span></span>
       <span id="topbar-status-summary" class="topbar-status-summary" style="display:none" aria-live="polite">
         <span id="topbar-connection" class="topbar-status-item">-</span>
         <span id="topbar-cost" class="topbar-status-item" style="display:none"><span data-i18n="totalCost">Total Cost</span> $<span id="topbar-cost-value">0.0000</span></span>
@@ -60,9 +59,8 @@
   <div class="app">
     <!-- 侧边栏 -->
     <aside class="sidebar">
-      <!-- Hermes-style vertical navigation -->
+      <!-- 垂直导航 -->
       <nav class="nav" aria-label="Primary navigation">
-        <div class="nav-brand" aria-hidden="true">CCB</div>
         <div class="nav-stack">
           <button class="nav-btn active" data-page="home" title="Home" data-i18n-title="home">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 11l9-8 9 8"></path><path d="M5 10v10h14V10"></path><path d="M9 20v-6h6v6"></path></svg>
@@ -87,6 +85,10 @@
           <button class="nav-btn" data-page="integrations" title="Integrations" data-i18n-title="integrations">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 7H5a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-4"></path><path d="M15 3h6v6"></path><path d="M10 14 21 3"></path></svg>
             <span data-i18n="integrations">Integrations</span>
+          </button>
+          <button class="nav-btn" data-page="feishu-gateway" title="Message Gateway" data-i18n-title="messageGateway">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v4"></path><path d="M12 17v4"></path><path d="M4.2 7.5l3.5 2"></path><path d="M16.3 14.5l3.5 2"></path><path d="M19.8 7.5l-3.5 2"></path><path d="M7.7 14.5l-3.5 2"></path><circle cx="12" cy="12" r="5"></circle><path d="M9.8 11h4.4"></path><path d="M9.8 13h2.6"></path></svg>
+            <span data-i18n="messageGatewayShort">Gateway</span>
           </button>
           <button class="nav-btn" data-page="memory" title="Memory" data-i18n-title="memory">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path><path d="M8 7h8"></path><path d="M8 11h7"></path></svg>
@@ -442,6 +444,171 @@
               <button id="btn-mcp-cancel" class="btn-save" type="button"><span data-i18n="cancel">Cancel</span></button>
             </div>
             <div id="mcp-form-status" class="remote-form-status" style="display:none"></div>
+          </section>
+        </div>
+      </div>
+
+      <!-- 消息网关页 -->
+      <div id="page-feishu-gateway" class="page feishu-gateway-page">
+        <div class="feishu-gateway-shell message-gateway-shell">
+          <header class="feishu-gateway-header message-gateway-header">
+            <div>
+              <div class="feishu-gateway-kicker" data-i18n="messageGatewayKicker">Unified messaging</div>
+              <h2 data-i18n="messageGateway">Message Gateway</h2>
+              <p data-i18n="messageGatewaySubtitle">Connect chat platforms to dedicated Claude Code sessions from one entry point.</p>
+            </div>
+            <div class="feishu-gateway-header-actions">
+              <button id="btn-feishu-gateway-refresh" class="btn-mini" type="button" data-i18n="refresh">Refresh</button>
+            </div>
+          </header>
+
+          <section class="gateway-overview" aria-label="Gateway status">
+            <div class="gateway-status-card">
+              <div class="feishu-status-topline">
+                <span id="message-gateway-overall-dot" class="feishu-status-dot"></span>
+                <span id="message-gateway-overall-label" class="feishu-status-label" data-i18n="gatewayUnconfigured">Unconfigured</span>
+              </div>
+              <div class="gateway-status-title" data-i18n="gatewayOverallStatus">Gateway status</div>
+              <p id="message-gateway-overall-detail" class="gateway-status-detail" data-i18n="gatewayNoPlatformConfigured">No platform has complete required parameters yet.</p>
+            </div>
+          </section>
+
+          <section class="gateway-platform-grid" aria-label="Message platforms">
+            <article id="gateway-platform-card-feishu" class="gateway-platform-card active" data-platform="feishu">
+              <div class="gateway-platform-card-head">
+                <div class="gateway-platform-icon">飞</div>
+                <div>
+                  <h3 data-i18n="feishuPlatform">Feishu</h3>
+                  <div class="feishu-status-topline gateway-card-status">
+                    <span id="feishu-gateway-status-dot" class="feishu-status-dot"></span>
+                    <span id="feishu-gateway-status-label" class="feishu-status-label" data-i18n="gatewayUnconfigured">Unconfigured</span>
+                  </div>
+                </div>
+              </div>
+              <p data-i18n="feishuPlatformDescription">Receive Feishu app messages and reply in the original conversation.</p>
+              <div class="gateway-required-summary" data-i18n="feishuRequiredFieldsSummary">Required: App ID, App Secret</div>
+              <button id="btn-feishu-platform-config" class="btn-mini" type="button" data-i18n="configure">Configure</button>
+            </article>
+
+            <article class="gateway-platform-card coming-soon" data-platform="wechat" aria-disabled="true">
+              <div class="gateway-platform-card-head">
+                <div class="gateway-platform-icon muted">微</div>
+                <div>
+                  <h3 data-i18n="wechatPlatform">WeChat</h3>
+                  <div class="feishu-status-topline gateway-card-status">
+                    <span class="feishu-status-dot"></span>
+                    <span class="feishu-status-label" data-i18n="gatewayComingSoon">Coming soon</span>
+                  </div>
+                </div>
+              </div>
+              <p data-i18n="wechatPlatformDescription">Reserved for future WeChat message access.</p>
+              <div class="gateway-required-summary" data-i18n="gatewayNoRequiredFieldsYet">Required fields will appear when supported.</div>
+              <button class="btn-mini" type="button" disabled data-i18n="gatewayComingSoon">Coming soon</button>
+            </article>
+          </section>
+
+          <section id="gateway-platform-detail-feishu" class="gateway-platform-detail" aria-label="Feishu platform detail">
+            <div class="gateway-detail-head">
+              <div>
+                <div class="feishu-gateway-kicker" data-i18n="gatewayPlatformDetail">Platform detail</div>
+                <h3 data-i18n="feishuPlatform">Feishu</h3>
+              </div>
+              <label class="toggle-label">
+                <span class="toggle-track">
+                  <input type="checkbox" id="feishu-gateway-enabled">
+                  <span class="toggle-indicator"></span>
+                </span>
+                <span class="toggle-text" data-i18n="feishuGatewayEnableToggle">Receive Feishu messages</span>
+              </label>
+            </div>
+
+            <div class="gateway-detail-grid">
+              <section class="feishu-scan-card gateway-quick-connect-card">
+                <div class="feishu-status-topline feishu-scan-status">
+                  <span id="feishu-quick-status-dot" class="feishu-status-dot"></span>
+                  <span id="feishu-quick-status-label" class="feishu-status-label" data-i18n="gatewayQuickConnect">Quick connect</span>
+                </div>
+                <div class="feishu-qr-box" aria-hidden="true">
+                  <div class="feishu-qr-grid">
+                    <span></span><span></span><span></span><span></span><span></span><span></span>
+                    <span></span><span></span><span></span><span></span><span></span><span></span>
+                    <span></span><span></span><span></span><span></span><span></span><span></span>
+                    <span></span><span></span><span></span><span></span><span></span><span></span>
+                  </div>
+                </div>
+                <h3 data-i18n="feishuGatewayScanTitle">Scan to connect Feishu</h3>
+                <p id="feishu-gateway-status-detail" class="feishu-scan-hint" data-i18n="feishuGatewayScanHint">Scan entry is reserved. Fill required fields to enable message receiving.</p>
+                <div class="feishu-scan-links">
+                  <button id="btn-feishu-copy-url" class="link-btn" type="button" data-i18n="feishuGatewayCopyEventUrl">Copy event URL</button>
+                  <a href="#feishu-manual-config" data-i18n="gatewayAdvancedSettings">Advanced settings</a>
+                  <a href="#feishu-gateway-sessions" data-i18n="feishuGatewayViewSessions">Sessions</a>
+                </div>
+                <input id="feishu-event-url" type="hidden" readonly value="/api/feishu-gateway/events">
+              </section>
+
+              <section class="gateway-required-form feishu-gateway-panel">
+                <div class="gateway-required-form-head">
+                  <h3 data-i18n="gatewayRequiredParams">Required parameters</h3>
+                  <p data-i18n="feishuRequiredParamsHint">Only App ID and App Secret are required in the main flow.</p>
+                </div>
+                <div class="feishu-form-grid">
+                  <div class="settings-row">
+                    <label class="field-label" for="feishu-app-id" data-i18n="feishuAppId">App ID</label>
+                    <input id="feishu-app-id" class="input" autocomplete="off" spellcheck="false" placeholder="cli_xxx">
+                  </div>
+                  <div class="settings-row">
+                    <label class="field-label" for="feishu-app-secret" data-i18n="feishuAppSecret">App Secret</label>
+                    <input id="feishu-app-secret" class="input" type="password" autocomplete="off" spellcheck="false">
+                  </div>
+                </div>
+                <button id="btn-feishu-gateway-save" class="btn btn-primary feishu-scan-save" type="button"><span class="btn-prefix">&gt;</span> <span data-i18n="save">Save</span></button>
+                <div id="feishu-gateway-form-status" class="remote-form-status" style="display:none"></div>
+              </section>
+            </div>
+
+            <details id="feishu-manual-config" class="feishu-gateway-panel feishu-advanced-panel">
+              <summary>
+                <span data-i18n="gatewayAdvancedSettings">Advanced settings</span>
+                <small data-i18n="gatewayAdvancedSettingsHint">Event subscription, allowlist, and runtime behavior.</small>
+              </summary>
+              <div class="feishu-copy-row feishu-manual-url-row">
+                <input class="input" readonly value="/api/feishu-gateway/events" aria-label="Event URL">
+              </div>
+              <div class="feishu-form-grid">
+                <div class="settings-row span-all">
+                  <label class="field-label" for="feishu-verification-token" data-i18n="feishuVerificationToken">Verification Token</label>
+                  <input id="feishu-verification-token" class="input" type="password" autocomplete="off" spellcheck="false">
+                </div>
+                <div class="settings-row">
+                  <label class="field-label" for="feishu-busy-mode" data-i18n="feishuBusyMode">Busy mode</label>
+                  <select id="feishu-busy-mode" class="select">
+                    <option value="queue" data-i18n="feishuBusyQueue">Queue new messages</option>
+                    <option value="reject" data-i18n="feishuBusyReject">Reject while running</option>
+                  </select>
+                </div>
+                <div class="settings-row align-top span-all">
+                  <label class="field-label" for="feishu-allowed-users" data-i18n="feishuAllowedUsers">Allowed users</label>
+                  <textarea id="feishu-allowed-users" class="input feishu-textarea" rows="3" spellcheck="false" data-i18n-placeholder="feishuAllowedUsersPlaceholder" placeholder="ou_xxx, ou_yyy"></textarea>
+                </div>
+                <div class="settings-row align-top span-all">
+                  <label class="field-label" for="feishu-allowed-chats" data-i18n="feishuAllowedChats">Allowed chats</label>
+                  <textarea id="feishu-allowed-chats" class="input feishu-textarea" rows="3" spellcheck="false" data-i18n-placeholder="feishuAllowedChatsPlaceholder" placeholder="oc_xxx, oc_yyy"></textarea>
+                </div>
+              </div>
+            </details>
+
+            <details id="feishu-gateway-sessions" class="feishu-gateway-panel feishu-scope-panel">
+              <summary>
+                <span data-i18n="feishuGatewayScopes">Gateway sessions</span>
+                <small data-i18n="feishuGatewayScopesHint">Each Feishu chat keeps an independent Claude Code session until reset.</small>
+              </summary>
+              <div class="feishu-command-list feishu-command-list-inline">
+                <code>/new</code><code>/reset</code><code>/status</code><code>/stop</code>
+              </div>
+              <div id="feishu-gateway-scope-list" class="feishu-scope-list">
+                <p class="empty-state" data-i18n="loading">Loading...</p>
+              </div>
+            </details>
           </section>
         </div>
       </div>

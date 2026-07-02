@@ -47,6 +47,8 @@ from config_manager import (
 from session_store import list_sessions, save_session, add_session_usage, delete_session, load_session_history, rename_session, update_session_cwd, toggle_pin
 from artifact_store import list_artifacts as list_artifact_records
 from memory_index import list_memory_files, search_memory, get_memory_file, delete_memory_file, save_memory_file, index_memory
+from feishu_gateway import FeishuGateway, FEISHU_GATEWAY_AVAILABLE, FEISHU_GATEWAY_UNAVAILABLE_REASON
+from feishu_gateway_store import get_feishu_gateway_config, update_feishu_gateway_config, list_scopes as list_feishu_scopes
 import remote_manager
 import scheduled_task_store
 from scheduled_task_runner import ScheduledTaskRunner
@@ -368,6 +370,9 @@ client_session_agents: dict[str, list] = {}
 # 定时任务后台 runner
 scheduled_runner: ScheduledTaskRunner | None = None
 
+# 飞书消息网关
+feishu_gateway: FeishuGateway | None = None
+
 # 会话共享：记录哪个 client_id 拥有哪个 session_id（owner），以及谁是 viewer
 session_owner: dict[str, str] = {}  # session_id → owner_client_id
 client_viewing: dict[str, str] = {}  # viewer_client_id → owner_client_id
@@ -648,6 +653,13 @@ def artifact_href(value: str) -> str:
 def get_default_model() -> str:
     models = get_available_models()
     return models[0] if models else "claude-sonnet-4-6"
+
+
+def get_feishu_gateway() -> FeishuGateway:
+    global feishu_gateway
+    if feishu_gateway is None:
+        feishu_gateway = FeishuGateway(session_manager, DEFAULT_CWD, get_default_model)
+    return feishu_gateway
 
 
 def format_slash_commands(discovered: dict) -> dict:
@@ -1931,6 +1943,10 @@ async def handle_action(body: bytes, writer: asyncio.StreamWriter):
                 client_session_ids[client_id] = resume_id
 
             run_id, takeover_session = session_manager.create_session(client_id)
+            takeover_session.session_id = resume_id
+            if resume_id:
+                session_run_ids[resume_id] = run_id
+                session_manager.bind_native_session(resume_id, run_id)
             meta = dict(client_meta.get(client_id) or client_meta.get(viewing_owner) or {})
             if requested_model:
                 meta["model"] = requested_model
@@ -2358,6 +2374,12 @@ async def handle_api_get(path: str, writer: asyncio.StreamWriter, query: dict = 
         data = {"count": count, "ok": count >= 0}
     elif path == "/api/scheduled-tasks":
         data = {"tasks": scheduled_task_store.list_tasks()}
+    elif path == "/api/feishu-gateway/config":
+        data = get_feishu_gateway_config(redact=True)
+        data["available"] = FEISHU_GATEWAY_AVAILABLE
+        data["unavailable_reason"] = FEISHU_GATEWAY_UNAVAILABLE_REASON
+    elif path == "/api/feishu-gateway/scopes":
+        data = {"scopes": list_feishu_scopes()}
     elif path == "/api/remote-targets":
         data = {"targets": remote_manager.list_targets(), "password_supported": remote_manager.password_supported()}
     elif path == "/api/sessions":
@@ -2433,6 +2455,47 @@ async def handle_api_post(path: str, body: bytes, writer: asyncio.StreamWriter):
         return
     elif path == "/api/env":
         update_env_config(data)
+    elif path == "/api/feishu-gateway/config":
+        result = update_feishu_gateway_config(data)
+        result["available"] = FEISHU_GATEWAY_AVAILABLE
+        result["unavailable_reason"] = FEISHU_GATEWAY_UNAVAILABLE_REASON
+        resp = json.dumps(result, ensure_ascii=False).encode("utf-8")
+        await send_response(writer, 200, "application/json; charset=utf-8", resp)
+        return
+    elif path == "/api/feishu-gateway/events":
+        if not FEISHU_GATEWAY_AVAILABLE:
+            resp = json.dumps({"ok": False, "error": FEISHU_GATEWAY_UNAVAILABLE_REASON}, ensure_ascii=False).encode("utf-8")
+            await send_response(writer, 503, "application/json; charset=utf-8", resp)
+            return
+        result = await get_feishu_gateway().handle_event(data)
+        status = 200 if result.get("ok", True) else 400
+        resp = json.dumps(result, ensure_ascii=False).encode("utf-8")
+        await send_response(writer, status, "application/json; charset=utf-8", resp)
+        return
+    elif path == "/api/feishu-gateway/reset-scope":
+        scope_key = str(data.get("scope_key") or "").strip()
+        chat_id = str(data.get("chat_id") or "").strip()
+        if not chat_id and scope_key.startswith("feishu:chat:"):
+            chat_id = scope_key.removeprefix("feishu:chat:")
+        if not chat_id:
+            await send_response(writer, 400, "application/json", b'{"error":"chat_id required"}')
+            return
+        ok = await get_feishu_gateway().reset_scope(chat_id)
+        resp = json.dumps({"ok": ok}, ensure_ascii=False).encode("utf-8")
+        await send_response(writer, 200, "application/json; charset=utf-8", resp)
+        return
+    elif path == "/api/feishu-gateway/stop-scope":
+        scope_key = str(data.get("scope_key") or "").strip()
+        chat_id = str(data.get("chat_id") or "").strip()
+        if not chat_id and scope_key.startswith("feishu:chat:"):
+            chat_id = scope_key.removeprefix("feishu:chat:")
+        if not chat_id:
+            await send_response(writer, 400, "application/json", b'{"error":"chat_id required"}')
+            return
+        ok = await get_feishu_gateway().stop_scope(chat_id)
+        resp = json.dumps({"ok": ok}, ensure_ascii=False).encode("utf-8")
+        await send_response(writer, 200, "application/json; charset=utf-8", resp)
+        return
     elif path == "/api/mcp-servers":
         try:
             saved = save_mcp_server(data)

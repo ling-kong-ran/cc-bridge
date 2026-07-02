@@ -32,6 +32,8 @@ let sessionOffset = 0;
 let sessionTotal = 0;
 const SESSION_PAGE_SIZE = 50;
 let scheduledTasks = [];
+let feishuGatewayConfig = null;
+let feishuGatewayScopes = [];
 let skillsCache = [];
 let currentSkillDir = '';
 let sidebarCollapsed = false;
@@ -77,16 +79,13 @@ const btnShortcuts = document.getElementById('btn-shortcuts');
 const shortcutsOverlay = document.getElementById('shortcuts-overlay');
 const shortcutsClose = document.getElementById('shortcuts-close');
 const btnExportChat = document.getElementById('btn-export-chat');
-const btnSidebarCollapse = document.getElementById('btn-sidebar-collapse');
 const topbarStatusSummary = document.getElementById('topbar-status-summary');
 const topbarConnection = document.getElementById('topbar-connection');
 const topbarCost = document.getElementById('topbar-cost');
 const topbarCostValue = document.getElementById('topbar-cost-value');
 const topbarTokens = document.getElementById('topbar-tokens');
 const topbarTokenValue = document.getElementById('topbar-token-value');
-const topbarSessionId = document.getElementById('topbar-session-id');
 const topbarModel = document.getElementById('topbar-model');
-const topbarCli = document.getElementById('topbar-cli');
 const btnSessionPin = document.getElementById('btn-session-pin');
 const btnSessionCwd = document.getElementById('btn-session-cwd');
 const btnSessionRename = document.getElementById('btn-session-rename');
@@ -129,7 +128,6 @@ let accessContext = { isLocalhost: true, defaultCwd: '' };
 document.addEventListener('DOMContentLoaded', async () => {
   initTheme();
   initShortcutsHelp();
-  initSidebarCollapse();
   initInterfaceSettings();
   initNotifications();
   initLanAccessControl();
@@ -154,6 +152,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   initMemoryUI();
   initArtifactsUI();
   initScheduledTasksUI();
+  initFeishuGatewayUI();
   initSessionWorkspace();
   loadDefaultCwd();
   loadClis();
@@ -693,17 +692,7 @@ function closeShortcutsHelp() {
 function setSidebarCollapsed(collapsed) {
   sidebarCollapsed = Boolean(collapsed && sessionActive);
   document.body.classList.toggle('sidebar-collapsed', sidebarCollapsed);
-  if (btnSidebarCollapse) {
-    btnSidebarCollapse.style.display = sessionActive ? '' : 'none';
-    btnSidebarCollapse.textContent = sidebarCollapsed ? '>' : '<';
-    btnSidebarCollapse.title = sidebarCollapsed ? t('expandSidebar') : t('collapseSidebar');
-    btnSidebarCollapse.setAttribute('aria-label', btnSidebarCollapse.title);
-  }
   renderTopbarStatusSummary();
-}
-
-function initSidebarCollapse() {
-  btnSidebarCollapse?.addEventListener('click', () => setSidebarCollapsed(!sidebarCollapsed));
 }
 
 function renderTopbarStatusSummary() {
@@ -1125,6 +1114,240 @@ async function runScheduledTask(task) {
   });
   showToast(t('scheduledTaskStarted'), 'info');
   loadScheduledTasks();
+}
+
+// ─── 飞书消息网关 ────────────────────────────────────────────────
+function initFeishuGatewayUI() {
+  document.getElementById('btn-feishu-gateway-refresh')?.addEventListener('click', loadFeishuGateway);
+  document.getElementById('btn-feishu-gateway-save')?.addEventListener('click', saveFeishuGatewayConfig);
+  document.getElementById('btn-feishu-copy-url')?.addEventListener('click', copyFeishuEventUrl);
+  document.getElementById('btn-feishu-platform-config')?.addEventListener('click', () => {
+    document.getElementById('gateway-platform-detail-feishu')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  });
+}
+
+async function loadFeishuGateway() {
+  await Promise.all([loadFeishuGatewayConfig(), loadFeishuGatewayScopes()]);
+}
+
+async function loadFeishuGatewayConfig() {
+  const status = document.getElementById('feishu-gateway-form-status');
+  try {
+    const resp = await fetch('/api/feishu-gateway/config');
+    const data = await resp.json();
+    if (!resp.ok) throw new Error(data.error || resp.statusText);
+    feishuGatewayConfig = data.config || data || {};
+    fillFeishuGatewayConfig(feishuGatewayConfig);
+    renderFeishuGatewayStatus(feishuGatewayConfig);
+    if (status) status.style.display = 'none';
+  } catch (e) {
+    feishuGatewayConfig = null;
+    renderFeishuGatewayStatus(null, e.message);
+    if (status) {
+      status.textContent = t('feishuGatewayLoadFailed');
+      status.style.display = '';
+    }
+  }
+}
+
+async function loadFeishuGatewayScopes() {
+  const list = document.getElementById('feishu-gateway-scope-list');
+  if (!list) return;
+  try {
+    const resp = await fetch('/api/feishu-gateway/scopes');
+    const data = await resp.json();
+    if (!resp.ok) throw new Error(data.error || resp.statusText);
+    feishuGatewayScopes = Array.isArray(data.scopes) ? data.scopes : (Array.isArray(data) ? data : []);
+    renderFeishuGatewayScopes();
+  } catch (e) {
+    feishuGatewayScopes = [];
+    list.innerHTML = `<p class="empty-state error">${esc(t('feishuGatewayScopesLoadFailed'))}</p>`;
+  }
+}
+
+function fillFeishuGatewayConfig(config) {
+  const get = id => document.getElementById(id);
+  const enabled = get('feishu-gateway-enabled');
+  if (enabled) enabled.checked = !!config.enabled;
+  const appId = get('feishu-app-id');
+  if (appId) appId.value = config.app_id || '';
+  const appSecret = get('feishu-app-secret');
+  if (appSecret) appSecret.value = config.app_secret || '';
+  const token = get('feishu-verification-token');
+  if (token) token.value = config.verification_token || '';
+  const busyMode = get('feishu-busy-mode');
+  if (busyMode) busyMode.value = config.busy_mode === 'reject' ? 'reject' : 'queue';
+  const allowedUsers = get('feishu-allowed-users');
+  if (allowedUsers) allowedUsers.value = listToLines(config.allowed_users);
+  const allowedChats = get('feishu-allowed-chats');
+  if (allowedChats) allowedChats.value = listToLines(config.allowed_chats);
+  const eventUrl = get('feishu-event-url');
+  if (eventUrl) eventUrl.value = config.event_url || `${location.origin}/api/feishu-gateway/events`;
+}
+
+function readFeishuGatewayConfig() {
+  return {
+    enabled: !!document.getElementById('feishu-gateway-enabled')?.checked,
+    app_id: document.getElementById('feishu-app-id')?.value.trim() || '',
+    app_secret: document.getElementById('feishu-app-secret')?.value || '',
+    verification_token: document.getElementById('feishu-verification-token')?.value || '',
+    busy_mode: document.getElementById('feishu-busy-mode')?.value === 'reject' ? 'reject' : 'queue',
+    allowed_users: readDelimitedList(document.getElementById('feishu-allowed-users')?.value || ''),
+    allowed_chats: readDelimitedList(document.getElementById('feishu-allowed-chats')?.value || ''),
+  };
+}
+
+async function saveFeishuGatewayConfig() {
+  const payload = readFeishuGatewayConfig();
+  const status = document.getElementById('feishu-gateway-form-status');
+  try {
+    const resp = await fetch('/api/feishu-gateway/config', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    const data = await resp.json();
+    if (!resp.ok) throw new Error(data.error || resp.statusText);
+    feishuGatewayConfig = data.config || data || payload;
+    fillFeishuGatewayConfig(feishuGatewayConfig);
+    renderFeishuGatewayStatus(feishuGatewayConfig);
+    if (status) {
+      status.textContent = t('feishuGatewaySaved');
+      status.style.display = '';
+    }
+    showToast(t('feishuGatewaySaved'), 'success');
+  } catch (e) {
+    if (status) {
+      status.textContent = t('feishuGatewaySaveFailed', { message: e.message || t('unknownError') });
+      status.style.display = '';
+    }
+    showToast(t('feishuGatewaySaveFailed', { message: e.message || t('unknownError') }), 'error');
+  }
+}
+
+function renderFeishuGatewayStatus(config, error = '') {
+  const dots = [
+    document.getElementById('feishu-gateway-status-dot'),
+    document.getElementById('feishu-quick-status-dot'),
+    document.getElementById('message-gateway-overall-dot'),
+  ].filter(Boolean);
+  const label = document.getElementById('feishu-gateway-status-label');
+  const quickLabel = document.getElementById('feishu-quick-status-label');
+  const overallLabel = document.getElementById('message-gateway-overall-label');
+  const detail = document.getElementById('feishu-gateway-status-detail');
+  const overallDetail = document.getElementById('message-gateway-overall-detail');
+  const card = document.getElementById('gateway-platform-card-feishu');
+  const appId = String(config?.app_id || '').trim();
+  const appSecret = String(config?.app_secret || '').trim();
+  const configured = !!(appId && appSecret);
+  const enabled = !!config?.enabled;
+  const statusKey = error ? 'workspaceError' : (enabled ? 'enabled' : (configured ? 'gatewayConfiguredDisabled' : 'gatewayUnconfigured'));
+  const detailKey = error
+    ? 'feishuGatewayUnavailable'
+    : (enabled ? 'feishuGatewayEnabledHint' : (configured ? 'gatewayConfiguredDisabledHint' : 'feishuGatewayDisabledHint'));
+
+  dots.forEach(dot => {
+    dot.classList.toggle('online', enabled && !error);
+    dot.classList.toggle('error', !!error);
+    dot.classList.toggle('ready', configured && !enabled && !error);
+  });
+  card?.classList.toggle('configured', configured);
+  card?.classList.toggle('enabled', enabled && !error);
+  card?.classList.toggle('error', !!error);
+  if (label) label.textContent = t(statusKey);
+  if (quickLabel) quickLabel.textContent = t(enabled ? 'connected' : 'gatewayQuickConnect');
+  if (overallLabel) overallLabel.textContent = t(statusKey);
+  if (detail) {
+    detail.textContent = error
+      ? t(detailKey, { message: error })
+      : t(detailKey);
+  }
+  if (overallDetail) {
+    overallDetail.textContent = error
+      ? t('gatewayOverallError', { message: error })
+      : (enabled ? t('gatewayOverallEnabled') : (configured ? t('gatewayOverallDisabled') : t('gatewayNoPlatformConfigured')));
+  }
+}
+
+function renderFeishuGatewayScopes() {
+  const list = document.getElementById('feishu-gateway-scope-list');
+  if (!list) return;
+  if (!feishuGatewayScopes.length) {
+    list.innerHTML = `<p class="empty-state">${esc(t('feishuGatewayNoScopes'))}</p>`;
+    return;
+  }
+  list.innerHTML = feishuGatewayScopes.map(scope => {
+    const key = scope.scope_key || scope.key || scope.scope_id || '';
+    const title = scope.chat_name || scope.scope_name || scope.chat_id || scope.scope_id || key;
+    const sessionId = scope.session_id || '';
+    const status = scope.running ? t('workspaceRunning') : (scope.status || t('workspaceIdle'));
+    const updated = scope.updated_at || scope.last_active_at || scope.last_seen_at || '';
+    return `
+      <article class="feishu-scope-item" data-scope-key="${esc(key)}">
+        <div class="feishu-scope-main">
+          <div class="feishu-scope-title-row">
+            <strong>${esc(title || t('feishuGatewayScope'))}</strong>
+            <span class="scheduled-status ${scope.running ? 'status-running' : ''}">${esc(status)}</span>
+          </div>
+          <div class="feishu-scope-meta">${esc(key || '-')}</div>
+          <div class="feishu-scope-meta">${esc(t('sessionId'))}: ${esc(sessionId || '-')}</div>
+          ${updated ? `<div class="feishu-scope-meta">${esc(t('feishuLastActive'))}: ${esc(updated)}</div>` : ''}
+        </div>
+        <div class="feishu-scope-actions">
+          <button class="btn-mini" data-act="stop">${esc(t('stop'))}</button>
+          <button class="btn-mini danger" data-act="reset">${esc(t('restartSession'))}</button>
+        </div>
+      </article>
+    `;
+  }).join('');
+  list.querySelectorAll('.feishu-scope-item').forEach(item => {
+    item.querySelector('[data-act="stop"]')?.addEventListener('click', () => stopFeishuGatewayScope(item.dataset.scopeKey));
+    item.querySelector('[data-act="reset"]')?.addEventListener('click', () => resetFeishuGatewayScope(item.dataset.scopeKey));
+  });
+}
+
+async function stopFeishuGatewayScope(scopeKey) {
+  if (!scopeKey) return;
+  await postFeishuScopeAction('/api/feishu-gateway/stop-scope', scopeKey, t('sessionStopped'));
+}
+
+async function resetFeishuGatewayScope(scopeKey) {
+  if (!scopeKey || !confirm(t('feishuConfirmResetScope', { scope: scopeKey }))) return;
+  await postFeishuScopeAction('/api/feishu-gateway/reset-scope', scopeKey, t('feishuScopeReset'));
+}
+
+async function postFeishuScopeAction(url, scopeKey, successMessage) {
+  try {
+    const resp = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ scope_key: scopeKey }),
+    });
+    const data = await resp.json();
+    if (!resp.ok) throw new Error(data.error || resp.statusText);
+    showToast(successMessage, 'success');
+    loadFeishuGatewayScopes();
+  } catch (e) {
+    showToast(t('requestFailed', { message: e.message || t('unknownError') }), 'error');
+  }
+}
+
+async function copyFeishuEventUrl() {
+  const value = document.getElementById('feishu-event-url')?.value || `${location.origin}/api/feishu-gateway/events`;
+  try {
+    await navigator.clipboard.writeText(value);
+    showToast(t('copied'), 'success');
+  } catch (e) {
+    showToast(t('copyFailed'), 'error');
+  }
+}
+
+function readDelimitedList(value) {
+  return String(value || '').split(/[\n,]/).map(v => v.trim()).filter(Boolean);
+}
+
+function listToLines(value) {
+  return Array.isArray(value) ? value.join('\n') : String(value || '');
 }
 
 // ─── 远程诊断目标 ────────────────────────────────────────────
@@ -1582,18 +1805,7 @@ async function copyResumeCommand() {
 
 function renderTopbarMeta(modelOverride = '') {
   const modelLabel = getDisplayModelName(modelOverride || modelSelect?.value || '') || t('noSession');
-  if (topbarSessionId) {
-    topbarSessionId.textContent = formatTopbarSessionId(currentSessionId);
-    const resumeCommand = getResumeCommandText();
-    topbarSessionId.title = resumeCommand || t('copyResumeCommand');
-    topbarSessionId.disabled = !currentSessionId;
-  }
   if (topbarModel) topbarModel.textContent = modelLabel;
-  if (topbarCli) {
-    const cliLabel = getSelectedCliLabel();
-    topbarCli.textContent = cliLabel;
-    topbarCli.title = document.getElementById('cli-select')?.value || cliLabel;
-  }
   renderTopbarSessionActions();
 }
 
@@ -1966,7 +2178,7 @@ function showPage(page) {
   if (target) target.classList.add('active');
   // 更新全局 titlebar
   const pageLabel = document.getElementById('titlebar-page-label');
-  const pageKey = page === 'home' ? 'home' : page === 'config' ? 'settings' : page === 'artifacts' ? 'artifacts' : page === 'scheduled' ? 'scheduledTasks' : page === 'sessions' ? 'sessions' : page === 'skills' ? 'skills' : page === 'integrations' ? 'integrations' : page === 'memory' ? 'memory' : 'chat';
+  const pageKey = page === 'home' ? 'home' : page === 'config' ? 'settings' : page === 'artifacts' ? 'artifacts' : page === 'scheduled' ? 'scheduledTasks' : page === 'feishu-gateway' ? 'messageGateway' : page === 'sessions' ? 'sessions' : page === 'skills' ? 'skills' : page === 'integrations' ? 'integrations' : page === 'memory' ? 'memory' : 'chat';
   if (pageLabel) pageLabel.textContent = t(pageKey);
   const isChatPage = page === 'chat';
   const backBtn = document.getElementById('btn-titlebar-back');
@@ -1999,6 +2211,8 @@ function showPage(page) {
     loadMemoryFiles();
   } else if (page === 'scheduled') {
     loadScheduledTasks();
+  } else if (page === 'feishu-gateway') {
+    loadFeishuGateway();
   }
   hideMentionPopup();
 }
@@ -3526,7 +3740,6 @@ function initInput() {
   btnStop.addEventListener('click', interruptCurrentRun);
   btnNewSession?.addEventListener('click', startNewSession);
   btnExportChat?.addEventListener('click', copyConversationMarkdown);
-  topbarSessionId?.addEventListener('click', copyResumeCommand);
   sessionSearchInput?.addEventListener('input', () => renderSessionList(cachedSessions));
   document.addEventListener('keydown', handleGlobalShortcuts);
   document.getElementById('welcome-new-session')?.addEventListener('click', startNewSession);
@@ -5167,7 +5380,7 @@ function initRightPanel() {
     }
   });
 
-  // Escape 关闭移动端浮层；桌面端保持 Hermes 式常驻 Pane
+  // Escape 关闭移动端浮层；桌面端保持常驻 Pane
   document.addEventListener('keydown', (e) => {
     if (e.key === 'Escape' && isMobile() && panelOpen()) {
       closePanel();
