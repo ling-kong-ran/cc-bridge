@@ -13,6 +13,7 @@ import ipaddress
 import re
 import base64
 import subprocess
+import tempfile
 import time
 from pathlib import Path
 from urllib.request import Request, urlopen
@@ -772,7 +773,7 @@ def git_review(cwd: str) -> dict:
         try:
             r = subprocess.run(
                 ["git"] + args, cwd=cwd,
-                capture_output=True, text=True, timeout=8,
+                capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=8,
                 creationflags=0x08000000 if sys.platform == "win32" else 0
             )
             return r.stdout.strip() if r.returncode == 0 else ""
@@ -797,7 +798,10 @@ def git_review(cwd: str) -> dict:
                 continue
             index_status = line[0]
             worktree_status = line[1]
-            fn = line[3:].strip()
+            # XY PATH — 跳过2字符状态码+后续空白，取剩余路径
+            # 用 \s* 而非 \s+：Y列=' ' 时 git 不额外输出分隔空格
+            m = re.match(r'^..\s*(.+)$', line)
+            fn = m.group(1).strip() if m else line[3:].strip()
             normalized = fn.replace("\\", "/")
             if index_status == "?" and worktree_status == "?":
                 item = {"status": "untracked", "file": normalized, "raw": "??"}
@@ -831,6 +835,59 @@ def git_review(cwd: str) -> dict:
         "stagedStat": staged,
         "unstagedStat": unstaged,
         "totalChanges": len(files),
+    }
+
+
+def git_diff_file(cwd: str, file_path: str, staged: bool = False) -> dict:
+    """返回单个文件的 unified diff 内容。"""
+    if not cwd or not os.path.isdir(cwd):
+        return {"error": "工作目录不存在"}
+    if not os.path.isdir(os.path.join(cwd, ".git")):
+        return {"error": "当前目录不是 Git 仓库"}
+
+    def _git(args):
+        try:
+            r = subprocess.run(
+                ["git"] + args, cwd=cwd,
+                capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=10,
+                creationflags=0x08000000 if sys.platform == "win32" else 0
+            )
+            return r.stdout.strip() if r.returncode == 0 else ""
+        except Exception:
+            return ""
+
+    def _diff(use_cached):
+        """构造 git diff 参数，避免 None 混入命令列表"""
+        args = ["diff"]
+        if use_cached:
+            args.append("--cached")
+        args += ["--", file_path]
+        return _git(args)
+
+    diff_output = _diff(staged)
+
+    # 双向回退：staged↔unstaged，因为文件可能同时有两侧变更
+    if not diff_output:
+        alt = _diff(not staged)
+        if alt:
+            diff_output = alt
+
+    # 未跟踪文件 / 新文件：对比空文件
+    if not diff_output:
+        full = os.path.join(cwd, file_path)
+        if os.path.isfile(full):
+            fd, tmp = tempfile.mkstemp()
+            os.close(fd)
+            try:
+                diff_output = _git(["diff", "--no-index", "--", tmp, full])
+            finally:
+                os.unlink(tmp)
+
+    return {
+        "ok": True,
+        "file": file_path,
+        "diff": diff_output,
+        "staged": staged,
     }
 
 
@@ -2386,6 +2443,12 @@ async def handle_api_get(path: str, writer: asyncio.StreamWriter, query: dict = 
     elif path == "/api/review":
         cwd = (query or {}).get("cwd", [""])[0] or DEFAULT_CWD
         data = git_review(cwd)
+    elif path == "/api/review-diff":
+        query = query or {}
+        cwd = query.get("cwd", [""])[0] or DEFAULT_CWD
+        file_path = query.get("file", [""])[0] or ""
+        staged = query.get("staged", ["0"])[0] in ("1", "true", "yes")
+        data = git_diff_file(cwd, file_path, staged)
     elif path == "/api/browse":
         p = (query or {}).get("path", [""])[0]
         data = browse_files(p)

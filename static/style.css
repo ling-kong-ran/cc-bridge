@@ -1185,12 +1185,15 @@ html.light-theme .select {
 
 .nav-btn {
   position: relative;
-  width: 46px;
-  height: 46px;
+  width: 48px;
+  height: auto;
+  min-height: 44px;
   display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
-  padding: 0;
+  gap: 2px;
+  padding: 4px 2px;
   border: 1px solid transparent;
   border-radius: 14px;
   background: transparent;
@@ -1204,30 +1207,24 @@ html.light-theme .select {
 }
 
 .nav-btn span {
-  position: absolute;
-  left: calc(100% + 10px);
-  top: 50%;
-  transform: translate(-4px, -50%);
-  max-width: 130px;
-  padding: 5px 8px;
-  border: 1px solid var(--border-dim);
-  border-radius: var(--radius-xs);
-  background: var(--bg-raised);
-  color: var(--text-base);
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.22);
-  opacity: 0;
-  pointer-events: none;
-  white-space: nowrap;
+  display: block;
+  font-size: 9px;
+  font-family: var(--font-default);
+  font-weight: 400;
+  color: var(--text-dim);
+  max-width: 48px;
   overflow: hidden;
   text-overflow: ellipsis;
-  z-index: 20;
-  transition: opacity var(--t-fast), transform var(--t-fast);
+  white-space: nowrap;
+  text-align: center;
+  line-height: 1.2;
+  transition: color var(--t-fast);
 }
 
 .nav-btn:hover span,
-.nav-btn:focus-visible span {
-  opacity: 1;
-  transform: translate(0, -50%);
+.nav-btn:focus-visible span,
+.nav-btn.active span {
+  color: inherit;
 }
 
 .nav-btn:hover {
@@ -1744,6 +1741,111 @@ body.pane-right-collapsed .chat-sidebar {
   text-align: center;
   color: var(--text-ghost);
 }
+
+/* ── Diff Preview 浮动面板 ────────────────── */
+.diff-preview-panel {
+  position: absolute;
+  left: 50%;
+  top: 56px;
+  bottom: auto;
+  transform: translateX(-50%);
+  width: min(780px, calc(100% - 36px));
+  height: min(58vh, 520px);
+  z-index: 24;
+  flex-direction: column;
+  background: color-mix(in srgb, var(--bg-surface) 94%, transparent);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  box-shadow: 0 22px 70px rgba(0,0,0,0.46);
+  overflow: hidden;
+  backdrop-filter: blur(10px);
+}
+.diff-preview-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--border-dim);
+  background: linear-gradient(90deg, rgba(var(--accent-rgb),0.08), transparent);
+  cursor: move;
+  user-select: none;
+}
+.diff-preview-panel.dragging,
+.diff-preview-panel.resizing {
+  opacity: 0.96;
+  user-select: none;
+}
+.diff-preview-resizer {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  width: 18px;
+  height: 18px;
+  cursor: nwse-resize;
+  z-index: 2;
+}
+.diff-preview-resizer::before {
+  content: '';
+  position: absolute;
+  right: 5px;
+  bottom: 5px;
+  width: 8px;
+  height: 8px;
+  border-right: 2px solid var(--text-ghost);
+  border-bottom: 2px solid var(--text-ghost);
+  opacity: 0.65;
+}
+.diff-preview-resizer:hover::before {
+  border-color: var(--green);
+  opacity: 1;
+}
+.diff-preview-header button,
+.diff-preview-header input {
+  cursor: auto;
+}
+.diff-preview-title-wrap { min-width: 0; }
+.diff-preview-kicker {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  font-weight: 700;
+  color: var(--amber);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+.diff-preview-name {
+  margin-top: 2px;
+  font-family: var(--font-mono);
+  font-size: 13px;
+  color: var(--text-bright);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.diff-preview-meta {
+  padding: 6px 12px;
+  color: var(--text-ghost);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  border-bottom: 1px solid var(--border-dim);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: flex; align-items: center; gap: 8px;
+}
+.diff-preview-meta .diff-staged-tag {
+  font-size: 9px; padding: 1px 6px; border-radius: 3px;
+  font-weight: 600; text-transform: uppercase;
+  color: var(--amber); background: rgba(232,167,48,0.12);
+  flex-shrink: 0;
+}
+.diff-preview-content {
+  flex: 1;
+  overflow: auto;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  line-height: 1.55;
+}
 .file-tree-empty {
   text-align: center; color: var(--text-ghost);
   font-size: 11px; padding: 20px 0;
@@ -1784,7 +1886,6 @@ body.pane-right-collapsed .chat-sidebar {
   border: 1px solid var(--border-dim);
   border-radius: var(--radius-xs);
   background: rgba(255,255,255,0.015);
-  overflow: hidden;
 }
 .review-change-group .review-section-title {
   margin: 0;
@@ -1798,7 +1899,7 @@ body.pane-right-collapsed .chat-sidebar {
   color: var(--amber);
 }
 .review-change-group .review-file-list {
-  padding: 3px;
+  padding: 3px 8px;
 }
 .review-empty.compact {
   padding: 10px 8px;
@@ -1813,7 +1914,6 @@ body.pane-right-collapsed .chat-sidebar {
   padding: 3px 4px; border-radius: 3px;
   cursor: pointer; transition: background var(--t-fast);
   color: var(--text-muted); font-size: 10.5px;
-  overflow: hidden;
 }
 .review-file-item:hover {
   background: var(--bg-raised); color: var(--text-base);
@@ -1821,6 +1921,7 @@ body.pane-right-collapsed .chat-sidebar {
 .review-file-item .rf-name {
   flex: 1; min-width: 0;
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  padding-left: 3px;
 }
 .review-file-item .rf-badge {
   font-size: 9px; padding: 1px 5px; border-radius: 3px;
@@ -1838,6 +1939,47 @@ body.pane-right-collapsed .chat-sidebar {
   font-size: 10px; font-family: var(--font-mono);
   color: var(--text-dim); white-space: pre-wrap;
   line-height: 1.5; padding: 4px 0;
+}
+
+/* ── Diff 表格（浮动面板内复用） ────────── */
+.review-diff-table {
+  width: 100%; border-collapse: collapse;
+  font-size: 10.5px; font-family: var(--font-mono);
+  line-height: 1.55; table-layout: auto;
+}
+.review-diff-table td {
+  padding: 0; vertical-align: top;
+}
+.diff-ln {
+  width: 1%; min-width: 32px; text-align: right;
+  padding: 1px 6px;
+  font-size: 9.5px; color: var(--text-ghost);
+  user-select: none; -webkit-user-select: none;
+  border-right: 1px solid rgba(255,255,255,0.04);
+}
+.diff-ln-old { }
+.diff-ln-new { }
+
+.diff-code { padding: 1px 8px; white-space: pre-wrap; word-break: break-all; }
+.diff-code span { }
+
+.diff-add { background: rgba(61,220,132,0.08); }
+.diff-add .diff-ln-new { color: var(--green); }
+.diff-add .diff-code { color: var(--green-dim); }
+
+.diff-del { background: rgba(240,80,80,0.08); }
+.diff-del .diff-ln-old { color: var(--red); }
+.diff-del .diff-code { color: var(--red-dim); }
+
+.diff-context { }
+.diff-context .diff-code { color: var(--text-dim); }
+
+.diff-hunk-header td {
+  padding: 2px 8px;
+  color: var(--cyan-dim); font-size: 10px;
+  background: rgba(86,208,232,0.05);
+  border-top: 1px solid rgba(86,208,232,0.08);
+  border-bottom: 1px solid rgba(86,208,232,0.08);
 }
 
 .btn-icon-mini {
@@ -5571,7 +5713,7 @@ html.light-theme .agent-status-bar {
   }
 
   .welcome-recent-card,
-  .welcome-runtime-card {
+  .welcome-start-card {
     min-height: 0;
     height: auto;
   }

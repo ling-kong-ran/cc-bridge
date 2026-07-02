@@ -559,19 +559,31 @@ class FeishuGateway:
     async def _consume_ws_events(self) -> None:
         """主 event loop 中的事件消费循环。WS 断开后自动重连。"""
         ws_log("事件消费循环已启动")
+        _last_activity = time.time()
+        _reconnect_backoff = 5
         while True:
             if not self._ws_running:
-                ws_log("WS 连接断开，5 秒后自动重连...")
-                await asyncio.sleep(5)
+                ws_log(f"WS 连接断开，{_reconnect_backoff} 秒后自动重连...")
+                await asyncio.sleep(_reconnect_backoff)
                 self.ensure_ws_running()
-                # ensure_ws_running 内部会跳过 (mode != websocket / !enabled) 的情况
-                if not self._ws_running:
-                    await asyncio.sleep(30)  # 还不行就等久点
+                if self._ws_running:
+                    _last_activity = time.time()
+                    _reconnect_backoff = 5
+                else:
+                    _reconnect_backoff = min(_reconnect_backoff * 2, 60)
                 continue
 
             try:
                 data = await asyncio.wait_for(self._ws_event_queue.get(), timeout=1.0)
+                _last_activity = time.time()
+                _reconnect_backoff = 5
             except asyncio.TimeoutError:
+                # 如果 WS 标记为运行中但长时间无事件，可能是连接僵死
+                stale = time.time() - _last_activity
+                if stale > 120:
+                    ws_log(f"WS 连接 {stale:.0f} 秒无活动，强制重连...")
+                    self.stop_ws()
+                    await asyncio.sleep(1)
                 continue
             except RuntimeError:
                 break

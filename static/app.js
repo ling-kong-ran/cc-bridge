@@ -28,6 +28,65 @@ let lastFocusConfigReloadAt = 0;
 let cachedSessions = [];
 let sessionsLoaded = false;
 let chatNavAutoOpening = false;
+
+// 每个 workspace tab 独立的 SSE/流式状态，切换标签页时 save/restore
+const _tabStreamState = new Map();
+
+function _saveStreamState(sessionId) {
+  if (!sessionId) return;
+  _tabStreamState.set(sessionId, {
+    isResponding,
+    currentRunId,
+    currentSessionId,
+    currentContent: currentContent.slice(),
+    streamBlocks: JSON.parse(JSON.stringify(streamBlocks)),
+    currentAssistantMessageId,
+    currentTurnContent,
+    currentTurnHasAssistantOutput,
+    currentTurnStartedAt,
+    currentTurnAttachmentCount,
+  });
+}
+
+function _restoreStreamState(sessionId) {
+  const saved = _tabStreamState.get(sessionId);
+  if (saved) {
+    isResponding = saved.isResponding;
+    currentRunId = saved.currentRunId;
+    currentSessionId = saved.currentSessionId;
+    currentContent = saved.currentContent;
+    streamBlocks = saved.streamBlocks;
+    currentAssistantMessageId = saved.currentAssistantMessageId;
+    currentTurnContent = saved.currentTurnContent;
+    currentTurnHasAssistantOutput = saved.currentTurnHasAssistantOutput;
+    currentTurnStartedAt = saved.currentTurnStartedAt;
+    currentTurnAttachmentCount = saved.currentTurnAttachmentCount;
+  } else {
+    isResponding = false;
+    currentRunId = null;
+    currentSessionId = null;
+    currentContent = [];
+    streamBlocks = {};
+    currentAssistantMessageId = null;
+    currentTurnContent = '';
+    currentTurnHasAssistantOutput = false;
+    currentTurnStartedAt = 0;
+    currentTurnAttachmentCount = 0;
+  }
+  currentAssistantEl = null;
+  totalCost = 0;
+  totalTokens = emptyTokenUsage();
+  updateStopButton();
+}
+
+function updateStopButton() {
+  const btnStop = document.getElementById('btn-stop');
+  if (btnStop) {
+    btnStop.classList.toggle('visible', isResponding);
+    btnStop.disabled = isViewer;
+  }
+}
+
 let sessionOffset = 0;
 let sessionTotal = 0;
 const SESSION_PAGE_SIZE = 50;
@@ -117,6 +176,15 @@ let previewSelectedLines = new Set();
 let lastPreviewSelectedLine = 0;
 let previewDragState = null;
 let previewResizeState = null;
+
+// Diff preview 浮动面板
+const diffPreviewPanel = document.getElementById('diff-preview-panel');
+const diffPreviewNameEl = document.getElementById('diff-preview-name');
+const diffPreviewMetaEl = document.getElementById('diff-preview-meta');
+const diffPreviewContentEl = document.getElementById('diff-preview-content');
+const diffPreviewCloseBtn = document.getElementById('diff-preview-close');
+let diffPreviewDragState = null;
+let diffPreviewResizeState = null;
 let currentLanguage = 'en';
 let i18nMap = {};
 let fontSizePercent = 100;
@@ -148,6 +216,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   initAgentModal();
   initRightPanel();
   initFilePreviewPanel();
+  initDiffPreviewPanel();
   initMentionAutocomplete();
   initMemoryUI();
   initArtifactsUI();
@@ -337,7 +406,21 @@ function activateWorkspaceSession(sessionId, opts = {}) {
   }
   captureActiveWorkspaceSnapshot();
   const previousSessionId = activeWorkspaceSessionId;
+  // 保存旧标签页的流式状态，以便切回时恢复
+  _saveStreamState(previousSessionId);
+  // 如果旧标签页正在运行，中断其执行
+  if (isResponding && previousSessionId) {
+    const prevSession = workspaceSessions.get(previousSessionId);
+    if (prevSession?.currentRunId || currentRunId) {
+      sendAction('stop_session', {
+        session_id: prevSession?.currentRunId ? previousSessionId : (currentSessionId || ''),
+        run_id: prevSession?.currentRunId || currentRunId || ''
+      });
+    }
+  }
   activeWorkspaceSessionId = sessionId;
+  // 恢复新标签页的流式状态
+  _restoreStreamState(sessionId);
   releaseInactiveWorkspaceSession(previousSessionId);
   const session = workspaceSessions.get(sessionId);
   if (session) {
@@ -2677,13 +2760,23 @@ function initSSE() {
 }
 
 function isEventForCurrentSession(data = {}) {
+  // run_id 精确匹配当前运行
   if (data.run_id && currentRunId && data.run_id === currentRunId) return true;
-  if (data.session_id && currentSessionId) return data.session_id === currentSessionId;
+  // 有 session_id 时，必须匹配当前活跃 workspace 标签页或 currentSessionId
+  if (data.session_id) {
+    if (activeWorkspaceSessionId && data.session_id === activeWorkspaceSessionId) return true;
+    if (currentSessionId && data.session_id === currentSessionId) return true;
+    return false; // 属于其他标签页，不渲染到当前窗口
+  }
+  // 无 session_id/run_id 的系统事件（如 heartbeat）允许通过
   return true;
 }
 
 function noteBackgroundSessionEvent(data = {}) {
-  if (!data.session_id || !currentSessionId || data.session_id === currentSessionId) return false;
+  if (!data.session_id) return false;
+  // 如果是活跃 workspace 标签页的事件，不视为后台
+  if (activeWorkspaceSessionId && data.session_id === activeWorkspaceSessionId) return false;
+  if (currentSessionId && data.session_id === currentSessionId) return false;
   if (data.run_id && currentRunId && data.run_id === currentRunId) return false;
   updateBackgroundWorkspacePreview(data);
   scheduleCompletionHistorySync(data.session_id);
@@ -5551,6 +5644,18 @@ function initRightPanel() {
     });
   });
 
+  // review panel 文件点击 → 弹出 diff 预览浮动面板
+  const reviewPanel = document.getElementById('review-panel');
+  if (reviewPanel) {
+    reviewPanel.addEventListener('click', (e) => {
+      const item = e.target.closest('.review-file-item');
+      if (!item) return;
+      const file = item.dataset.file;
+      const staged = item.dataset.staged === '1';
+      if (file) loadReviewDiff(file, staged);
+    });
+  }
+
   // 文件树刷新按钮
   document.getElementById('btn-file-tree-refresh')?.addEventListener('click', () => {
     const cwd = (cwdInput?.value || '').trim();
@@ -5657,6 +5762,7 @@ function switchToSidebarTab(tab) {
 let fileTreePath = '';
 
 async function loadReview(cwd) {
+  _reviewCwd = cwd || '';
   const panel = document.getElementById('review-panel');
   if (!panel) return;
   panel.innerHTML = `<div class="review-loading">${esc(t('reviewLoading'))}</div>`;
@@ -5682,21 +5788,24 @@ async function loadReview(cwd) {
         modified: t('statusModified'), added: t('statusAdded'), deleted: t('statusDeleted'),
         renamed: t('statusRenamed'), untracked: t('statusUntracked'), changed: t('statusChanged')
       };
-      const renderReviewFileList = (items) => {
+      const renderReviewFileList = (items, staged) => {
         if (!items.length) return `<div class="review-empty compact">${esc(t('reviewNoChanges'))}</div>`;
-        return `<div class="review-file-list">${items.map(f => `<div class="review-file-item"><span class="rf-name">${esc(f.file)}</span><span class="rf-badge ${esc(f.status)}">${esc(statusLabel[f.status] || f.status)}</span></div>`).join('')}</div>`;
+        return `<div class="review-file-list">${items.map(f => {
+          const flag = staged ? '1' : '0';
+          return `<div class="review-file-item" data-file="${esc(f.file)}" data-staged="${flag}" title="${esc(t('reviewClickToDiff'))}"><span class="rf-name">${esc(f.file)}</span><span class="rf-badge ${esc(f.status)}">${esc(statusLabel[f.status] || f.status)}</span></div>`;
+        }).join('')}</div>`;
       };
       const stagedFiles = data.stagedFiles || [];
       const unstagedFiles = data.unstagedFiles || [];
       const hasSplitFiles = stagedFiles.length || unstagedFiles.length;
       if (hasSplitFiles) {
-        html += `<div class="review-change-group staged"><div class="review-section-title" data-i18n="reviewStaged">${esc(t('reviewStaged'))}</div>${renderReviewFileList(stagedFiles)}</div>`;
-        html += `<div class="review-change-group unstaged"><div class="review-section-title" data-i18n="reviewUnstaged">${esc(t('reviewUnstaged'))}</div>${renderReviewFileList(unstagedFiles)}</div>`;
+        html += `<div class="review-change-group staged"><div class="review-section-title" data-i18n="reviewStaged">${esc(t('reviewStaged'))}</div>${renderReviewFileList(stagedFiles, true)}</div>`;
+        html += `<div class="review-change-group unstaged"><div class="review-section-title" data-i18n="reviewUnstaged">${esc(t('reviewUnstaged'))}</div>${renderReviewFileList(unstagedFiles, false)}</div>`;
       } else if (files.length === 0) {
         html += `<div class="review-empty">${esc(t('reviewNoChanges'))}</div>`;
       } else {
         html += `<div class="review-section-title" data-i18n="filesTab">${esc(t('filesTab'))}</div>`;
-        html += renderReviewFileList(files);
+        html += renderReviewFileList(files, false);
       }
     // 变更统计
     if (data.stagedStat) {
@@ -5716,6 +5825,81 @@ async function loadReview(cwd) {
     panel.innerHTML = `<div class="review-empty">${esc(t('unknownError'))}</div>`;
     updateWorkspaceHeader('review');
   }
+}
+
+let _reviewCwd = '';
+
+async function loadReviewDiff(file, staged) {
+  if (!diffPreviewPanel || !_reviewCwd) return;
+  // 打开面板
+  diffPreviewPanel.style.display = 'flex';
+  const wasHidden = !diffPreviewPanel._wasOpen;
+  if (wasHidden) {
+    diffPreviewPanel.style.left = '';
+    diffPreviewPanel.style.right = '';
+    diffPreviewPanel.style.top = '';
+    diffPreviewPanel.style.bottom = '';
+    diffPreviewPanel.style.width = '';
+    diffPreviewPanel.style.height = '';
+    diffPreviewPanel.style.transform = '';
+    requestAnimationFrame(() => positionDiffPreviewAtCenter());
+  }
+  diffPreviewPanel._wasOpen = true;
+  diffPreviewNameEl.textContent = file.split('/').pop() || file;
+  diffPreviewMetaEl.innerHTML = `<span>${esc(file)}</span><span class="diff-staged-tag">${staged ? esc(t('reviewStaged')) : esc(t('reviewUnstaged'))}</span>`;
+  diffPreviewContentEl.innerHTML = `<div class="file-preview-state">${esc(t('reviewLoading'))}</div>`;
+
+  try {
+    const resp = await fetch(`/api/review-diff?cwd=${encodeURIComponent(_reviewCwd)}&file=${encodeURIComponent(file)}&staged=${staged ? '1' : '0'}`);
+    const data = await resp.json();
+    if (data.error) {
+      diffPreviewContentEl.innerHTML = `<div class="file-preview-state">${esc(data.error)}</div>`;
+      return;
+    }
+    renderDiffContent(data);
+  } catch (e) {
+    diffPreviewContentEl.innerHTML = `<div class="file-preview-state">${esc(t('unknownError'))}</div>`;
+  }
+}
+
+function renderDiffContent(data) {
+  const diffText = data.diff || '';
+  if (!diffText) {
+    diffPreviewContentEl.innerHTML = `<div class="file-preview-state">${esc(t('reviewNoChanges'))}</div>`;
+    return;
+  }
+
+  // 解析 unified diff 并渲染为表格
+  const lines = diffText.split('\n');
+  let html = '<table class="review-diff-table">';
+  let oldLine = 0, newLine = 0;
+  let inHunk = false;
+
+  for (const rawLine of lines) {
+    const line = rawLine;
+    if (line.startsWith('@@')) {
+      inHunk = true;
+      const m = line.match(/@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@/);
+      if (m) {
+        oldLine = parseInt(m[1]) || 0;
+        newLine = parseInt(m[3]) || 0;
+      }
+      html += `<tr class="diff-hunk-header"><td colspan="3">${esc(line)}</td></tr>`;
+    } else if (line.startsWith('+') && inHunk) {
+      html += `<tr class="diff-add"><td class="diff-ln diff-ln-old"></td><td class="diff-ln diff-ln-new">${newLine}</td><td class="diff-code"><span>${esc(line)}</span></td></tr>`;
+      newLine++;
+    } else if (line.startsWith('-') && inHunk) {
+      html += `<tr class="diff-del"><td class="diff-ln diff-ln-old">${oldLine}</td><td class="diff-ln diff-ln-new"></td><td class="diff-code"><span>${esc(line)}</span></td></tr>`;
+      oldLine++;
+    } else if (line.startsWith(' ') && inHunk) {
+      html += `<tr class="diff-context"><td class="diff-ln diff-ln-old">${oldLine}</td><td class="diff-ln diff-ln-new">${newLine}</td><td class="diff-code"><span>${esc(line)}</span></td></tr>`;
+      oldLine++;
+      newLine++;
+    }
+  }
+
+  html += '</table>';
+  diffPreviewContentEl.innerHTML = html;
 }
 
 function updateFileTreePathLabel(path = fileTreePath || cwdInput?.value || '') {
@@ -5750,8 +5934,19 @@ function initFilePreviewPanel() {
   document.addEventListener('mousemove', handleFilePreviewPointerMove);
   document.addEventListener('mouseup', stopFilePreviewPointerAction);
   document.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape' && previewPanel?.style.display !== 'none') closeFilePreview();
+    if (e.key === 'Escape') {
+      if (diffPreviewPanel?.style.display !== 'none') closeDiffPreview();
+      else if (previewPanel?.style.display !== 'none') closeFilePreview();
+    }
   });
+}
+
+function initDiffPreviewPanel() {
+  diffPreviewCloseBtn?.addEventListener('click', closeDiffPreview);
+  diffPreviewPanel?.querySelector('.diff-preview-header')?.addEventListener('mousedown', startDiffPreviewDrag);
+  diffPreviewPanel?.querySelector('.diff-preview-resizer')?.addEventListener('mousedown', startDiffPreviewResize);
+  document.addEventListener('mousemove', handleDiffPreviewPointerMove);
+  document.addEventListener('mouseup', stopDiffPreviewPointerAction);
 }
 
 function positionFilePreviewAtMessagesCenter() {
@@ -5871,6 +6066,133 @@ function stopFilePreviewPointerAction() {
 
 function stopFilePreviewDrag() {
   stopFilePreviewPointerAction();
+}
+
+// ─── Diff preview 浮动面板 ─────────────────────────────────
+
+function positionDiffPreviewAtCenter() {
+  if (!diffPreviewPanel || !messagesEl) return;
+  const parent = diffPreviewPanel.offsetParent || diffPreviewPanel.parentElement;
+  if (!parent) return;
+  const rect = diffPreviewPanel.getBoundingClientRect();
+  const parentRect = parent.getBoundingClientRect();
+  const messagesRect = messagesEl.getBoundingClientRect();
+  const minLeft = 8;
+  const minTop = 8;
+  const maxLeft = Math.max(minLeft, parentRect.width - rect.width - 8);
+  const maxTop = Math.max(minTop, parentRect.height - rect.height - 8);
+  const nextLeft = Math.min(maxLeft, Math.max(minLeft, messagesRect.left - parentRect.left + (messagesRect.width - rect.width) / 2));
+  const nextTop = Math.min(maxTop, Math.max(minTop, messagesRect.top - parentRect.top + (messagesRect.height - rect.height) / 2));
+  diffPreviewPanel.style.left = `${nextLeft}px`;
+  diffPreviewPanel.style.top = `${nextTop}px`;
+  diffPreviewPanel.style.right = 'auto';
+  diffPreviewPanel.style.bottom = 'auto';
+  diffPreviewPanel.style.transform = 'none';
+}
+
+function ensureDiffPreviewBox() {
+  if (!diffPreviewPanel) return null;
+  const parent = diffPreviewPanel.offsetParent || diffPreviewPanel.parentElement;
+  if (!parent) return null;
+  const rect = diffPreviewPanel.getBoundingClientRect();
+  const parentRect = parent.getBoundingClientRect();
+  diffPreviewPanel.style.width = `${rect.width}px`;
+  diffPreviewPanel.style.height = `${rect.height}px`;
+  diffPreviewPanel.style.right = 'auto';
+  diffPreviewPanel.style.bottom = 'auto';
+  diffPreviewPanel.style.left = `${rect.left - parentRect.left}px`;
+  diffPreviewPanel.style.top = `${rect.top - parentRect.top}px`;
+  return { rect, parentRect };
+}
+
+function startDiffPreviewDrag(e) {
+  if (!diffPreviewPanel || e.button !== 0 || e.target.closest('button, input')) return;
+  const box = ensureDiffPreviewBox();
+  if (!box) return;
+  const { rect, parentRect } = box;
+  diffPreviewDragState = {
+    offsetX: e.clientX - rect.left,
+    offsetY: e.clientY - rect.top,
+    parentLeft: parentRect.left,
+    parentTop: parentRect.top,
+    parentWidth: parentRect.width,
+    parentHeight: parentRect.height,
+    width: rect.width,
+    height: rect.height,
+  };
+  diffPreviewPanel.classList.add('dragging');
+  e.preventDefault();
+}
+
+function dragDiffPreviewPanel(e) {
+  if (!diffPreviewPanel || !diffPreviewDragState) return;
+  const s = diffPreviewDragState;
+  const maxLeft = Math.max(0, s.parentWidth - s.width - 8);
+  const maxTop = Math.max(0, s.parentHeight - s.height - 8);
+  const nextLeft = Math.min(maxLeft, Math.max(8, e.clientX - s.parentLeft - s.offsetX));
+  const nextTop = Math.min(maxTop, Math.max(8, e.clientY - s.parentTop - s.offsetY));
+  diffPreviewPanel.style.left = `${nextLeft}px`;
+  diffPreviewPanel.style.top = `${nextTop}px`;
+}
+
+function startDiffPreviewResize(e) {
+  if (!diffPreviewPanel || e.button !== 0) return;
+  const box = ensureDiffPreviewBox();
+  if (!box) return;
+  const { rect, parentRect } = box;
+  diffPreviewResizeState = {
+    startX: e.clientX,
+    startY: e.clientY,
+    left: rect.left - parentRect.left,
+    top: rect.top - parentRect.top,
+    width: rect.width,
+    height: rect.height,
+    parentWidth: parentRect.width,
+    parentHeight: parentRect.height,
+  };
+  diffPreviewPanel.classList.add('resizing');
+  e.preventDefault();
+  e.stopPropagation();
+}
+
+function resizeDiffPreviewPanel(e) {
+  if (!diffPreviewPanel || !diffPreviewResizeState) return;
+  const s = diffPreviewResizeState;
+  const minWidth = Math.min(420, Math.max(280, s.parentWidth - 16));
+  const minHeight = Math.min(220, Math.max(180, s.parentHeight - 16));
+  const maxWidth = Math.max(minWidth, s.parentWidth - s.left - 8);
+  const maxHeight = Math.max(minHeight, s.parentHeight - s.top - 8);
+  const nextWidth = Math.min(maxWidth, Math.max(minWidth, s.width + e.clientX - s.startX));
+  const nextHeight = Math.min(maxHeight, Math.max(minHeight, s.height + e.clientY - s.startY));
+  diffPreviewPanel.style.width = `${nextWidth}px`;
+  diffPreviewPanel.style.height = `${nextHeight}px`;
+}
+
+function handleDiffPreviewPointerMove(e) {
+  if (diffPreviewResizeState) resizeDiffPreviewPanel(e);
+  else if (diffPreviewDragState) dragDiffPreviewPanel(e);
+}
+
+function stopDiffPreviewPointerAction() {
+  if (!diffPreviewPanel) return;
+  if (diffPreviewDragState) {
+    diffPreviewDragState = null;
+    diffPreviewPanel.classList.remove('dragging');
+  }
+  if (diffPreviewResizeState) {
+    diffPreviewResizeState = null;
+    diffPreviewPanel.classList.remove('resizing');
+  }
+}
+
+function closeDiffPreview() {
+  if (!diffPreviewPanel) return;
+  diffPreviewPanel.style.display = 'none';
+  diffPreviewPanel._wasOpen = false;
+  diffPreviewDragState = null;
+  diffPreviewResizeState = null;
+  diffPreviewPanel.classList.remove('dragging', 'resizing');
+  if (diffPreviewContentEl) diffPreviewContentEl.innerHTML = '';
 }
 
 function closeFilePreview() {
@@ -6708,6 +7030,8 @@ async function resumeSession(sessionId, cwd, model, savedCost = 0, remoteTargetI
   currentAssistantMessageId = null;
   currentContent = [];
   streamBlocks = {};
+  isResponding = false;
+  currentRunId = null;
   currentSessionId = sessionId;
   resetAssistantStreamState();
   totalCost = Number.isFinite(savedCost) ? savedCost : 0;
