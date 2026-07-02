@@ -308,9 +308,9 @@ function drawWikiGraph() {
   ctx.translate(wikiGraphOffsetX, wikiGraphOffsetY);
   ctx.scale(wikiGraphScale, wikiGraphScale);
 
-  // 绘制边
-  ctx.strokeStyle = "rgba(106, 122, 144, 0.25)";
-  ctx.lineWidth = 1;
+  // 绘制边：提高对比度，避免图谱线条在深色背景下看不清
+  ctx.strokeStyle = "rgba(125, 238, 178, 0.48)";
+  ctx.lineWidth = 1.6;
   edges.forEach(function(e) {
     var a = nodes[e.source];
     var b = nodes[e.target];
