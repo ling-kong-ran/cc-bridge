@@ -26,13 +26,15 @@ def ensure_venv() -> Path:
 
 
 def _install_deps(python: Path) -> None:
-    """将 requirements.txt 安装到 venv 中。"""
+    """将 requirements.txt 安装到 venv 中（失败不阻止启动）。"""
     req_file = REPO_ROOT / "requirements.txt"
     if not req_file.exists():
-        log("未找到 requirements.txt，跳过依赖安装")
         return
     log("安装项目依赖...")
-    subprocess.run(
-        [str(python), "-m", "pip", "install", "-r", str(req_file)],
-        check=True,
-    )
+    try:
+        subprocess.run(
+            [str(python), "-m", "pip", "install", "-r", str(req_file)],
+            check=True,
+        )
+    except subprocess.CalledProcessError:
+        log("依赖安装失败，可能是离线环境，继续启动服务")
