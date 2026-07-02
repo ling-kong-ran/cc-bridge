@@ -460,6 +460,12 @@ class FeishuGateway:
             ws_log(f"_start_ws: 导入 EventDispatcherHandler 失败: {exc}")
             return False
 
+        # 先停止旧连接（如果有的话），避免重复线程
+        if self._ws_thread is not None and self._ws_thread.is_alive():
+            ws_log("_start_ws: 检测到旧 WS 线程仍在运行，先停止")
+            self._ws_running = False
+            self._ws_client = None
+
         # 创建事件队列用于跨线程传递
         try:
             main_loop = asyncio.get_event_loop()
@@ -518,6 +524,9 @@ class FeishuGateway:
             self._ws_running = False
             return
 
+        # 追踪 SDK 内部重连状态（跨线程共享，由钩子和看门狗读写）
+        sdk_reconnecting = {"at": 0.0}  # 用 dict 避免 nonlocal 闭包问题
+
         client = None
         try:
             ws_log("正在创建 WS Client (domain=open.feishu.cn)...")
@@ -526,7 +535,19 @@ class FeishuGateway:
                 app_secret=app_secret,
                 event_handler=event_handler,
             )
+            # 注册 SDK 重连钩子，避免依赖看门狗被动等待
+            def _on_reconnecting():
+                sdk_reconnecting["at"] = time.time()
+                ws_log("SDK 检测到断连，开始重连...")
+
+            def _on_reconnected():
+                ws_log("SDK 重连成功")
+                sdk_reconnecting["at"] = 0.0
+
+            client.on_reconnecting = _on_reconnecting
+            client.on_reconnected = _on_reconnected
             self._ws_client = client
+            self._sdk_reconnecting = sdk_reconnecting
             ws_log("Client 已创建，调用 start()...")
             client.start()
             ws_log("client.start() 返回（连接已关闭）")
@@ -536,11 +557,12 @@ class FeishuGateway:
             ws_log(traceback.format_exc())
         finally:
             self._ws_running = False
+            self._sdk_reconnecting = None
             if client is not None:
                 try:
                     client.stop()
-                except Exception:
-                    pass
+                except (AttributeError, Exception):
+                    pass  # SDK Client 没有 stop() 方法，忽略
                 self._ws_client = None
             # 清理线程 event loop 中的待处理任务
             if loop is not None and not loop.is_closed():
@@ -562,48 +584,58 @@ class FeishuGateway:
         _last_activity = time.time()
         _reconnect_backoff = 5
         while True:
-            if not self._ws_running:
-                ws_log(f"WS 连接断开，{_reconnect_backoff} 秒后自动重连...")
-                await asyncio.sleep(_reconnect_backoff)
-                self.ensure_ws_running()
-                if self._ws_running:
+            try:
+                if not self._ws_running:
+                    ws_log(f"WS 连接断开，{_reconnect_backoff} 秒后自动重连...")
+                    await asyncio.sleep(_reconnect_backoff)
+                    self.ensure_ws_running()
+                    if self._ws_running:
+                        _last_activity = time.time()
+                        _reconnect_backoff = 5
+                    else:
+                        _reconnect_backoff = min(_reconnect_backoff * 2, 60)
+                    continue
+
+                try:
+                    data = await asyncio.wait_for(self._ws_event_queue.get(), timeout=1.0)
                     _last_activity = time.time()
                     _reconnect_backoff = 5
-                else:
-                    _reconnect_backoff = min(_reconnect_backoff * 2, 60)
-                continue
-
-            try:
-                data = await asyncio.wait_for(self._ws_event_queue.get(), timeout=1.0)
-                _last_activity = time.time()
-                _reconnect_backoff = 5
-            except asyncio.TimeoutError:
-                # 如果 WS 标记为运行中但长时间无事件，可能是连接僵死
-                stale = time.time() - _last_activity
-                if stale > 120:
-                    ws_log(f"WS 连接 {stale:.0f} 秒无活动，强制重连...")
-                    self.stop_ws()
-                    await asyncio.sleep(1)
-                continue
-            except RuntimeError:
-                break
-            try:
-                et = data.get("header", {}).get("event_type", "?")
-                cid = data.get("event", {}).get("message", {}).get("chat_id", "?")
-                ws_log(f"收到事件: type={et} chat_id={cid}")
-                result = await self.handle_event(data)
-                ws_log(f"handle_event 返回: {result}")
+                except asyncio.TimeoutError:
+                    # 如果 WS 标记为运行中但长时间无事件，可能是连接僵死
+                    stale = time.time() - _last_activity
+                    # SDK 钩子已检测到断连时用更短的超时（60s），否则用 120s
+                    sdk_reconnecting = getattr(self, '_sdk_reconnecting', None)
+                    sdk_down_since = sdk_reconnecting["at"] if sdk_reconnecting else 0
+                    threshold = 60 if (sdk_down_since and sdk_down_since > 0) else 120
+                    if stale > threshold:
+                        ws_log(f"WS 连接 {stale:.0f} 秒无活动 (threshold={threshold}s)，强制重连...")
+                        self.stop_ws()
+                        await asyncio.sleep(1)
+                    continue
+                except RuntimeError:
+                    break
+                try:
+                    et = data.get("header", {}).get("event_type", "?")
+                    cid = data.get("event", {}).get("message", {}).get("chat_id", "?")
+                    ws_log(f"收到事件: type={et} chat_id={cid}")
+                    result = await self.handle_event(data)
+                    ws_log(f"handle_event 返回: {result}")
+                except Exception as exc:
+                    import traceback
+                    ws_log(f"消费事件异常: {exc}\n{traceback.format_exc()}")
             except Exception as exc:
                 import traceback
-                ws_log(f"消费事件异常: {exc}\n{traceback.format_exc()}")
+                ws_log(f"事件消费循环异常（5 秒后恢复）: {exc}\n{traceback.format_exc()}")
+                await asyncio.sleep(5)
 
     def stop_ws(self) -> None:
         """停止 WebSocket 连接。"""
         self._ws_running = False
+        self._sdk_reconnecting = None
         client = self._ws_client
+        self._ws_client = None
         if client is not None:
             try:
                 client.stop()
-            except Exception:
-                pass
-            self._ws_client = None
+            except (AttributeError, Exception):
+                pass  # SDK Client 没有 stop() 方法
