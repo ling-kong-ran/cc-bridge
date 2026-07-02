@@ -4099,6 +4099,12 @@ html.light-theme body.resizing-workspace-pane .workspace-pane-resizer::after {
 
 .memory-list-panel,
 .memory-side-panel {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-dim);
+  border-radius: var(--radius-lg);
+  padding: 14px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.12);
+}
 
 .integration-panel-head {
   display: flex;
