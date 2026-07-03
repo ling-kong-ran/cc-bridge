@@ -2456,6 +2456,40 @@ async def publish_scheduled_event(event_type: str, data: dict):
     """向所有已连接客户端广播定时任务事件。"""
     for client_id in list(sse_clients.keys()):
         await push_event(client_id, event_type, data)
+    if event_type in ("scheduled_task_finished", "scheduled_task_error"):
+        asyncio.create_task(_notify_scheduled_task_event(event_type, data))
+
+
+async def _notify_scheduled_task_event(event_type: str, data: dict):
+    """定时任务结束时主动推送到已激活的网关会话。"""
+    try:
+        task = data.get("task") if isinstance(data.get("task"), dict) else {}
+        lang = get_gui_settings().get("language", "zh")
+        is_en = lang == "en"
+        name = str(task.get("name") or data.get("task_id") or "定时任务")
+        model = str(task.get("model") or "")
+        sid = str(data.get("session_id") or task.get("last_session_id") or "")
+        manual = bool(data.get("manual"))
+        error = str(data.get("message") or task.get("last_error") or "")
+        if event_type == "scheduled_task_error":
+            title = "Scheduled task failed" if is_en else "定时任务失败"
+            status = "Failed" if is_en else "失败"
+        else:
+            title = "Scheduled task completed" if is_en else "定时任务完成"
+            status = "Completed" if is_en else "完成"
+        trigger_label = "Trigger" if is_en else "触发方式"
+        trigger = ("Manual" if manual else "Schedule") if is_en else ("手动" if manual else "定时")
+        parts = [f"**{title}**", f"\n{('Task' if is_en else '任务')}：{name}", f"{('Status' if is_en else '状态')}：{status}"]
+        parts.append(f"{trigger_label}：{trigger}")
+        if model:
+            parts.append(f"{('Model' if is_en else '模型')}：{model}")
+        if sid:
+            parts.append(f"Session：{sid}")
+        if error:
+            parts.append(f"\n{('Error' if is_en else '错误')}：{error[:500]}")
+        await get_feishu_gateway().notify_active_scopes("\n".join(parts).strip(), reason="notify_scheduled_task", require_complete_notify=False)
+    except Exception as exc:
+        _notify_log.info(f"scheduled notify failed: {exc}")
 
 
 def make_owner_event_handler(client_id: str, run_id: str, session, model: str, cwd: str, remote_target_id: str, cli: str, default_title: str = "新会话"):

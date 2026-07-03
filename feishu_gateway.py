@@ -123,19 +123,31 @@ class FeishuGateway:
         asyncio.create_task(self._handle_message(config, message))
         return {"ok": True, "accepted": True}
 
-    async def notify_session_complete(self, title: str, summary: str, model: str, cost_usd: float = 0, prompt: str = "", lang: str = "zh", elapsed: float = 0) -> None:
-        """向所有活跃飞书聊天发送 GUI 会话完成通知。"""
+    async def notify_active_scopes(self, text: str, reason: str = "gateway_notify", require_complete_notify: bool = True) -> None:
+        """向所有活跃飞书聊天推送一段已格式化的通知文本。"""
         config = get_feishu_gateway_config(redact=False)
         if not config.get("enabled"):
-            ws_log("notify_session_complete: 网关未启用，跳过")
+            ws_log(f"{reason}: 网关未启用，跳过")
             return
-        if not config.get("complete_notify", True):
-            ws_log("notify_session_complete: complete_notify=false，跳过")
+        if require_complete_notify and not config.get("complete_notify", True):
+            ws_log(f"{reason}: complete_notify=false，跳过")
             return
         scopes = list_scopes()
         if not scopes:
-            ws_log("notify_session_complete: scopes 为空，无通知目标")
+            ws_log(f"{reason}: scopes 为空，无通知目标")
             return
+        ws_log(f"{reason}: 发送通知到 {len(scopes)} 个聊天")
+        for scope in scopes:
+            chat_id = scope.get("chat_id")
+            if not chat_id:
+                continue
+            try:
+                await self._send_reply(config, chat_id, text)
+            except Exception as exc:
+                ws_log(f"{reason}: 发送到 {chat_id} 失败: {exc}")
+
+    async def notify_session_complete(self, title: str, summary: str, model: str, cost_usd: float = 0, prompt: str = "", lang: str = "zh", elapsed: float = 0) -> None:
+        """向所有活跃飞书聊天发送 GUI 会话完成通知。"""
         is_en = lang == "en"
         header = "Notification" if is_en else "通知"
         q_label = "Q" if is_en else "问"
@@ -157,15 +169,7 @@ class FeishuGateway:
                 s = int(elapsed % 60)
                 parts.append(f"  |  {elapsed_label}：{m}m{s}s")
         text = "\n".join(parts).strip()
-        ws_log(f"notify_session_complete: 发送完成通知到 {len(scopes)} 个聊天")
-        for scope in scopes:
-            chat_id = scope.get("chat_id")
-            if not chat_id:
-                continue
-            try:
-                await self._send_reply(config, chat_id, text)
-            except Exception as exc:
-                ws_log(f"notify_session_complete: 发送到 {chat_id} 失败: {exc}")
+        await self.notify_active_scopes(text, reason="notify_session_complete")
 
     async def reset_scope(self, chat_id: str) -> bool:
         scope_key = self._scope_key(chat_id)

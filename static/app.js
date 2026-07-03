@@ -205,6 +205,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   initTopbarSessionActions();
   initMobileLayout();
   initSSE();
+  initMessageAutoScroll();
   initInput();
   initModelPill();
   initCliInstallModal();
@@ -2936,7 +2937,7 @@ function bindSSEEvents() {
     if (!isEventForCurrentSession(data)) return;
     if (data.content) {
       addUserMessage(data.content);
-      scrollToBottom();
+      scrollToBottom(true);
     }
   });
 
@@ -2961,7 +2962,7 @@ function bindSSEEvents() {
       } else {
         currentAssistantEl.classList.add('streaming');
       }
-      scrollToBottom();
+      scrollToBottom(true);
     }
     startTurnTimer();
     updateUI();
@@ -4628,7 +4629,7 @@ async function sendMessage() {
     }
   }
 
-  scrollToBottom();
+  scrollToBottom(true);
   updateUI();
 
   const result = await sendAction('send_message', {
@@ -4767,11 +4768,27 @@ function updateUI() {
 }
 
 let _scrollPending = false;
-function scrollToBottom() {
+let followMessageOutput = true;
+
+function isMessagesNearBottom(threshold = 80) {
+  if (!messagesEl) return true;
+  return messagesEl.scrollHeight - messagesEl.scrollTop - messagesEl.clientHeight <= threshold;
+}
+
+function initMessageAutoScroll() {
+  if (!messagesEl) return;
+  messagesEl.addEventListener('scroll', () => {
+    followMessageOutput = isMessagesNearBottom();
+  }, { passive: true });
+}
+
+function scrollToBottom(force = false) {
+  if (!force && !followMessageOutput) return;
   if (_scrollPending) return;
   _scrollPending = true;
   requestAnimationFrame(() => {
     messagesEl.scrollTo({ top: messagesEl.scrollHeight, behavior: 'instant' });
+    followMessageOutput = true;
     _scrollPending = false;
   });
 }
@@ -7245,7 +7262,7 @@ function renderHistory(history) {
       contentEl.innerHTML = html;
     }
   }
-  scrollToBottom();
+  scrollToBottom(true);
 }
 
 function renderHistoryToolCard(block) {
