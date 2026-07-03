@@ -76,6 +76,7 @@ Request flow: browser → `server.py` (HTTP + REST + SSE) → `ccb_bridge.py` (s
 ## Conventions
 
 - Code comments and CLI-facing UI strings are Chinese (zh-CN); user-facing UI text is localized via `static/i18n/{en,zh}.json` (same key set, read through `data-i18n*` attributes).
+- Git commit messages for this project must be written in Chinese.
 - All filesystem paths are normalized to forward slashes (`.replace("\\", "/")`) before being sent to the frontend.
 - Path-traversal guards exist on static serving (must resolve under `static/`) and `/api/file` (must be under an uploads dir) — preserve these when touching those handlers.
 - Directory browsing/search endpoints skip dotfiles and `node_modules`, `__pycache__`, `.git`, `venv`, `.venv`.

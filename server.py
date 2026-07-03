@@ -485,15 +485,8 @@ async def broadcast_session_lock(session_id: str, locked: bool, holder_id: str =
 async def release_session_lock_for_session(
     session_id: str,
     holder_id: str = "",
-    notify_complete: bool = False,
-    session=None,
-    model: str = "",
-    default_title: str = "新会话",
-    error: str = "",
 ):
     if session_id and session_locks.get(session_id, {}).get("holder_id") == holder_id:
-        if notify_complete:
-            await _notify_turn_complete_once(holder_id, session_id, session, model, default_title, error=error)
         await broadcast_session_lock(session_id, False, holder_id)
 
 
@@ -2426,14 +2419,7 @@ async def handle_action(body: bytes, writer: asyncio.StreamWriter):
         released = False
         if session and not session.current_generation_state().get("running"):
             released = await session.release_idle()
-            await release_session_lock_for_session(
-                sid,
-                client_id,
-                notify_complete=True,
-                session=session,
-                model=getattr(session, "model", "") or (client_meta.get(client_id, {}) or {}).get("model", ""),
-                default_title=client_last_msg.get(client_id, "新会话"),
-            )
+            await release_session_lock_for_session(sid, client_id)
             if sid and session_run_ids.get(sid) == run_id:
                 session_run_ids.pop(sid, None)
             if run_id:
