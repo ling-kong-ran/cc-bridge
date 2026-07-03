@@ -2677,8 +2677,16 @@ html.light-theme body.resizing-workspace-pane .workspace-pane-resizer::after {
 }
 
 .welcome-start-card {
+  overflow: hidden;
   border-color: rgba(var(--accent-rgb), 0.24);
   background: linear-gradient(180deg, rgba(var(--accent-rgb), 0.05), rgba(255,255,255,0.015));
+}
+
+.welcome-start-card .welcome-runtime {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding-right: 4px;
 }
 
 .welcome-runtime-inline-label {
