@@ -294,6 +294,7 @@ class CCBSession:
         self._message_started_at: Optional[float] = None  # 当前消息开始时间（server 端，用于刷新后恢复耗时）
         self._message_prompt: str = ""  # 当前消息摘要（用于恢复状态/通知）
         self._message_has_output = False
+        self._notified: bool = False  # 当前轮次是否已发送过通知（每轮消息前重置）
         self._read_task: Optional[asyncio.Task] = None
         self._mcp_config_path: Optional[Path] = None
         self._persistent = False
@@ -390,7 +391,9 @@ class CCBSession:
     async def send_message(self, content: str, owner_id: str = "", prefer_persistent: bool = True):
         """发送一条消息：优先复用持久 CLI，必要时回退到一次性进程。"""
         if not self.is_running:
+            print(f"[CC Bridge] send_message skipped: not running sid={self.session_id}")
             return
+        print(f"[CC Bridge] send_message start sid={self.session_id} persistent={self._persistent} proc_alive={self._proc is not None and self._proc.returncode is None}")
         if owner_id:
             self._message_owner_id = owner_id
             self._message_started_at = time.time()
@@ -430,8 +433,10 @@ class CCBSession:
             await self._write_persistent_payload(content)
 
     def _can_use_persistent_cli(self) -> bool:
-        """可复用配置固定的持久 CLI；远程目标/权限变化时通过 proc_key 触发重启。"""
-        return self._prefer_persistent and not self._persistent_failed
+        """是否可使用 stream-json stdin 持久模式。"""
+        if not self._prefer_persistent or self._persistent_failed:
+            return False
+        return True
 
     def _persistent_proc_key(self) -> tuple:
         remote_key = ""
@@ -527,6 +532,8 @@ class CCBSession:
         """发送一条消息：启动 ccb 子进程处理。"""
         # 如果上一个进程还在跑，先终止
         await self._kill_proc()
+
+        print(f"[CC Bridge] _send_one_shot sid={self.session_id} model={self.model} cli={self.cli or get_current_cli()}")
 
         cli = validate_cli(self.cli or get_current_cli())
         cwd = validate_cwd(self.cwd or "")
@@ -665,6 +672,9 @@ class CCBSession:
         self._viewer_callbacks.pop(viewer_id, None)
 
     async def _emit_event(self, event: dict):
+        evt_type = event.get("type", "unknown")
+        if evt_type in ("result", "process_ended", "error"):
+            print(f"[CC Bridge] _emit_event sid={self.session_id} type={evt_type} has_on_event={self._on_event is not None}")
         if self.session_id and "session_id" not in event:
             event = dict(event)
             event["session_id"] = self.session_id
@@ -675,8 +685,8 @@ class CCBSession:
                     await self._on_event(event)
                 else:
                     self._on_event(event)
-            except Exception:
-                pass
+            except Exception as exc:
+                print(f"[CC Bridge] _emit_event handler crash sid={self.session_id} type={evt_type} error={exc}")
         # 通知所有 viewer
         for cb in list(self._viewer_callbacks.values()):
             try:
@@ -785,6 +795,7 @@ class CCBSession:
                         return
                     if self.is_running:
                         await self._emit_event({"type": "error", "message": "持久 CLI 进程已退出，下一条消息将自动回退为普通模式"})
+                self.is_running = False  # 进程结束，允许下一条消息创建新的 mak_event_handler
                 self._message_owner_id = None
                 self._message_started_at = None
                 self._message_prompt = ""
