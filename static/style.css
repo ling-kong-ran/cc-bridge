@@ -4749,7 +4749,21 @@ html.light-theme .memory-file-snippet {
 .picker-footer {
   display: flex; justify-content: space-between; align-items: center;
   flex: 0 0 auto;
+  gap: 12px;
   padding: 11px 16px; border-top: 1px solid var(--border-dim);
+}
+
+.picker-footer-left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.picker-select-all {
+  width: auto;
+  padding: 5px 10px;
+  font-size: 10px;
 }
 
 .picker-empty {

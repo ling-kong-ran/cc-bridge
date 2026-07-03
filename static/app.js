@@ -7517,6 +7517,7 @@ const filePickerCurrentPath = document.getElementById('file-picker-current-path'
 const filePickerUp = document.getElementById('file-picker-up');
 const filePickerClose = document.getElementById('file-picker-close');
 const filePickerConfirm = document.getElementById('file-picker-confirm');
+const filePickerSelectAll = document.getElementById('file-picker-select-all');
 const filePickerSelectedCount = document.getElementById('file-picker-selected-count');
 const filePickerSearch = document.getElementById('file-picker-search');
 const filePickerTabs = document.getElementById('file-picker-tabs');
@@ -7529,6 +7530,7 @@ const filePickerLocalHint = document.getElementById('file-picker-local-hint');
 let filePickerCurrentDir = '/';
 let filePickerSelected = new Map(); // path -> { name, source, originalPath, remoteTargetName }
 let filePickerItems = [];
+let filePickerVisibleItems = [];
 let filePickerSearchTimer = null;
 let filePickerSearchSeq = 0;
 let filePickerMode = 'local';
@@ -7542,6 +7544,7 @@ filePickerUp.addEventListener('click', () => {
   navigateFilePicker(getParentPath(filePickerCurrentDir));
 });
 filePickerConfirm.addEventListener('click', confirmFileSelection);
+filePickerSelectAll?.addEventListener('click', toggleSelectAllVisibleFiles);
 filePickerSearch.addEventListener('input', handleFilePickerSearchInput);
 filePickerClientChoose?.addEventListener('click', () => fileInput.click());
 filePickerServerBrowse?.addEventListener('click', () => setFilePickerMode('server'));
@@ -7607,12 +7610,53 @@ function closeFilePicker() {
 function updateFilePickerCount() {
   filePickerSelectedCount.textContent = t('selectedFiles', { count: filePickerSelected.size });
   filePickerConfirm.disabled = filePickerSelected.size === 0;
+  updateFilePickerSelectAllButton();
+}
+
+function getVisibleSelectableFilePickerItems() {
+  if (!filePickerList) return [];
+  return Array.from(filePickerList.querySelectorAll('.file-picker-item'))
+    .filter(el => el.dataset.type !== 'dir' && el.dataset.type !== 'drive')
+    .map(el => ({
+      path: el.dataset.path,
+      name: el.dataset.name,
+      source: filePickerMode === 'remote' ? 'remote' : 'server',
+      originalPath: el.dataset.path,
+      remoteTargetName: getRemoteTargetName(),
+    }))
+    .filter(item => item.path);
+}
+
+function updateFilePickerSelectAllButton() {
+  if (!filePickerSelectAll) return;
+  const items = getVisibleSelectableFilePickerItems();
+  const hasItems = items.length > 0;
+  const allSelected = hasItems && items.every(item => filePickerSelected.has(item.path));
+  filePickerSelectAll.style.display = filePickerMode === 'client' || filePickerMode === 'local' ? 'none' : '';
+  filePickerSelectAll.disabled = !hasItems;
+  filePickerSelectAll.textContent = allSelected ? t('clearVisibleFiles') : t('selectAllFiles');
+}
+
+function toggleSelectAllVisibleFiles() {
+  const items = getVisibleSelectableFilePickerItems();
+  if (!items.length) return;
+  const allSelected = items.every(item => filePickerSelected.has(item.path));
+  for (const item of items) {
+    if (allSelected) {
+      filePickerSelected.delete(item.path);
+    } else {
+      filePickerSelected.set(item.path, item);
+    }
+  }
+  updateFilePickerCount();
+  renderFilePickerItems(filePickerVisibleItems.length ? filePickerVisibleItems : filePickerItems);
 }
 
 async function navigateFilePicker(path) {
   filePickerCurrentDir = path;
   filePickerCurrentPath.textContent = path || '/';
   filePickerItems = [];
+  filePickerVisibleItems = [];
   filePickerSearch.value = '';
   filePickerSearchSeq += 1;
   filePickerList.innerHTML = `<div class="picker-empty">${esc(t('pickerLoading'))}</div>`;
@@ -7810,9 +7854,11 @@ function renderFilePickerItems(items, options = {}) {
   const filteredItems = keyword && items === filePickerItems
     ? items.filter(item => `${item.name} ${item.path}`.toLowerCase().includes(keyword))
     : items;
+  filePickerVisibleItems = filteredItems;
 
   if (filteredItems.length === 0) {
     filePickerList.innerHTML = `<div class="picker-empty">${esc(options.emptyText || (keyword ? t('noMatches') : t('emptyDir')))}</div>`;
+    updateFilePickerSelectAllButton();
     return;
   }
 
@@ -7854,6 +7900,7 @@ function renderFilePickerItems(items, options = {}) {
       renderFilePickerItems(filePickerSearch.value.trim() ? filteredItems : filePickerItems);
     });
   });
+  updateFilePickerSelectAllButton();
 }
 
 function getFileIcon(name) {

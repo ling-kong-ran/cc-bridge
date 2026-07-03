@@ -237,6 +237,8 @@
   "restored": "会话已恢复 · 发送消息继续对话",
   "restoreFailed": "恢复失败: {message}",
   "selectedFiles": "已选 {count} 个文件",
+  "selectAllFiles": "全选文件",
+  "clearVisibleFiles": "取消本页全选",
   "pickerLoading": "加载中...",
   "emptyDirFolders": "此目录下无子文件夹",
   "emptyDir": "此目录为空",

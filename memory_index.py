@@ -352,6 +352,63 @@ def get_memory_graph(cwd: str) -> dict:
     return {"nodes": nodes, "edges": edges}
 
 
+def _extract_memory_terms(title: str, body: str, stem: str) -> set[str]:
+    """提取用于记忆整理的轻量关键词，兼顾中文文件名。"""
+    text = f"{title} {body} {stem}".lower()
+    terms = set()
+
+    # 英文/数字词（2+ 字符）
+    for word in re.findall(r"[a-zA-Z0-9_]{2,}", text):
+        terms.add(word)
+
+    # 中文字符 bigram（"飞书消息" → ["飞书", "书消", "消息"]）
+    cjk_chars = re.findall(r"[一-鿿]", text)
+    for k in range(len(cjk_chars) - 1):
+        terms.add(cjk_chars[k] + cjk_chars[k + 1])
+
+    # 文件名分段：中文前缀/编号后缀常靠 - _ 空格分隔
+    for part in re.split(r"[-_\s.]+", stem):
+        part = part.strip().lower()
+        if len(part) < 2:
+            continue
+        terms.add(part)
+        part_cjk = re.findall(r"[一-鿿]", part)
+        for k in range(len(part_cjk) - 1):
+            terms.add(part_cjk[k] + part_cjk[k + 1])
+
+    return terms
+
+
+def _memory_prefix_score(stem_a: str, stem_b: str) -> float:
+    """计算文件名公共前缀强度；相同中文前缀应直接视为强关联。"""
+    a = stem_a.lower()
+    b = stem_b.lower()
+    prefix_len = 0
+    for ch_a, ch_b in zip(a, b):
+        if ch_a != ch_b:
+            break
+        prefix_len += 1
+    if prefix_len == 0:
+        return 0.0
+
+    prefix = a[:prefix_len].rstrip("-_ .0123456789")
+    cjk_count = len(re.findall(r"[一-鿿]", prefix))
+    ascii_count = len(re.findall(r"[a-z0-9]", prefix))
+    if cjk_count < 2 and ascii_count < 4:
+        return 0.0
+    return len(prefix) / max(1, min(len(a), len(b)))
+
+
+def _append_memory_link(file_data: dict[str, Any], target_stem: str) -> None:
+    """在原文件末尾追加 wikilink，保留 frontmatter。"""
+    content = (file_data.get("content") or file_data.get("body") or "").rstrip()
+    new_content = content + f"\n\n[[{target_stem}]]\n"
+    file_data["path"].write_text(new_content, encoding="utf-8")
+    file_data["content"] = new_content
+    file_data["body"] = new_content
+    file_data["existing_links"].add(target_stem)
+
+
 def organize_memory_links(cwd: str) -> dict:
     """分析 memory 文件内容相似度，自动为相关文件添加 [[wikilink]] 双向链接。
 
@@ -374,37 +431,20 @@ def organize_memory_links(cwd: str) -> dict:
         for match in re.finditer(r"\[\[([^\[\]]+?)(?:\|[^\[\]]*?)?\]\]", body):
             existing_links.add(Path(match.group(1).strip()).stem)
 
-        # 提取关键短语——中文用字符 bigram，英文用词级 token
-        text = (title + " " + body).lower()
-        terms = set()
-
-        # 英文/数字词（2+ 字符）
-        for word in re.findall(r"[a-zA-Z0-9_]{2,}", text):
-            terms.add(word)
-
-        # 中文字符 bigram（"飞书消息" → ["飞书", "书消", "消息"]）
-        cjk_chars = re.findall(r"[\u4e00-\u9fff]", text)
-        for k in range(len(cjk_chars) - 1):
-            terms.add(cjk_chars[k] + cjk_chars[k + 1])
-
-        # 文件名中的词也加入（按分隔符拆分）
         stem = Path(md_file.name).stem
-        for part in re.split(r"[-_\s]+", stem):
-            if len(part) >= 2:
-                terms.add(part.lower())
-
         files_data[parsed["name"]] = {
             "path": md_file,
             "title": title,
+            "content": parsed.get("content", ""),
             "body": body,
-            "terms": terms,
+            "terms": _extract_memory_terms(title, body, stem),
             "existing_links": existing_links,
         }
 
     if len(files_data) < 2:
         return {"linked": 0, "skipped": 0, "pairs": []}
 
-    # 计算文件对之间的相似度
+    # 计算文件对之间的相似度；中文文件名前缀相同也视为强关联
     file_names = list(files_data.keys())
     linked = 0
     skipped = 0
@@ -425,7 +465,6 @@ def organize_memory_links(cwd: str) -> dict:
                 skipped += 1
                 continue
 
-            # 计算 Jaccard 相似度
             terms_a = data_a["terms"]
             terms_b = data_b["terms"]
             if not terms_a or not terms_b:
@@ -433,35 +472,29 @@ def organize_memory_links(cwd: str) -> dict:
             intersection = terms_a & terms_b
             union = terms_a | terms_b
             similarity = len(intersection) / len(union) if union else 0
+            prefix_score = _memory_prefix_score(stem_a, stem_b)
 
-            # 阈值：中文 bigram 粒度细，用更低阈值（~0.06）
-            if similarity < 0.06:
+            # 阈值：中文 bigram 粒度细，用较低阈值；同名前缀文件直接建立关联
+            if similarity < 0.06 and prefix_score < 0.35:
                 continue
 
             # 添加双向链接
             modified = False
-            # 在文件 A 末尾添加链接到 B
             if stem_b not in data_a["existing_links"]:
-                new_content_a = data_a["body"].rstrip() + f"\n\n[[{stem_b}]]\n"
-                data_a["path"].write_text(new_content_a, encoding="utf-8")
-                data_a["body"] = new_content_a
-                data_a["existing_links"].add(stem_b)
+                _append_memory_link(data_a, stem_b)
                 modified = True
 
-            # 在文件 B 末尾添加链接到 A
             if stem_a not in data_b["existing_links"]:
-                new_content_b = data_b["body"].rstrip() + f"\n\n[[{stem_a}]]\n"
-                data_b["path"].write_text(new_content_b, encoding="utf-8")
-                data_b["body"] = new_content_b
-                data_b["existing_links"].add(stem_a)
+                _append_memory_link(data_b, stem_a)
                 modified = True
 
             if modified:
                 linked += 1
                 pairs.append([name_a, name_b])
 
+    if linked:
+        index_memory(cwd, force=True)
     return {"linked": linked, "skipped": skipped, "pairs": pairs}
-
 
 def delete_memory_file(filename: str, cwd: str) -> bool:
     """删除 memory 文件（重命名为 .bak）。"""

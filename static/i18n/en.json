@@ -237,6 +237,8 @@
   "restored": "Session restored · send a message to continue",
   "restoreFailed": "Restore failed: {message}",
   "selectedFiles": "Selected {count} files",
+  "selectAllFiles": "Select all files",
+  "clearVisibleFiles": "Clear visible files",
   "pickerLoading": "Loading...",
   "emptyDirFolders": "No folders in this directory",
   "emptyDir": "This directory is empty",

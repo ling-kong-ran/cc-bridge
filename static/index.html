@@ -1151,7 +1151,10 @@
         <div id="file-picker-list" class="picker-list"></div>
       </div>
       <div class="picker-footer">
-        <span id="file-picker-selected-count" style="font-family:var(--font-mono);color:var(--text-muted);">Selected 0 files</span>
+        <div class="picker-footer-left">
+          <span id="file-picker-selected-count" style="font-family:var(--font-mono);color:var(--text-muted);">Selected 0 files</span>
+          <button id="file-picker-select-all" class="btn-save picker-select-all" type="button" data-i18n="selectAllFiles">Select all files</button>
+        </div>
         <button id="file-picker-confirm" class="btn btn-primary" style="width:auto; padding:8px 24px;">
           <span class="btn-prefix">&gt;</span> <span data-i18n="addAttachments">Add Attachments</span>
         </button>

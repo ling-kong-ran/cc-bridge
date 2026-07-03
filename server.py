@@ -48,7 +48,7 @@ from config_manager import (
 )
 from session_store import list_sessions, save_session, add_session_usage, delete_session, load_session_history, rename_session, update_session_cwd, toggle_pin
 from artifact_store import list_artifacts as list_artifact_records
-from memory_index import list_memory_files, search_memory, get_memory_file, delete_memory_file, save_memory_file, index_memory, get_memory_tree, get_memory_graph
+from memory_index import list_memory_files, search_memory, get_memory_file, delete_memory_file, save_memory_file, index_memory, get_memory_tree, get_memory_graph, import_memory_files, organize_memory_links
 import wiki_store
 # 飞书模块延迟加载 — 避免 lark_oapi SDK 拖慢 server 启动
 class _LazyFeishu:
@@ -1471,15 +1471,41 @@ def delete_uploaded_files(paths: list[str]) -> dict:
     return {"ok": True, "deleted": deleted, "failed": failed}
 
 
-# ─── 文件上传 ─────────────────────────────────────────────
-async def handle_upload(headers: dict, body: bytes, writer: asyncio.StreamWriter):
-    """处理 multipart 文件上传，保存到工作目录的 .gui-uploads/ 下"""
-    content_type = headers.get("content-type", "")
-    if "multipart/form-data" not in content_type:
-        await send_response(writer, 400, "application/json", b'{"error":"need multipart"}')
+async def handle_memory_upload(headers: dict, body: bytes, writer: asyncio.StreamWriter):
+    """处理 memory 导入上传，直接写入项目 memory 目录。"""
+    result = _parse_multipart_upload(headers, body)
+    if result.get("error"):
+        resp = json.dumps({"ok": False, "error": result["error"]}, ensure_ascii=False).encode("utf-8")
+        await send_response(writer, 400, "application/json; charset=utf-8", resp)
         return
 
-    # 提取 boundary
+    cwd_value = result.get("cwd") or DEFAULT_CWD
+    imported = []
+    for item in result.get("files") or []:
+        filename = item.get("filename") or "memory.md"
+        file_data = item.get("data") or b""
+        if not file_data:
+            continue
+        try:
+            content = file_data.decode("utf-8")
+        except UnicodeDecodeError:
+            continue
+        saved = save_memory_file(filename, content, cwd_value)
+        if saved:
+            imported.append(saved)
+
+    if imported:
+        index_memory(cwd_value, force=True)
+    resp = json.dumps({"ok": bool(imported), "imported": imported}, ensure_ascii=False).encode("utf-8")
+    await send_response(writer, 200, "application/json; charset=utf-8", resp)
+
+
+def _parse_multipart_upload(headers: dict, body: bytes) -> dict:
+    """解析 multipart 上传，返回 cwd 和文件数据。"""
+    content_type = headers.get("content-type", "")
+    if "multipart/form-data" not in content_type:
+        return {"error": "need multipart"}
+
     boundary = None
     for part in content_type.split(";"):
         part = part.strip()
@@ -1488,30 +1514,24 @@ async def handle_upload(headers: dict, body: bytes, writer: asyncio.StreamWriter
             break
 
     if not boundary:
-        await send_response(writer, 400, "application/json", b'{"error":"no boundary"}')
-        return
+        return {"error": "no boundary"}
 
-    # 解析 multipart body
     boundary_bytes = f"--{boundary}".encode()
     parts = body.split(boundary_bytes)
-    saved_files = []
-    upload_dir = UPLOAD_DIR_FALLBACK  # 默认
     cwd_value = None
+    files = []
 
     for part in parts:
         if not part or part == b"--\r\n" or part == b"--":
             continue
-
-        # 分离 headers 和 content
         if b"\r\n\r\n" not in part:
             continue
         header_section, file_data = part.split(b"\r\n\r\n", 1)
-
-        # 去掉尾部 \r\n
         if file_data.endswith(b"\r\n"):
             file_data = file_data[:-2]
+        if file_data.endswith(b"--"):
+            file_data = file_data[:-2]
 
-        # 从 Content-Disposition 提取字段名和文件名
         header_str = header_section.decode("utf-8", errors="replace")
         filename = ""
         field_name = ""
@@ -1527,40 +1547,43 @@ async def handle_upload(headers: dict, body: bytes, writer: asyncio.StreamWriter
                         filename = fname
                 break
 
-        # 如果是 cwd 字段
         if field_name == "cwd" and not filename:
             cwd_value = file_data.decode("utf-8", errors="replace").strip()
             continue
+        if file_data and filename:
+            files.append({"filename": filename, "data": file_data})
 
-        if not file_data or not filename:
+    return {"cwd": cwd_value, "files": files}
+
+
+# ─── 文件上传 ─────────────────────────────────────────────
+async def handle_upload(headers: dict, body: bytes, writer: asyncio.StreamWriter):
+    """处理 multipart 文件上传，保存到工作目录的 .gui-uploads/ 下"""
+    result = _parse_multipart_upload(headers, body)
+    if result.get("error"):
+        resp = json.dumps({"error": result["error"]}, ensure_ascii=False).encode("utf-8")
+        await send_response(writer, 400, "application/json; charset=utf-8", resp)
+        return
+
+    saved_files = []
+    upload_dir = UPLOAD_DIR_FALLBACK  # 默认
+    cwd_value = result.get("cwd")
+
+    if cwd_value and os.path.isdir(cwd_value):
+        upload_dir = Path(cwd_value) / ".gui-uploads"
+        upload_dir.mkdir(exist_ok=True)
+
+    for item in result.get("files") or []:
+        filename = item.get("filename") or "file"
+        file_data = item.get("data") or b""
+        if not file_data:
             continue
 
-        # 确定上传目录
-        if cwd_value and os.path.isdir(cwd_value):
-            upload_dir = Path(cwd_value) / ".gui-uploads"
-            upload_dir.mkdir(exist_ok=True)
-
         # 保存文件（UUID 前缀避免冲突）
-        safe_name = f"{uuid.uuid4().hex[:8]}_{filename}"
+        safe_name = f"{uuid.uuid4().hex[:8]}_{Path(filename).name}"
         file_path = upload_dir / safe_name
         file_path.write_bytes(file_data)
         saved_files.append(str(file_path.resolve()).replace("\\", "/"))
-
-    # 如果 cwd 还没处理（cwd 字段在 file 后面），重新移动文件
-    if cwd_value and os.path.isdir(cwd_value) and saved_files:
-        target_dir = Path(cwd_value) / ".gui-uploads"
-        target_dir.mkdir(exist_ok=True)
-        new_files = []
-        for fp in saved_files:
-            src = Path(fp)
-            if src.parent != target_dir:
-                dst = target_dir / src.name
-                dst.write_bytes(src.read_bytes())
-                src.unlink()
-                new_files.append(str(dst.resolve()).replace("\\", "/"))
-            else:
-                new_files.append(fp)
-        saved_files = new_files
 
     resp = json.dumps({"files": saved_files}, ensure_ascii=False).encode("utf-8")
     await send_response(writer, 200, "application/json; charset=utf-8", resp)
@@ -1619,6 +1642,9 @@ async def handle_http(reader: asyncio.StreamReader, writer: asyncio.StreamWriter
         if route_path == "/sse":
             await handle_sse(query, writer)
             return  # SSE 连接由 handle_sse 管理生命周期
+
+        elif method == "POST" and route_path == "/api/memory/upload":
+            await handle_memory_upload(headers, body, writer)
 
         elif method == "POST" and route_path == "/api/upload":
             await handle_upload(headers, body, writer)
@@ -3198,6 +3224,24 @@ async def handle_api_post(path: str, body: bytes, writer: asyncio.StreamWriter):
             await send_response(writer, 200, "application/json; charset=utf-8", resp)
         else:
             await send_response(writer, 500, "application/json", b'{"error":"save failed"}')
+        return
+    elif path == "/api/memory/import":
+        cwd = data.get("cwd", DEFAULT_CWD)
+        paths = data.get("paths") or []
+        if not isinstance(paths, list):
+            await send_response(writer, 400, "application/json", b'{"error":"paths required"}')
+            return
+        imported = import_memory_files(paths, cwd)
+        if imported:
+            index_memory(cwd, force=True)
+        resp = json.dumps({"ok": True, "imported": imported}, ensure_ascii=False).encode("utf-8")
+        await send_response(writer, 200, "application/json; charset=utf-8", resp)
+        return
+    elif path == "/api/memory/organize":
+        cwd = data.get("cwd", DEFAULT_CWD)
+        result = organize_memory_links(cwd)
+        resp = json.dumps(result, ensure_ascii=False).encode("utf-8")
+        await send_response(writer, 200, "application/json; charset=utf-8", resp)
         return
     elif path == "/api/memory/index":
         cwd = data.get("cwd", DEFAULT_CWD)
