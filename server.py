@@ -2505,7 +2505,7 @@ async def _notify_scheduled_task_event(event_type: str, data: dict):
             status = "Completed" if is_en else "完成"
         trigger_label = "Trigger" if is_en else "触发方式"
         trigger = ("Manual" if manual else "Schedule") if is_en else ("手动" if manual else "定时")
-        parts = [f"**{title}**", f"\n{('Task' if is_en else '任务')}：{name}", f"{('Status' if is_en else '状态')}：{status}"]
+        parts = [f"通知：{title}", f"\n{('Task' if is_en else '任务')}：{name}", f"{('Status' if is_en else '状态')}：{status}"]
         parts.append(f"{trigger_label}：{trigger}")
         if model:
             parts.append(f"{('Model' if is_en else '模型')}：{model}")
@@ -2595,17 +2595,35 @@ async def _notify_turn_complete_once(client_id: str, sid: str, session, model: s
     return True
 
 
+def _extract_assistant_text(event: dict) -> str:
+    """从 assistant 事件中提取当前消息的文本块。"""
+    message = event.get("message") if isinstance(event.get("message"), dict) else {}
+    content = message.get("content") if isinstance(message.get("content"), list) else []
+    parts: list[str] = []
+    for block in content:
+        if not isinstance(block, dict):
+            continue
+        if block.get("type") == "text" and block.get("text"):
+            parts.append(str(block.get("text") or ""))
+    return "\n\n".join(p.strip() for p in parts if p and p.strip()).strip()
+
+
 def _track_response_text(event: dict, client_id: str) -> None:
-    """从 stream_event / assistant 事件中提取文本，累积到 client_response_buf。"""
+    """从 stream_event / assistant 事件中提取文本，记录当前轮最后一条助手回复。"""
     try:
         if not isinstance(event, dict):
+            return
+        if event.get("type") == "assistant":
+            text = _extract_assistant_text(event)
+            if text:
+                client_response_buf[client_id] = text
             return
         inner = event.get("event", event) if isinstance(event.get("event"), dict) else event
         if not isinstance(inner, dict):
             return
         if inner.get("type") == "content_block_delta":
             delta = inner.get("delta", {}) if isinstance(inner.get("delta"), dict) else {}
-            t = delta.get("text") or delta.get("thinking") or ""
+            t = delta.get("text") or ""
             if t:
                 client_response_buf[client_id] = client_response_buf.get(client_id, "") + t
     except Exception:

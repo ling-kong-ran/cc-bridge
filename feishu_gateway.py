@@ -149,25 +149,26 @@ class FeishuGateway:
     async def notify_session_complete(self, title: str, summary: str, model: str, cost_usd: float = 0, prompt: str = "", lang: str = "zh", elapsed: float = 0) -> None:
         """向所有活跃飞书聊天发送 GUI 会话完成通知。"""
         is_en = lang == "en"
-        header = "Notification" if is_en else "通知"
+        header = "Session completed" if is_en else "会话完成"
         q_label = "Q" if is_en else "问"
         a_label = "A" if is_en else "答"
         model_label = "Model" if is_en else "模型"
         elapsed_label = "Duration" if is_en else "耗时"
         cost_info = f" (${cost_usd:.4f})" if cost_usd > 0 else ""
-        parts = [f"**{header}**{cost_info}"]
+        parts = [f"通知：{header}{cost_info}"]
         if prompt:
-            parts.append(f"\n**{q_label}**\n{prompt}")
+            parts.append(f"\n{q_label}：\n{prompt}")
         if summary:
-            parts.append(f"\n**{a_label}**\n{summary}")
-        parts.append(f"\n{model_label}：{model}")
+            parts.append(f"\n{a_label}：\n{summary}")
+        meta = [f"{model_label}：{model}"]
         if elapsed > 0:
             if elapsed < 60:
-                parts.append(f"  |  {elapsed_label}：{elapsed:.0f}s")
+                meta.append(f"{elapsed_label}：{elapsed:.0f}s")
             else:
                 m = int(elapsed // 60)
                 s = int(elapsed % 60)
-                parts.append(f"  |  {elapsed_label}：{m}m{s}s")
+                meta.append(f"{elapsed_label}：{m}m{s}s")
+        parts.append("\n" + "  |  ".join(meta))
         text = "\n".join(parts).strip()
         await self.notify_active_scopes(text, reason="notify_session_complete")
 
