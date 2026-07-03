@@ -4040,8 +4040,6 @@ function initInput() {
   });
 
   inputEl.addEventListener('input', () => {
-    inputEl.style.height = 'auto';
-    inputEl.style.height = Math.min(inputEl.scrollHeight, 200) + 'px';
     const query = getSlashQuery();
     if (query !== null && !slashCommands.length) {
       slashCommandPanel.innerHTML = `<div class="slash-command-empty">${esc(t('loading'))}</div>`;
@@ -4609,7 +4607,6 @@ async function sendMessage() {
   addUserMessage(originalContent, quotesForThisTurn);
   captureActiveWorkspaceSnapshot();
   inputEl.value = '';
-  inputEl.style.height = 'auto';
 
   if (!isLiveFollowup) {
     currentTurnContent = originalContent || (attachmentCount ? t('notifyAttachmentPrompt', { count: attachmentCount }) : (quotesForThisTurn.length ? t('quotedMessage') : ''));

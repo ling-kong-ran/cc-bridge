@@ -2,6 +2,13 @@
 let artifacts = [];
 let artifactFilter = 'all';
 let artifactSearch = '';
+let artifactVisibleLimit = 36;
+let artifactLazyObserver = null;
+const ARTIFACT_LAZY_BATCH = 36;
+
+function resetArtifactLazyLimit() {
+  artifactVisibleLimit = ARTIFACT_LAZY_BATCH;
+}
 
 function initArtifactsUI() {
   document.getElementById('btn-artifacts-refresh')?.addEventListener('click', function() { loadArtifacts(true); });
@@ -15,6 +22,7 @@ function initArtifactsUI() {
   document.querySelectorAll('.artifacts-tab').forEach(function(tab) {
     tab.addEventListener('click', function() {
       artifactFilter = tab.dataset.filter || 'all';
+      resetArtifactLazyLimit();
       document.querySelectorAll('.artifacts-tab').forEach(function(t) { t.classList.toggle('active', t === tab); });
       renderArtifacts();
     });
@@ -23,6 +31,7 @@ function initArtifactsUI() {
   if (search) {
     search.addEventListener('input', function() {
       artifactSearch = search.value.trim().toLowerCase();
+      resetArtifactLazyLimit();
       renderArtifacts();
     });
   }
@@ -40,6 +49,7 @@ async function loadArtifacts(force) {
     var resp = await fetch('/api/artifacts?limit_sessions=30');
     var data = await resp.json();
     artifacts = Array.isArray(data.artifacts) ? data.artifacts : [];
+    resetArtifactLazyLimit();
     renderArtifacts();
   } catch (e) {
     if (content) content.innerHTML = '<div class="artifacts-empty error">' + esc(t('artifactsLoadFailed')) + '</div>';
@@ -61,6 +71,8 @@ function renderArtifacts() {
   var summary = document.getElementById('artifacts-summary');
   if (!content) return;
   var visible = filteredArtifacts();
+  var renderItems = visible.slice(0, artifactVisibleLimit);
+  var hasMore = visible.length > renderItems.length;
   var counts = artifacts.reduce(function(acc, item) {
     acc[item.kind] = (acc[item.kind] || 0) + 1;
     return acc;
@@ -77,8 +89,8 @@ function renderArtifacts() {
     content.innerHTML = artifacts.length ? '<div class="artifacts-empty">' + esc(t('noMatches')) + '</div>' : '<div class="artifacts-empty-enhanced"><div class="empty-icon">📦</div><div class="empty-title">' + esc(t('noArtifacts')) + '</div><div class="empty-hint">' + esc(t('artifactsEmptyHint')) + '</div></div>';
     return;
   }
-  var imageItems = visible.filter(function(item) { return item.kind === 'image'; });
-  var otherItems = visible.filter(function(item) { return item.kind !== 'image'; });
+  var imageItems = renderItems.filter(function(item) { return item.kind === 'image'; });
+  var otherItems = renderItems.filter(function(item) { return item.kind !== 'image'; });
   var html = '';
   if (imageItems.length) {
     html += '<div class="artifacts-grid">';
@@ -88,8 +100,34 @@ function renderArtifacts() {
   if (otherItems.length) {
     html += '<div class="artifacts-table">' + otherItems.map(renderArtifactRow).join('') + '</div>';
   }
+  if (hasMore) {
+    html += '<div id="artifacts-lazy-sentinel" class="artifacts-lazy-sentinel"><span>' + esc(t('loading')) + '</span><small>' + renderItems.length + ' / ' + visible.length + '</small></div>';
+  }
   content.innerHTML = html;
   bindArtifactActions(content);
+  bindArtifactLazyLoader(content, visible.length);
+}
+
+function bindArtifactLazyLoader(content, total) {
+  if (artifactLazyObserver) {
+    artifactLazyObserver.disconnect();
+    artifactLazyObserver = null;
+  }
+  var sentinel = document.getElementById('artifacts-lazy-sentinel');
+  if (!sentinel) return;
+  var loadMore = function() {
+    if (artifactVisibleLimit >= total) return;
+    artifactVisibleLimit += ARTIFACT_LAZY_BATCH;
+    renderArtifacts();
+  };
+  if (!('IntersectionObserver' in window)) {
+    sentinel.addEventListener('click', loadMore);
+    return;
+  }
+  artifactLazyObserver = new IntersectionObserver(function(entries) {
+    if (entries.some(function(entry) { return entry.isIntersecting; })) loadMore();
+  }, { root: content.closest('.artifacts-page') || null, rootMargin: '260px 0px', threshold: 0.01 });
+  artifactLazyObserver.observe(sentinel);
 }
 
 function renderArtifactImageCard(item) {
