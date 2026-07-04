@@ -428,6 +428,8 @@ class FeishuGateway:
     _ws_running: bool = False
     _ws_thread: threading.Thread | None = None
     _ws_event_queue: Any = None  # asyncio.Queue, 在 _start_ws 中初始化
+    _ws_loop: asyncio.AbstractEventLoop | None = None  # WS SDK 专用 event loop，仅在 WS 线程内驱动
+    _ws_stop_requested: bool = False
     _ws_consumer_started: bool = False  # 防止重复创建消费任务
 
     @property
@@ -510,11 +512,11 @@ class FeishuGateway:
             ws_log(f"_start_ws: 导入 EventDispatcherHandler 失败: {exc}")
             return False
 
-        # 先停止旧连接（如果有的话），避免重复线程
+        # 先停止旧连接（如果有的话），避免多个 WS 线程同时改写 SDK 模块级 loop
         if self._ws_thread is not None and self._ws_thread.is_alive():
-            ws_log("_start_ws: 检测到旧 WS 线程仍在运行，先停止")
-            self._ws_running = False
-            self._ws_client = None
+            ws_log("_start_ws: 检测到旧 WS 线程仍在运行，先请求停止，等待下次重连")
+            self.stop_ws()
+            return False
 
         # 创建事件队列用于跨线程传递
         try:
@@ -529,7 +531,7 @@ class FeishuGateway:
         def _on_message(data: Any) -> None:
             """SDK 后台线程回调：将事件转为 dict 并投递到 asyncio 队列。"""
             payload = _msg_to_payload(data)
-            if payload:
+            if payload and not gateway._ws_stop_requested:
                 main_loop.call_soon_threadsafe(gateway._ws_event_queue.put_nowait, payload)
 
         event_handler = (
@@ -538,6 +540,7 @@ class FeishuGateway:
             .build()
         )
 
+        self._ws_stop_requested = False
         self._ws_running = True
         self._ws_thread = threading.Thread(
             target=self._run_ws_loop,
@@ -568,6 +571,7 @@ class FeishuGateway:
         try:
             loop = asyncio.new_event_loop()
             asyncio.set_event_loop(loop)
+            self._ws_loop = loop
             ws_client_module.loop = loop
         except Exception as exc:
             ws_log(f"创建 event loop 失败: {exc}")
@@ -608,25 +612,25 @@ class FeishuGateway:
         finally:
             self._ws_running = False
             self._sdk_reconnecting = None
-            if client is not None:
-                try:
-                    client.stop()
-                except (AttributeError, Exception):
-                    pass  # SDK Client 没有 stop() 方法，忽略
+            if self._ws_client is client:
                 self._ws_client = None
-            # 清理线程 event loop 中的待处理任务
+            # 清理线程 event loop 中的待处理任务。不要在这里再次调用 client.stop()：
+            # lark_oapi 的 Client 没有公开 stop()，断连时重复 close 可能让 websockets Future 跨 loop。
             if loop is not None and not loop.is_closed():
                 try:
                     pending = asyncio.all_tasks(loop)
                     for task in pending:
                         task.cancel()
-                    loop.run_until_complete(asyncio.gather(*pending, return_exceptions=True))
+                    if pending:
+                        loop.run_until_complete(asyncio.gather(*pending, return_exceptions=True))
                 except Exception:
                     pass
                 try:
                     loop.close()
                 except Exception:
                     pass
+            if self._ws_loop is loop:
+                self._ws_loop = None
 
     async def _consume_ws_events(self) -> None:
         """主 event loop 中的事件消费循环。WS 断开后自动重连。"""
@@ -680,12 +684,14 @@ class FeishuGateway:
 
     def stop_ws(self) -> None:
         """停止 WebSocket 连接。"""
+        self._ws_stop_requested = True
         self._ws_running = False
         self._sdk_reconnecting = None
-        client = self._ws_client
         self._ws_client = None
-        if client is not None:
+
+        loop = self._ws_loop
+        if loop is not None and not loop.is_closed():
             try:
-                client.stop()
-            except (AttributeError, Exception):
-                pass  # SDK Client 没有 stop() 方法
+                loop.call_soon_threadsafe(loop.stop)
+            except RuntimeError:
+                pass
