@@ -5991,6 +5991,55 @@ html.light-theme .agent-status-bar {
   }
 
   .workspace-tabs-shell {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 8px;
+    overflow: hidden;
+  }
+
+  .workspace-tabs {
+    min-width: 0;
+    gap: 5px;
+    padding-bottom: 1px;
+  }
+
+  .workspace-tabs-empty {
+    padding: 6px 8px;
+    font-size: 10px;
+    white-space: nowrap;
+  }
+
+  .workspace-actions {
+    flex: 0 0 auto;
+    gap: 3px;
+  }
+
+  .workspace-mode {
+    height: 26px;
+    padding: 0 8px;
+    font-size: 9px;
+  }
+
+  .workspace-new-session {
+    flex-basis: 28px;
+    width: 28px;
+    height: 28px;
+    font-size: 16px;
+  }
+
+  .workspace-tab {
+    flex: 0 0 min(58vw, 190px);
+    min-width: 132px;
+    max-width: 190px;
+    padding: 6px 8px 6px 11px;
+  }
+
+  .workspace-tab-title {
+    font-size: 10px;
+  }
+
+  .workspace-tab-meta {
     display: none;
   }
 
