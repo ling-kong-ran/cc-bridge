@@ -87,6 +87,19 @@ function updateStopButton() {
   }
 }
 
+function setVisible(el, visible, display = '') {
+  if (!el) return;
+  el.style.display = visible ? display : 'none';
+}
+
+function isVisible(el) {
+  return !!el && el.style.display !== 'none';
+}
+
+function isDisplay(el, display) {
+  return !!el && el.style.display === display;
+}
+
 let sessionOffset = 0;
 let sessionTotal = 0;
 const SESSION_PAGE_SIZE = 50;
@@ -479,6 +492,8 @@ function renderWorkspace() {
   workspacePanesEl.classList.toggle('workspace-focus', workspaceMode !== 'grid');
   workspaceFocusBtn?.classList.toggle('active', workspaceMode !== 'grid');
   workspaceGridBtn?.classList.toggle('active', workspaceMode === 'grid');
+  workspaceFocusBtn?.setAttribute('aria-pressed', workspaceMode !== 'grid' ? 'true' : 'false');
+  workspaceGridBtn?.setAttribute('aria-pressed', workspaceMode === 'grid' ? 'true' : 'false');
   saveWorkspaceState();
 }
 
@@ -585,8 +600,10 @@ function renderWorkspaceTabs() {
     workspaceTabsEl.innerHTML = `<div class="workspace-tabs-empty">${esc(t('workspaceNoTabs'))}</div>${newButton}`;
     return;
   }
-  workspaceTabsEl.innerHTML = sessions.map(s => `
-    <div class="workspace-tab ${s.sessionId === activeWorkspaceSessionId ? 'active' : ''} status-${esc(s.status || 'idle')}" role="tab" tabindex="0" data-session-id="${esc(s.sessionId)}">
+  workspaceTabsEl.innerHTML = sessions.map(s => {
+    const active = s.sessionId === activeWorkspaceSessionId;
+    return `
+    <div class="workspace-tab ${active ? 'active' : ''} status-${esc(s.status || 'idle')}" role="tab" tabindex="0" aria-selected="${active ? 'true' : 'false'}" data-session-id="${esc(s.sessionId)}">
       <span class="workspace-tab-title-row">
         <span class="workspace-tab-title">${esc(s.title || t('newChat'))}</span>
         <span class="workspace-tab-actions">
@@ -596,7 +613,8 @@ function renderWorkspaceTabs() {
       </span>
       <span class="workspace-tab-meta">${esc(getWorkspaceStatusLabel(s.status))}${(s.status === 'running' || s.status === 'tool') && s.phase ? ` · ${esc(s.phase)}` : ''}</span>
     </div>
-  `).join('') + newButton;
+  `;
+  }).join('') + newButton;
 }
 
 function renderWorkspacePanes() {
@@ -767,11 +785,11 @@ function initShortcutsHelp() {
 }
 
 function openShortcutsHelp() {
-  if (shortcutsOverlay) shortcutsOverlay.style.display = 'flex';
+  setVisible(shortcutsOverlay, true, 'flex');
 }
 
 function closeShortcutsHelp() {
-  if (shortcutsOverlay) shortcutsOverlay.style.display = 'none';
+  setVisible(shortcutsOverlay, false);
 }
 
 function setSidebarCollapsed(collapsed) {
@@ -996,6 +1014,7 @@ function initScheduledTasksUI() {
   document.getElementById('btn-scheduled-save')?.addEventListener('click', saveScheduledTask);
   document.getElementById('btn-scheduled-reset')?.addEventListener('click', resetScheduledForm);
   document.getElementById('scheduled-type')?.addEventListener('change', updateScheduledScheduleFields);
+  document.getElementById('scheduled-task-list')?.addEventListener('click', handleScheduledTaskAction);
   updateScheduledScheduleFields();
 }
 
@@ -1026,9 +1045,9 @@ function updateScheduledScheduleFields() {
   const interval = document.getElementById('scheduled-interval-field');
   const daily = document.getElementById('scheduled-daily-field');
   const once = document.getElementById('scheduled-once-field');
-  if (interval) interval.style.display = type === 'interval' ? '' : 'none';
-  if (daily) daily.style.display = type === 'daily' ? '' : 'none';
-  if (once) once.style.display = type === 'once' ? '' : 'none';
+  setVisible(interval, type === 'interval');
+  setVisible(daily, type === 'daily');
+  setVisible(once, type === 'once');
 }
 
 async function loadScheduledTasks() {
@@ -1043,6 +1062,18 @@ async function loadScheduledTasks() {
   } catch (e) {
     list.innerHTML = `<p class="empty-state">${esc(t('scheduledLoadFailed'))}</p>`;
   }
+}
+
+function handleScheduledTaskAction(e) {
+  const actionEl = e.target.closest('[data-act]');
+  const item = actionEl?.closest('.scheduled-task-item');
+  if (!actionEl || !item) return;
+  const task = scheduledTasks.find(t => t.id === item.dataset.id);
+  if (!task) return;
+  if (actionEl.dataset.act === 'run') runScheduledTask(task);
+  if (actionEl.dataset.act === 'toggle') toggleScheduledTask(task);
+  if (actionEl.dataset.act === 'edit') fillScheduledForm(task);
+  if (actionEl.dataset.act === 'delete') deleteScheduledTask(task);
 }
 
 function renderScheduledTasks() {
@@ -1071,13 +1102,6 @@ function renderScheduledTasks() {
       </div>
     </article>
   `).join('');
-  list.querySelectorAll('.scheduled-task-item').forEach(item => {
-    const task = scheduledTasks.find(t => t.id === item.dataset.id);
-    item.querySelector('[data-act="run"]')?.addEventListener('click', () => runScheduledTask(task));
-    item.querySelector('[data-act="toggle"]')?.addEventListener('click', () => toggleScheduledTask(task));
-    item.querySelector('[data-act="edit"]')?.addEventListener('click', () => fillScheduledForm(task));
-    item.querySelector('[data-act="delete"]')?.addEventListener('click', () => deleteScheduledTask(task));
-  });
 }
 
 function formatSchedule(schedule) {
@@ -4043,7 +4067,7 @@ function initInput() {
     const query = getSlashQuery();
     if (query !== null && !slashCommands.length) {
       slashCommandPanel.innerHTML = `<div class="slash-command-empty">${esc(t('loading'))}</div>`;
-      slashCommandPanel.style.display = 'block';
+      setVisible(slashCommandPanel, true, 'block');
       ensureSlashCommandsLoaded();
       return;
     }
@@ -4195,11 +4219,11 @@ function quoteIntoInput(text, meta = null) {
 function renderQuotePreview() {
   if (!quotePreviewBar) return;
   if (quotedMessages.length === 0) {
-    quotePreviewBar.style.display = 'none';
+    setVisible(quotePreviewBar, false);
     quotePreviewBar.innerHTML = '';
     return;
   }
-  quotePreviewBar.style.display = 'flex';
+  setVisible(quotePreviewBar, true, 'flex');
   quotePreviewBar.innerHTML = quotedMessages.map((quote, i) => `
     <div class="quote-preview-item">
       <div class="quote-preview-head">
@@ -4236,7 +4260,7 @@ function interruptCurrentRun() {
 }
 
 function handleGlobalShortcuts(e) {
-  if (e.key === 'Escape' && shortcutsOverlay && shortcutsOverlay.style.display !== 'none') {
+  if (e.key === 'Escape' && isVisible(shortcutsOverlay)) {
     e.preventDefault();
     closeShortcutsHelp();
     return;
@@ -4366,17 +4390,17 @@ function updateSlashCommandPanel() {
 
   if (!slashCommandMatches.length) {
     slashCommandPanel.innerHTML = `<div class="slash-command-empty">${esc(t('noCommandMatches'))}</div>`;
-    slashCommandPanel.style.display = 'block';
+    setVisible(slashCommandPanel, true, 'block');
     return;
   }
 
   slashCommandPanel.innerHTML = slashCommandMatches.map((cmd, idx) => `
-    <button type="button" class="slash-command-item${idx === slashCommandIndex ? ' active' : ''}" data-idx="${idx}">
+    <button type="button" class="slash-command-item${idx === slashCommandIndex ? ' active' : ''}" data-idx="${idx}" role="option" aria-selected="${idx === slashCommandIndex ? 'true' : 'false'}">
       <span class="slash-command-name">${esc(cmd.name)}</span>
       <span class="slash-command-desc">${esc(cmd.description || '')}</span>
     </button>
   `).join('');
-  slashCommandPanel.style.display = 'block';
+  setVisible(slashCommandPanel, true, 'block');
 
   slashCommandPanel.querySelectorAll('.slash-command-item').forEach(btn => {
     btn.addEventListener('mouseenter', () => {
@@ -4391,7 +4415,9 @@ function updateSlashCommandPanel() {
 
 function renderSlashCommandActiveState() {
   slashCommandPanel.querySelectorAll('.slash-command-item').forEach((item, idx) => {
-    item.classList.toggle('active', idx === slashCommandIndex);
+    const active = idx === slashCommandIndex;
+    item.classList.toggle('active', active);
+    item.setAttribute('aria-selected', active ? 'true' : 'false');
   });
 }
 
@@ -4434,7 +4460,7 @@ function selectSlashCommand(index) {
 }
 
 function closeSlashCommandPanel() {
-  slashCommandPanel.style.display = 'none';
+  setVisible(slashCommandPanel, false);
   slashCommandMatches = [];
   slashCommandIndex = 0;
 }
@@ -4447,7 +4473,7 @@ function renderModelPill() {
   modelPill.textContent = getDisplayModelName(val) || 'Model';
   renderInputStatus();
   // 同步刷新弹出列表里的选项选中态
-  if (modelPillPopover && modelPillPopover.style.display === 'block') {
+  if (isDisplay(modelPillPopover, 'block')) {
     renderModelPillPopoverOptions();
   }
 }
@@ -4458,7 +4484,7 @@ function renderModelPillPopoverOptions() {
   modelPillPopover.innerHTML = Array.from(modelSelect.options)
     .filter(function(o) { return o.value; })
     .map(function(o) {
-      return '<button class="model-pill-option' + (o.value === current ? ' active' : '') + '" data-model="' + esc(o.value) + '">' + esc(o.textContent) + '</button>';
+      return '<button class="model-pill-option' + (o.value === current ? ' active' : '') + '" data-model="' + esc(o.value) + '" type="button" role="option" aria-selected="' + (o.value === current ? 'true' : 'false') + '">' + esc(o.textContent) + '</button>';
     })
     .join('');
   modelPillPopover.querySelectorAll('.model-pill-option').forEach(function(btn) {
@@ -4475,17 +4501,19 @@ function renderModelPillPopoverOptions() {
 
 function openModelPillPopover() {
   if (!modelPillPopover) return;
-  if (modelPillPopover.style.display === 'block') { closeModelPillPopover(); return; }
+  if (isDisplay(modelPillPopover, 'block')) { closeModelPillPopover(); return; }
   closeSlashCommandPanel();
   renderModelPillPopoverOptions();
-  modelPillPopover.style.display = 'block';
+  setVisible(modelPillPopover, true, 'block');
   modelPill.classList.add('open');
+  modelPill.setAttribute('aria-expanded', 'true');
 }
 
 function closeModelPillPopover() {
   if (!modelPillPopover) return;
-  modelPillPopover.style.display = 'none';
+  setVisible(modelPillPopover, false);
   modelPill.classList.remove('open');
+  modelPill.setAttribute('aria-expanded', 'false');
 }
 
 function initModelPill() {
@@ -4495,7 +4523,7 @@ function initModelPill() {
     openModelPillPopover();
   });
   document.addEventListener('click', function(e) {
-    if (modelPillPopover && modelPillPopover.style.display === 'block' &&
+    if (isDisplay(modelPillPopover, 'block') &&
         !modelPillPopover.contains(e.target) && e.target !== modelPill) {
       closeModelPillPopover();
     }
@@ -4524,11 +4552,11 @@ async function uploadFile(file) {
 
 function renderAttachments() {
   if (attachedFiles.length === 0) {
-    attachmentsBar.style.display = 'none';
+    setVisible(attachmentsBar, false);
     attachmentsBar.innerHTML = '';
     return;
   }
-  attachmentsBar.style.display = 'flex';
+  setVisible(attachmentsBar, true, 'flex');
   attachmentsBar.innerHTML = attachedFiles.map((f, i) => `
     <div class="attachment-item" title="${esc(getAttachmentTitle(f))}">
       <span class="attachment-source">${esc(getAttachmentSourceLabel(f))}</span>
@@ -5527,18 +5555,18 @@ function renderAgentAddPopover() {
       searchInput.addEventListener('input', () => {
         const q = searchInput.value.toLowerCase();
         popover.querySelectorAll('.agent-add-popover-item').forEach(item => {
-          item.style.display = item.dataset.agent.toLowerCase().includes(q) ? '' : 'none';
+          setVisible(item, item.dataset.agent.toLowerCase().includes(q));
         });
       });
       setTimeout(() => searchInput.focus(), 0);
     }
   }
-  popover.style.display = 'block';
+  setVisible(popover, true, 'block');
 }
 
 function hideAgentAddPopover() {
   const popover = document.getElementById('agent-add-popover');
-  if (popover) popover.style.display = 'none';
+  setVisible(popover, false);
 }
 
 function refreshRightPaneFiles() {
@@ -5712,7 +5740,7 @@ function initRightPanel() {
   // 添加 agent 按钮
   if (addBtn) {
     addBtn.addEventListener('click', () => {
-      if (popover && popover.style.display === 'block') {
+      if (popover && isDisplay(popover, 'block')) {
         hideAgentAddPopover();
       } else {
         renderAgentAddPopover();
@@ -5741,7 +5769,7 @@ function initRightPanel() {
   // 点击面板外关闭 agent 弹窗
   document.addEventListener('click', (e) => {
     const pv = document.getElementById('agent-add-popover');
-    if (!pv || pv.style.display !== 'block') return;
+    if (!isDisplay(pv, 'block')) return;
     if (!pv.contains(e.target) && e.target.id !== 'btn-session-agent-add') {
       hideAgentAddPopover();
     }
@@ -5796,12 +5824,14 @@ function updateWorkspaceHeader(tab = document.querySelector('.chat-sidebar-tab.a
 }
 
 function switchToSidebarTab(tab) {
-  document.querySelectorAll('.chat-sidebar-tab').forEach(t => t.classList.remove('active'));
-  const tabEl = document.querySelector(`.chat-sidebar-tab[data-tab="${tab}"]`);
-  if (tabEl) tabEl.classList.add('active');
-  document.getElementById('file-tree-panel').style.display = tab === 'files' ? '' : 'none';
-  document.getElementById('review-panel').style.display = tab === 'review' ? '' : 'none';
-  document.getElementById('group-member-panel').style.display = tab === 'members' ? '' : 'none';
+  document.querySelectorAll('.chat-sidebar-tab').forEach(t => {
+    const active = t.dataset.tab === tab;
+    t.classList.toggle('active', active);
+    t.setAttribute('aria-selected', active ? 'true' : 'false');
+  });
+  setVisible(document.getElementById('file-tree-panel'), tab === 'files');
+  setVisible(document.getElementById('review-panel'), tab === 'review');
+  setVisible(document.getElementById('group-member-panel'), tab === 'members');
   updateWorkspaceHeader(tab);
 }
 

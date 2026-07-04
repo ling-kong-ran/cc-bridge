@@ -24,7 +24,7 @@
 <body>
   <div id="mobile-sidebar-backdrop" class="mobile-sidebar-backdrop" aria-hidden="true"></div>
 
-  <div class="titlebar">
+  <header class="titlebar">
     <div class="titlebar-left">
       <button class="mobile-menu-toggle" type="button" aria-label="Open menu" aria-expanded="false">
         <span></span><span></span><span></span>
@@ -40,20 +40,20 @@
       </span>
     </div>
     <div class="titlebar-right">
-      <button id="btn-toggle-right-panel" class="titlebar-btn" type="button" title="Toggle panel" style="display:none">◧</button>
-      <button id="btn-session-pin" class="titlebar-btn titlebar-session-action" type="button" title="Pin session" style="display:none">PIN</button>
-      <button id="btn-session-cwd" class="titlebar-btn titlebar-session-action" type="button" title="Change working directory" style="display:none">DIR</button>
-      <button id="btn-session-rename" class="titlebar-btn titlebar-session-action" type="button" title="Rename session" style="display:none">EDIT</button>
-      <button id="btn-session-delete" class="titlebar-btn titlebar-session-action" type="button" title="Delete session" style="display:none">×</button>
-      <button id="btn-export-chat" class="titlebar-btn" type="button" title="Copy as Markdown" data-i18n-title="copyMarkdown">MD</button>
-      <button id="btn-shortcuts" class="titlebar-btn" type="button" title="Help" data-i18n-title="shortcutsTitle">?</button>
+      <button id="btn-toggle-right-panel" class="titlebar-btn" type="button" title="Toggle panel" aria-label="Toggle panel" style="display:none">◧</button>
+      <button id="btn-session-pin" class="titlebar-btn titlebar-session-action" type="button" title="Pin session" data-i18n-title="pinSession" aria-label="Pin session" style="display:none">PIN</button>
+      <button id="btn-session-cwd" class="titlebar-btn titlebar-session-action" type="button" title="Change working directory" data-i18n-title="changeCwd" aria-label="Change working directory" style="display:none">DIR</button>
+      <button id="btn-session-rename" class="titlebar-btn titlebar-session-action" type="button" title="Rename session" data-i18n-title="rename" aria-label="Rename session" style="display:none">EDIT</button>
+      <button id="btn-session-delete" class="titlebar-btn titlebar-session-action" type="button" title="Delete session" data-i18n-title="delete" aria-label="Delete session" style="display:none">×</button>
+      <button id="btn-export-chat" class="titlebar-btn" type="button" title="Copy as Markdown" data-i18n-title="copyMarkdown" aria-label="Copy as Markdown">MD</button>
+      <button id="btn-shortcuts" class="titlebar-btn" type="button" title="Help" data-i18n-title="shortcutsTitle" aria-label="Help">?</button>
       <button id="btn-theme-toggle" class="titlebar-btn" type="button" title="Switch Theme" aria-label="Switch theme">
         <svg class="theme-icon-moon" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.8A8.5 8.5 0 1 1 11.2 3a6.7 6.7 0 0 0 9.8 9.8z"></path></svg>
         <svg class="theme-icon-sun" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="4"></circle><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"></path></svg>
       </button>
       <button id="btn-nav-settings" class="titlebar-btn" type="button" title="Settings" data-i18n-title="settings">⚙</button>
     </div>
-  </div>
+  </header>
 
   <div class="app">
     <!-- 侧边栏 -->
@@ -159,10 +159,10 @@
         <div class="chat-main">
           <div id="session-workspace" class="session-workspace">
             <div class="workspace-tabs-shell">
-              <div id="workspace-tabs" class="workspace-tabs" role="tablist"></div>
+              <div id="workspace-tabs" class="workspace-tabs" role="tablist" aria-label="Session workspace tabs"></div>
               <div class="workspace-actions">
-                <button id="workspace-focus-mode" class="workspace-mode active" type="button" data-i18n="workspaceFocus">Focus</button>
-                <button id="workspace-grid-mode" class="workspace-mode" type="button" data-i18n="workspaceGrid">Grid</button>
+                <button id="workspace-focus-mode" class="workspace-mode active" type="button" aria-pressed="true" data-i18n="workspaceFocus">Focus</button>
+                <button id="workspace-grid-mode" class="workspace-mode" type="button" aria-pressed="false" data-i18n="workspaceGrid">Grid</button>
               </div>
             </div>
             <div id="workspace-panes" class="workspace-panes workspace-focus">
@@ -171,7 +171,7 @@
                   <div class="workspace-pane-title" data-i18n="chat">Chat</div>
                   <div class="workspace-pane-status" data-i18n="workspaceIdle">Idle</div>
                 </div>
-                <div id="messages" class="messages"></div>
+                <div id="messages" class="messages" role="log" aria-live="polite" aria-relevant="additions text"></div>
               </section>
             </div>
           </div>
@@ -244,24 +244,24 @@
                 </div>
               </details>
             </div>
-            <div id="attachments-bar" class="attachments-bar" style="display:none"></div>
-            <div id="quote-preview-bar" class="quote-preview-bar" style="display:none"></div>
-            <div id="slash-command-panel" class="slash-command-panel" style="display:none"></div>
-            <div id="model-pill-popover" class="model-pill-popover" style="display:none"></div>
+            <div id="attachments-bar" class="attachments-bar" style="display:none" aria-live="polite"></div>
+            <div id="quote-preview-bar" class="quote-preview-bar" style="display:none" aria-live="polite"></div>
+            <div id="slash-command-panel" class="slash-command-panel" role="listbox" aria-label="Slash commands" style="display:none"></div>
+            <div id="model-pill-popover" class="model-pill-popover" role="listbox" aria-label="Models" style="display:none"></div>
             <div class="input-shell">
               <div class="input-wrapper">
-                <button id="btn-attach" class="btn-attach" title="Add File" data-i18n-title="addFile">
+                <button id="btn-attach" class="btn-attach" type="button" title="Add File" data-i18n-title="addFile" aria-label="Add File">
                   <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"></path></svg>
                 </button>
                 <textarea id="message-input" placeholder="Type a message... (Enter to send, Shift+Enter for newline)" data-i18n-placeholder="messagePlaceholder" rows="2"></textarea>
                 <div class="input-actions">
-                  <button id="btn-send" class="btn-send" disabled data-i18n="send">Send</button>
-                  <button id="btn-stop" class="btn-stop" data-i18n="stop">Stop</button>
+                  <button id="btn-send" class="btn-send" type="button" disabled data-i18n="send">Send</button>
+                  <button id="btn-stop" class="btn-stop" type="button" data-i18n="stop">Stop</button>
                 </div>
               </div>
               <div class="input-status-row">
                 <span class="drag-hint" data-i18n="dragDropHint">支持拖拽文件上传</span>
-                <button id="model-pill" class="model-pill" title="Switch Model" data-i18n-title="switchModel"></button>
+                <button id="model-pill" class="model-pill" type="button" title="Switch Model" data-i18n-title="switchModel" aria-haspopup="listbox" aria-expanded="false"></button>
               </div>
             </div>
             <input type="file" id="file-input" multiple style="display:none">
@@ -276,13 +276,13 @@
                 <span id="chat-sidebar-subtitle" class="chat-sidebar-subtitle">-</span>
               </div>
               <div class="chat-sidebar-header-actions">
-                <button id="btn-chat-sidebar-close" class="btn-icon-mini btn-close-sidebar" title="收起面板" data-i18n-title="collapsePanel">›</button>
+                <button id="btn-chat-sidebar-close" class="btn-icon-mini btn-close-sidebar" type="button" title="收起面板" data-i18n-title="collapsePanel" aria-label="Collapse panel">›</button>
               </div>
             </div>
-            <div class="chat-sidebar-tabs">
-              <button class="chat-sidebar-tab active" data-tab="files" title="Files" data-i18n-title="filesTab"><span data-i18n="filesTab">Files</span></button>
-              <button class="chat-sidebar-tab" data-tab="review" title="Changes" data-i18n-title="reviewTab"><span data-i18n="reviewTab">Changes</span></button>
-              <button class="chat-sidebar-tab" data-tab="members" title="Members" data-i18n-title="sessionMembers"><span data-i18n="sessionMembers">Members</span></button>
+            <div class="chat-sidebar-tabs" role="tablist" aria-label="Workspace side panel">
+              <button class="chat-sidebar-tab active" data-tab="files" type="button" role="tab" aria-selected="true" title="Files" data-i18n-title="filesTab"><span data-i18n="filesTab">Files</span></button>
+              <button class="chat-sidebar-tab" data-tab="review" type="button" role="tab" aria-selected="false" title="Changes" data-i18n-title="reviewTab"><span data-i18n="reviewTab">Changes</span></button>
+              <button class="chat-sidebar-tab" data-tab="members" type="button" role="tab" aria-selected="false" title="Members" data-i18n-title="sessionMembers"><span data-i18n="sessionMembers">Members</span></button>
             </div>
           </div>
           <div class="chat-sidebar-content">
@@ -457,7 +457,7 @@
               </div>
             </div>
             <div class="remote-form-actions">
-              <button id="btn-mcp-save" class="btn btn-primary" type="button" style="width:auto; padding:8px 20px;">
+              <button id="btn-mcp-save" class="btn btn-primary btn-medium" type="button">
                 <span class="btn-prefix">&gt;</span> <span data-i18n="save">Save</span>
               </button>
               <button id="btn-mcp-cancel" class="btn-save" type="button"><span data-i18n="cancel">Cancel</span></button>
@@ -949,7 +949,7 @@
                   </div>
                   <div class="remote-form-actions">
                     <button id="btn-remote-test" class="btn-save" type="button"><span data-i18n="remoteTest">Test Connection</span></button>
-                    <button id="btn-remote-save" class="btn btn-primary" type="button" style="width:auto; padding:8px 20px;">
+                    <button id="btn-remote-save" class="btn btn-primary btn-medium" type="button">
                       <span class="btn-prefix">&gt;</span> <span data-i18n="save">Save</span>
                     </button>
                     <button id="btn-remote-cancel" class="btn-save" type="button"><span data-i18n="cancel">Cancel</span></button>
@@ -976,27 +976,27 @@
 
   <!-- Memory 查看模态框 -->
   <div id="memory-modal-overlay" class="modal-overlay" style="display:none">
-    <div class="modal" style="width:620px; max-width:92vw; max-height:80vh; display:flex; flex-direction:column;">
+    <div class="modal memory-view-modal">
       <div class="memory-modal-head">
         <span id="memory-modal-title" class="memory-file-title"></span>
         <button id="memory-modal-close" class="close-btn" type="button">&times;</button>
       </div>
-      <div id="memory-modal-body" class="memory-modal-body" style="overflow-y:auto; padding:16px;"></div>
+      <div id="memory-modal-body" class="memory-modal-body modal-scroll-body"></div>
     </div>
   </div>
 
   <!-- Memory 编辑模态框 -->
   <div id="memory-edit-overlay" class="modal-overlay" style="display:none">
-    <div class="modal" style="width:680px; max-width:94vw; max-height:85vh; display:flex; flex-direction:column;">
+    <div class="modal memory-edit-modal">
       <div class="memory-modal-head">
         <span id="memory-edit-title" data-i18n="editMemory">Edit Memory</span>
         <button id="memory-edit-close" class="close-btn" type="button">&times;</button>
       </div>
-      <div style="padding:12px 16px;">
-        <input id="memory-edit-filename" class="input" style="width:100%" placeholder="topic.md">
+      <div class="modal-field-pad">
+        <input id="memory-edit-filename" class="input" placeholder="topic.md">
       </div>
-      <textarea id="memory-edit-content" style="flex:1; min-height:260px; padding:12px 16px; border:none; border-top:1px solid var(--border-dim); background:var(--bg-deep); color:var(--text-base); font-family:var(--font-mono); font-size:13px; line-height:1.6; resize:none; outline:none;"></textarea>
-      <div style="display:flex; gap:8px; justify-content:flex-end; padding:10px 16px; border-top:1px solid var(--border-dim);">
+      <textarea id="memory-edit-content" class="memory-edit-content"></textarea>
+      <div class="modal-actions-row">
         <button id="btn-memory-edit-save" class="btn-save" type="button"><span data-i18n="save">Save</span></button>
         <button id="btn-memory-edit-cancel" class="btn-mini" type="button"><span data-i18n="cancel">Cancel</span></button>
       </div>
@@ -1115,7 +1115,7 @@
       </div>
       <div id="picker-list" class="picker-list"></div>
       <div class="picker-footer">
-        <button id="picker-select" class="btn btn-primary" style="width:auto; padding:8px 24px;">
+        <button id="picker-select" class="btn btn-primary btn-wide">
           <span class="btn-prefix">&gt;</span> <span data-i18n="choose">Choose</span>
         </button>
       </div>
@@ -1133,7 +1133,7 @@
       <div id="file-picker-local" class="picker-local" style="display:none">
         <p id="file-picker-local-hint" class="picker-local-hint" data-i18n="chooseClientHint">Choose files from this device.</p>
         <div class="picker-local-actions">
-          <button id="file-picker-client-choose" class="btn btn-primary" type="button" style="width:auto; padding:8px 18px;"><span data-i18n="chooseFromDevice">Choose from device</span></button>
+          <button id="file-picker-client-choose" class="btn btn-primary btn-medium" type="button"><span data-i18n="chooseFromDevice">Choose from device</span></button>
           <button id="file-picker-server-browse" class="btn-save" type="button" style="display:none"><span data-i18n="browseWorkspace">Browse workspace</span></button>
         </div>
       </div>
@@ -1152,10 +1152,10 @@
       </div>
       <div class="picker-footer">
         <div class="picker-footer-left">
-          <span id="file-picker-selected-count" style="font-family:var(--font-mono);color:var(--text-muted);">Selected 0 files</span>
+          <span id="file-picker-selected-count" class="picker-selected-count">Selected 0 files</span>
           <button id="file-picker-select-all" class="btn-save picker-select-all" type="button" data-i18n="selectAllFiles">Select all files</button>
         </div>
-        <button id="file-picker-confirm" class="btn btn-primary" style="width:auto; padding:8px 24px;">
+        <button id="file-picker-confirm" class="btn btn-primary btn-wide">
           <span class="btn-prefix">&gt;</span> <span data-i18n="addAttachments">Add Attachments</span>
         </button>
       </div>
@@ -1185,7 +1185,7 @@
 
   <!-- CLI 安装引导弹窗 -->
   <div id="cli-install-overlay" class="picker-overlay" style="display:none">
-    <div class="picker-modal" style="width:520px;">
+    <div class="picker-modal picker-modal-md">
       <div class="picker-header">
         <span class="picker-title" data-i18n="cliInstallTitle">Install Claude Code CLI</span>
         <button id="cli-install-close" class="picker-close" data-i18n="close">Close</button>
@@ -1203,9 +1203,9 @@
         <div id="cli-install-status" class="cli-install-status" style="display:none"></div>
         <pre id="cli-install-output" class="cli-install-output" style="display:none"></pre>
       </div>
-      <div class="picker-footer" style="justify-content:space-between; align-items:center;">
+      <div class="picker-footer picker-footer-split">
         <a class="cli-install-doc-link" href="https://docs.anthropic.com/en/docs/claude-code" target="_blank" rel="noopener" data-i18n="cliInstallDocs">Official docs</a>
-        <button id="cli-install-run" class="btn btn-primary" style="width:auto; padding:8px 24px;">
+        <button id="cli-install-run" class="btn btn-primary btn-wide">
           <span class="btn-prefix">&gt;</span> <span data-i18n="cliInstallRun">Install Automatically</span>
         </button>
       </div>
@@ -1213,7 +1213,7 @@
   </div>
 
   <div id="update-overlay" class="picker-overlay" style="display:none">
-    <div class="picker-modal" style="width:520px;">
+    <div class="picker-modal picker-modal-md">
       <div class="picker-header">
         <span class="picker-title" data-i18n="updateTitle">Update Available</span>
         <button id="update-close" class="picker-close" data-i18n="close">Close</button>
@@ -1223,9 +1223,9 @@
         <pre id="update-changelog" class="cli-install-output" style="display:none"></pre>
         <div id="update-status" class="cli-install-status" style="display:none"></div>
       </div>
-      <div class="picker-footer" style="justify-content:space-between; align-items:center;">
-        <button id="update-skip" class="btn" style="width:auto; padding:8px 18px;" data-i18n="skipVersion">Skip this version</button>
-        <button id="update-run" class="btn btn-primary" style="width:auto; padding:8px 24px;">
+      <div class="picker-footer picker-footer-split">
+        <button id="update-skip" class="btn btn-medium" data-i18n="skipVersion">Skip this version</button>
+        <button id="update-run" class="btn btn-primary btn-wide">
           <span class="btn-prefix">&gt;</span> <span data-i18n="updateNow">Update now</span>
         </button>
       </div>
@@ -1247,7 +1247,7 @@
       <div id="session-migrate-list" class="session-migrate-list"></div>
       <div id="session-migrate-footer" class="session-migrate-footer" style="display:none">
         <label class="session-migrate-select-all"><input type="checkbox" id="session-migrate-check-all"> <span data-i18n="selectAll">Select All</span></label>
-        <button id="session-migrate-confirm" class="btn btn-primary" type="button" style="width:auto; padding:6px 16px; font-size:12px;"><span data-i18n="migrateSelected">Migrate Selected</span></button>
+        <button id="session-migrate-confirm" class="btn btn-primary btn-compact" type="button"><span data-i18n="migrateSelected">Migrate Selected</span></button>
       </div>
     </div>
   </div>
