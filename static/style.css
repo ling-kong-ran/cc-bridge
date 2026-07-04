@@ -6229,6 +6229,15 @@ html.light-theme .agent-status-bar {
     padding: 14px 10px;
   }
 
+  .message,
+  .message.user,
+  .message.assistant {
+    width: 100%;
+    max-width: none;
+    margin-left: 0;
+    margin-right: 0;
+  }
+
   .message {
     gap: 8px;
     margin-bottom: 12px;
