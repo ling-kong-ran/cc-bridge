@@ -1,0 +1,67 @@
+{
+  "name": "cc-bridge-desktop",
+  "productName": "CC Bridge",
+  "version": "0.1.0",
+  "description": "CC Bridge 桌面应用壳。",
+  "private": true,
+  "main": "desktop/electron/main.cjs",
+  "scripts": {
+    "desktop:dev": "electron .",
+    "desktop:pack": "electron-builder --dir",
+    "desktop:dist": "electron-builder",
+    "desktop:dist:win": "electron-builder --win nsis"
+  },
+  "devDependencies": {
+    "electron": "40.10.2",
+    "electron-builder": "26.8.1"
+  },
+  "build": {
+    "appId": "local.cc-bridge.desktop",
+    "productName": "CC Bridge",
+    "artifactName": "CC-Bridge-${version}-${os}-${arch}.${ext}",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "desktop/electron/**",
+      "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": ".",
+        "to": "cc-bridge",
+        "filter": [
+          "server.py",
+          "ccb_bridge.py",
+          "config_manager.py",
+          "session_store.py",
+          "artifact_store.py",
+          "memory_index.py",
+          "wiki_store.py",
+          "remote_manager.py",
+          "scheduled_task_store.py",
+          "scheduled_task_runner.py",
+          "feishu_*.py",
+          "bootstrap.py",
+          "bootstrap/**",
+          "static/**",
+          "requirements.txt"
+        ]
+      }
+    ],
+    "asar": true,
+    "win": {
+      "target": [
+        "nsis"
+      ],
+      "signAndEditExecutable": false
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "perMachine": false,
+      "shortcutName": "CC Bridge",
+      "uninstallDisplayName": "CC Bridge"
+    }
+  }
+}

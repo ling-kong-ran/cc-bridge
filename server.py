@@ -15,6 +15,7 @@ import base64
 import subprocess
 import tempfile
 import time
+import secrets
 from pathlib import Path
 from urllib.request import Request, urlopen
 from urllib.parse import urlparse, parse_qs, quote
@@ -112,9 +113,11 @@ _notify_log.addHandler(_ch)
 
 STATIC_DIR = Path(__file__).parent / "static"
 DEFAULT_CWD = str(Path(__file__).parent.resolve())  # 项目根目录作为默认 CWD
-HOST = "0.0.0.0"  # 监听所有网卡，允许局域网设备访问
+HOST = os.environ.get("CCB_HOST", "0.0.0.0")  # 默认监听所有网卡，桌面模式改为 127.0.0.1
 BROWSER_HOST = "127.0.0.1"
 DEFAULT_PORT = 17878
+DESKTOP_MODE = os.environ.get("CCB_DESKTOP") == "1"
+DESKTOP_SHUTDOWN_TOKEN = os.environ.get("CCB_DESKTOP_TOKEN", "")
 MAX_REQUEST_BODY_BYTES = 100 * 1024 * 1024
 APP_ROOT = Path(__file__).parent.resolve()
 SERVER_FILE = Path(__file__).resolve()
@@ -2656,7 +2659,9 @@ async def _notify_gui_complete(title: str, model: str, platforms: list, error: s
 
 # ─── REST API ──────────────────────────────────────────────
 async def handle_api_get(path: str, writer: asyncio.StreamWriter, query: dict = None):
-    if path == "/api/settings":
+    if path == "/api/health":
+        data = {"ok": True, "app": "cc-bridge", "mode": "desktop" if DESKTOP_MODE else "web"}
+    elif path == "/api/settings":
         data = get_settings()
     elif path == "/api/gui-settings":
         data = get_gui_settings()
@@ -2888,7 +2893,20 @@ async def handle_api_post(path: str, body: bytes, writer: asyncio.StreamWriter):
         await send_response(writer, 400, "application/json", b'{"error":"invalid json"}')
         return
 
-    if path == "/api/settings":
+    if path == "/api/shutdown":
+        if not DESKTOP_MODE:
+            await send_response(writer, 404, "application/json", b'{"error":"not found"}')
+            return
+        if not is_localhost_ip(get_client_ip(writer)):
+            await send_response(writer, 403, "application/json", b'{"error":"localhost only"}')
+            return
+        if DESKTOP_SHUTDOWN_TOKEN and data.get("token") != DESKTOP_SHUTDOWN_TOKEN:
+            await send_response(writer, 403, "application/json", b'{"error":"invalid token"}')
+            return
+        await send_response(writer, 200, "application/json", b'{"ok":true}')
+        asyncio.get_event_loop().call_later(0.2, lambda: os._exit(0))
+        return
+    elif path == "/api/settings":
         save_settings(data)
     elif path == "/api/gui-settings":
         if "lan_access_enabled" in data and not is_localhost_ip(get_client_ip(writer)):
@@ -3342,8 +3360,15 @@ async def send_response(writer: asyncio.StreamWriter, status: int, content_type:
     await writer.drain()
 
 
-async def main(start_port: int | None = None):
-    global scheduled_runner
+async def main(start_port: int | None = None, desktop: bool = False, host: str | None = None):
+    global scheduled_runner, HOST, DESKTOP_MODE, DESKTOP_SHUTDOWN_TOKEN
+    DESKTOP_MODE = desktop or DESKTOP_MODE
+    if DESKTOP_MODE:
+        HOST = host or "127.0.0.1"
+        if not DESKTOP_SHUTDOWN_TOKEN:
+            DESKTOP_SHUTDOWN_TOKEN = secrets.token_urlsafe(32)
+    elif host:
+        HOST = host
     cleanup_existing_app_servers(start_port=start_port or 17878)
 
     # 恢复上次选中的 CLI（启动时 _current_cli 默认是第一个检测到的，这里覆盖为用户上次的选择）
@@ -3353,7 +3378,8 @@ async def main(start_port: int | None = None):
 
     server = None
     last_error = None
-    for port in range(DEFAULT_PORT, 65536):
+    bind_start_port = start_port or DEFAULT_PORT
+    for port in range(bind_start_port, 65536):
         try:
             server = await asyncio.start_server(handle_http, HOST, port)
             break
@@ -3361,7 +3387,7 @@ async def main(start_port: int | None = None):
             last_error = exc
 
     if server is None:
-        raise RuntimeError(f"Unable to bind port {DEFAULT_PORT}-65535: {last_error}")
+        raise RuntimeError(f"Unable to bind port {bind_start_port}-65535: {last_error}")
 
     local_url = f"http://{BROWSER_HOST}:{port}"
     lan_urls = [f"http://{ip}:{port}" for ip in get_lan_ips()]
@@ -3374,9 +3400,19 @@ async def main(start_port: int | None = None):
     if not lan_urls:
         print("[CC Bridge] LAN access: no LAN IPv4 address detected")
     print(f"[CC Bridge] Press Ctrl+C to stop")
+    if DESKTOP_MODE:
+        ready = {
+            "type": "server_ready",
+            "host": BROWSER_HOST,
+            "port": port,
+            "url": local_url,
+            "desktop": True,
+            "shutdown_token": DESKTOP_SHUTDOWN_TOKEN,
+        }
+        print(json.dumps(ready, ensure_ascii=False), flush=True)
 
-    # 自动打开浏览器（仅当显式设置环境变量时启用）
-    if os.environ.get("CCB_GUI_OPEN_BROWSER") == "1":
+    # 自动打开浏览器（仅当显式设置环境变量时启用，桌面模式禁用）
+    if not DESKTOP_MODE and os.environ.get("CCB_GUI_OPEN_BROWSER") == "1":
         import webbrowser
         webbrowser.open(local_url)
 
@@ -3411,10 +3447,12 @@ if __name__ == "__main__":
     import argparse
     parser = argparse.ArgumentParser(description="CC Bridge Server")
     parser.add_argument("--port", type=int, default=None, help="指定监听端口（默认从 17878 开始自动选择）")
+    parser.add_argument("--host", default=None, help="指定监听地址")
+    parser.add_argument("--desktop", action="store_true", help="桌面模式：绑定本机并输出 ready JSON")
     args = parser.parse_args()
 
     async def _entry():
-        await main(start_port=args.port)
+        await main(start_port=args.port, desktop=args.desktop, host=args.host)
 
     try:
         asyncio.run(_entry())
