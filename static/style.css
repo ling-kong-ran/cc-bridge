@@ -680,11 +680,21 @@ body:not(.has-active-session) .runtime-summary-value {
   grid-column: 2;
 }
 
-/* 网关通知：推到网格下方行，不与 CWD/Remote 控件重叠 */
+/* 网关通知 / 自动记忆上下文：放到网格下方独立行，避免与 CWD/Remote 控件重叠 */
 .chat-runtime-section .runtime-panel-body .field-label[data-i18n="gatewayNotify"] {
+  grid-column: 1;
   grid-row: 3;
 }
 .chat-runtime-section .runtime-panel-body #notify-feishu-row {
+  grid-column: 1;
+  grid-row: 4;
+}
+.chat-runtime-section .runtime-panel-body .field-label[data-i18n="memoryAutoContext"] {
+  grid-column: 2 / 4;
+  grid-row: 3;
+}
+.chat-runtime-section .runtime-panel-body #memory-auto-inject-row {
+  grid-column: 2 / 4;
   grid-row: 4;
 }
 
@@ -3321,6 +3331,87 @@ html.light-theme body.resizing-workspace-pane .workspace-pane-resizer::after {
   color: var(--red-dim);
   border-color: rgba(240,80,80,0.30);
   background: rgba(240,80,80,0.08);
+}
+
+.context-trace {
+  max-width: 900px;
+  margin: -6px auto 16px;
+  padding-left: 42px;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  animation: msgIn var(--t-base) var(--ease-out) both;
+}
+
+.context-trace details {
+  border: 1px solid rgba(var(--accent-rgb), 0.16);
+  border-radius: var(--radius-sm);
+  background: rgba(var(--accent-rgb), 0.045);
+  overflow: hidden;
+}
+
+.context-trace summary {
+  padding: 7px 10px;
+  cursor: pointer;
+  color: var(--green-dim);
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  user-select: none;
+}
+
+.context-trace summary:hover {
+  background: rgba(var(--accent-rgb), 0.06);
+  color: var(--green);
+}
+
+.context-trace-body {
+  display: grid;
+  gap: 8px;
+  padding: 0 10px 10px;
+}
+
+.context-trace-item {
+  padding: 8px 9px;
+  border: 1px solid var(--border-dim);
+  border-radius: var(--radius-xs);
+  background: rgba(255,255,255,0.025);
+}
+
+.context-trace-title {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  color: var(--text-bright);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.context-trace-title span {
+  flex-shrink: 0;
+  color: var(--cyan-dim);
+  font-size: 10px;
+  font-weight: 600;
+}
+
+.context-trace-path,
+.context-trace-reason,
+.context-trace-skipped {
+  margin-top: 3px;
+  font-size: 10px;
+  line-height: 1.45;
+  color: var(--text-subtle);
+  word-break: break-all;
+}
+
+.context-trace-reason {
+  color: var(--text-muted);
+}
+
+.context-trace-skipped {
+  padding: 7px 9px;
+  border-left: 2px solid var(--amber);
+  background: var(--amber-faint);
+  color: var(--text-muted);
 }
 
 /* ─── Message Content ───────────────────────────────────────── */
@@ -6334,7 +6425,11 @@ html.light-theme .agent-status-bar {
   .chat-runtime-section .runtime-panel-body .cwd-wrapper,
   .chat-runtime-section .runtime-panel-body .select,
   .chat-runtime-section .runtime-panel-body .runtime-toggle,
-  .chat-runtime-section .runtime-panel-body .field-label[for="remote-target-select"] {
+  .chat-runtime-section .runtime-panel-body .field-label[for="remote-target-select"],
+  .chat-runtime-section .runtime-panel-body .field-label[data-i18n="gatewayNotify"],
+  .chat-runtime-section .runtime-panel-body #notify-feishu-row,
+  .chat-runtime-section .runtime-panel-body .field-label[data-i18n="memoryAutoContext"],
+  .chat-runtime-section .runtime-panel-body #memory-auto-inject-row {
     grid-column: 1;
     grid-row: auto;
   }

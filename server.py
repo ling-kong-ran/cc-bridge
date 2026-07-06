@@ -51,6 +51,7 @@ from session_store import list_sessions, save_session, add_session_usage, delete
 from artifact_store import list_artifacts as list_artifact_records
 from memory_index import list_memory_files, search_memory, get_memory_file, delete_memory_file, save_memory_file, index_memory, get_memory_tree, get_memory_graph, import_memory_files, organize_memory_links
 import wiki_store
+import context_orchestrator
 # 飞书模块延迟加载 — 避免 lark_oapi SDK 拖慢 server 启动
 class _LazyFeishu:
     """延迟导入飞书相关模块。首次访问任意属性时自动触发 import。"""
@@ -1438,6 +1439,32 @@ async def push_event(client_id: str, event_type: str, data: dict):
         await queue.put({"event": event_type, "data": data})
 
 
+async def prepare_contextual_message(client_id: str, content: str, cwd: str, session_id: str = "", run_id: str = "", skip_inject: bool = False) -> str:
+    """发送前注入自动召回上下文，并把 trace 推送到前端。"""
+    if (content or "").lstrip().startswith("/"):
+        return content
+    final_content, trace = context_orchestrator.build_contextual_prompt(
+        content=content,
+        cwd=cwd or DEFAULT_CWD,
+        client_id=client_id,
+        session_id=session_id,
+        settings=get_gui_settings(),
+        skip_inject=skip_inject,
+    )
+    if not trace:
+        return final_content
+    if session_id:
+        trace["session_id"] = session_id
+    if run_id:
+        trace["run_id"] = run_id
+    event_data = {"session_id": session_id, "run_id": run_id, "trace": trace}
+    await push_event(client_id, "context_injected", event_data)
+    if session_id:
+        for viewer_id in [target_id for target_id in get_session_subscribers(session_id) if target_id != client_id]:
+            await push_event(viewer_id, "context_injected", event_data)
+    return final_content
+
+
 UPLOAD_DIR_FALLBACK = Path(__file__).parent / "uploads"
 UPLOAD_DIR_FALLBACK.mkdir(exist_ok=True)
 
@@ -2320,7 +2347,15 @@ async def handle_action(body: bytes, writer: asyncio.StreamWriter):
                                  remote_target_id=meta.get("remote_target_id", ""), cli=meta.get("cli", ""))
                 await broadcast_session_lock(sid, True, client_id)
                 await broadcast_user_message(sid, content, client_id)
-                await session.send_message(content, owner_id=client_id)
+                final_content = await prepare_contextual_message(
+                    client_id,
+                    content,
+                    meta.get("cwd", ""),
+                    session_id=sid,
+                    run_id=run_id,
+                    skip_inject=bool(data.get("skip_memory_inject")),
+                )
+                await session.send_message(final_content, owner_id=client_id)
                 await send_response(writer, 200, "application/json", json.dumps({"ok": True, "run_id": run_id}, ensure_ascii=False).encode("utf-8"))
                 return
             except Exception as exc:
@@ -2407,7 +2442,15 @@ async def handle_action(body: bytes, writer: asyncio.StreamWriter):
                 await broadcast_user_message(sid, content, client_id)
 
             try:
-                await session.send_message(content, owner_id=client_id)
+                final_content = await prepare_contextual_message(
+                    client_id,
+                    content,
+                    session.cwd or (client_meta.get(client_id, {}) or {}).get("cwd", ""),
+                    session_id=sid or "",
+                    run_id=run_id,
+                    skip_inject=bool(data.get("skip_memory_inject")),
+                )
+                await session.send_message(final_content, owner_id=client_id)
             except Exception as exc:
                 await release_session_lock_for_client(client_id)
                 await push_event(client_id, "error", {"message": str(exc)})
@@ -2797,6 +2840,8 @@ async def handle_api_get(path: str, writer: asyncio.StreamWriter, query: dict = 
         max_tokens = int(query.get("max_tokens", ["4000"])[0])
         depth = int(query.get("depth", ["1"])[0])
         data = {"context": wiki_store.retrieve_context(q, max_tokens=max_tokens, depth=depth)}
+    elif path == "/api/context/settings":
+        data = context_orchestrator.normalize_context_settings(get_gui_settings())
     elif path == "/api/scheduled-tasks":
         data = {"tasks": scheduled_task_store.list_tasks()}
     elif path == "/api/feishu-gateway/config":
@@ -2916,6 +2961,28 @@ async def handle_api_post(path: str, body: bytes, writer: asyncio.StreamWriter):
         if data.get("lan_access_enabled") is False:
             await revoke_lan_clients()
         resp = json.dumps(result, ensure_ascii=False).encode("utf-8")
+        await send_response(writer, 200, "application/json; charset=utf-8", resp)
+        return
+    elif path == "/api/context/settings":
+        allowed = {k: data[k] for k in context_orchestrator.DEFAULT_CONTEXT_SETTINGS if k in data}
+        result = context_orchestrator.normalize_context_settings(update_gui_settings(allowed))
+        resp = json.dumps(result, ensure_ascii=False).encode("utf-8")
+        await send_response(writer, 200, "application/json; charset=utf-8", resp)
+        return
+    elif path == "/api/context/preview":
+        cwd = str(data.get("cwd") or DEFAULT_CWD)
+        query_text = str(data.get("query") or data.get("content") or "")
+        settings = context_orchestrator.normalize_context_settings(get_gui_settings())
+        if "max_tokens" in data:
+            settings["memoryInjectMaxTokens"] = data.get("max_tokens")
+        trace = context_orchestrator.retrieve_context_trace(
+            query=query_text,
+            cwd=cwd,
+            client_id=str(data.get("client_id") or ""),
+            session_id=str(data.get("session_id") or ""),
+            settings=settings,
+        )
+        resp = json.dumps({"ok": True, "trace": trace}, ensure_ascii=False).encode("utf-8")
         await send_response(writer, 200, "application/json; charset=utf-8", resp)
         return
     elif path == "/api/env":

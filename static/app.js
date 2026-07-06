@@ -172,6 +172,7 @@ const notificationsRow = document.getElementById('notifications-row');
 const remoteTargetSelect = document.getElementById('remote-target-select');
 const remoteAllowMutate = document.getElementById('remote-allow-mutate');
 const notifyFeishu = document.getElementById('notify-feishu');
+const memoryAutoInject = document.getElementById('memory-auto-inject');
 const remoteMutateRow = document.getElementById('remote-mutate-row');
 const lanAccessToggle = document.getElementById('lan-access-toggle');
 const lanAccessRow = document.getElementById('lan-access-row');
@@ -222,6 +223,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   initShortcutsHelp();
   initInterfaceSettings();
   initNotifications();
+  initMemoryAutoInjectControl();
   initLanAccessControl();
   await loadThemePreference();
   initNavigation();
@@ -913,6 +915,42 @@ function applyNotifyFeishuPreference(enabled, persist = false) {
     notifyFeishu.checked = Boolean(enabled);
   }
   if (persist) saveGuiSettings({ notify_feishu: Boolean(enabled) });
+}
+
+function initMemoryAutoInjectControl() {
+  memoryAutoInject?.addEventListener('change', async () => {
+    await saveContextSettings({ memoryAutoInject: memoryAutoInject.checked });
+  });
+}
+
+function applyMemoryAutoInjectPreference(enabled) {
+  if (memoryAutoInject) memoryAutoInject.checked = enabled !== false;
+}
+
+async function loadContextSettings() {
+  try {
+    const resp = await fetch('/api/context/settings');
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+    const data = await resp.json();
+    applyMemoryAutoInjectPreference(data.memoryAutoInject);
+  } catch (e) {
+    applyMemoryAutoInjectPreference(true);
+  }
+}
+
+async function saveContextSettings(settings) {
+  try {
+    const resp = await fetch('/api/context/settings', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(settings),
+    });
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+    const data = await resp.json();
+    applyMemoryAutoInjectPreference(data.memoryAutoInject);
+  } catch (e) {
+    addSystemMsg(t('contextSettingsSaveFailed'), true);
+  }
 }
 
 function pageIsUnfocused() {
@@ -2009,6 +2047,7 @@ async function loadThemePreference() {
     await applyLanguage(language, false);
     applyNotificationPreference(Boolean(data.notifications_enabled));
     applyNotifyFeishuPreference(Boolean(data.notify_feishu));
+    await loadContextSettings();
     accessContext = { isLocalhost: Boolean(data.is_localhost), defaultCwd: data.default_cwd || '' };
     document.body.classList.toggle('pane-right-collapsed', data.right_panel_collapsed === true);
     applyRightPaneWidth(data.right_panel_width);
@@ -2022,6 +2061,7 @@ async function loadThemePreference() {
     await applyLanguage('en', false);
     applyNotificationPreference(false);
     applyNotifyFeishuPreference(false);
+    applyMemoryAutoInjectPreference(true);
     applyLanAccessPreference({ is_localhost: false, lan_access_enabled: false });
   }
 }
@@ -3027,6 +3067,12 @@ function bindSSEEvents() {
     handleAssistantFinal(data);
   });
 
+  eventSource.addEventListener('context_injected', (e) => {
+    const data = JSON.parse(e.data || '{}');
+    if (!isEventForCurrentSession(data)) return;
+    renderContextTrace(data.trace || data);
+  });
+
   eventSource.addEventListener('session_id_captured', (e) => {
     const data = JSON.parse(e.data);
     if (data.session_id && currentSessionId && data.session_id !== currentSessionId && data.run_id !== currentRunId) {
@@ -4015,6 +4061,32 @@ function addSystemMsg(text, isError) {
   scrollToBottom();
 }
 
+function renderContextTrace(trace = {}) {
+  const injected = Array.isArray(trace.injected) ? trace.injected : [];
+  if (!injected.length) return;
+  const el = document.createElement('div');
+  el.className = 'context-trace';
+  const usedTokens = Number(trace.used_tokens || 0);
+  const skipped = Array.isArray(trace.skipped) ? trace.skipped : [];
+  el.innerHTML = `
+    <details>
+      <summary>Memory 已注入 ${injected.length} 条 · 约 ${usedTokens} tokens</summary>
+      <div class="context-trace-body">
+        ${injected.map(item => `
+          <div class="context-trace-item">
+            <div class="context-trace-title">${esc(item.title || item.path || item.id || 'Memory')} <span>${esc(String(item.score ?? ''))}</span></div>
+            <div class="context-trace-path">${esc(item.source || '')} · ${esc(item.path || '')}</div>
+            <div class="context-trace-reason">${esc(item.reason || '')}</div>
+          </div>
+        `).join('')}
+        ${skipped.length ? `<div class="context-trace-skipped">未注入 ${skipped.length} 条：${esc(skipped.slice(0, 3).map(item => item.title || item.path || item.reason).join('、'))}</div>` : ''}
+      </div>
+    </details>
+  `;
+  messagesEl.appendChild(el);
+  scrollToBottom();
+}
+
 // ─── Toast 通知 ─────────────────────────────────────────────────
 const toastContainer = document.getElementById('toast-container');
 let toastTimer = null;
@@ -4674,6 +4746,7 @@ async function sendMessage() {
     cli: document.getElementById('cli-select')?.value || '',
     remote_target_id: remoteTargetSelect?.value || '',
     allow_remote_mutate: !!remoteAllowMutate?.checked,
+    skip_memory_inject: memoryAutoInject?.checked === false,
     notify_platforms: notifyFeishu?.checked ? ['feishu'] : [],
   });
 
@@ -4760,6 +4833,7 @@ function createNewSession(cwd) {
     skip_permissions: document.getElementById('skip-permissions').checked,
     remote_target_id: remoteTargetSelect?.value || '',
     allow_remote_mutate: !!remoteAllowMutate?.checked,
+    skip_memory_inject: memoryAutoInject?.checked === false,
     notify_platforms: notifyFeishu?.checked ? ['feishu'] : [],
   });
   loadSessions();
