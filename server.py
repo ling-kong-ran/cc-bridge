@@ -53,6 +53,9 @@ from memory_index import list_memory_files, search_memory, get_memory_file, dele
 import wiki_store
 import context_orchestrator
 import memory_consolidator
+from backend.routes.settings_routes import handle_settings_get, handle_settings_post
+from backend.routes.context_routes import handle_context_get, handle_context_post
+from backend.routes.scheduled_tasks_routes import handle_scheduled_tasks_get, handle_scheduled_tasks_post
 # 飞书模块延迟加载 — 避免 lark_oapi SDK 拖慢 server 启动
 class _LazyFeishu:
     """延迟导入飞书相关模块。首次访问任意属性时自动触发 import。"""
@@ -94,7 +97,6 @@ try:
 except ImportError:
     QRCODE_AVAILABLE = False
 import remote_manager
-import scheduled_task_store
 from scheduled_task_runner import ScheduledTaskRunner
 
 # ─── 日志：同时输出到控制台和 ~/.ccb/server.log ──────────────────
@@ -2809,9 +2811,7 @@ async def handle_api_get(path: str, writer: asyncio.StreamWriter, query: dict = 
     elif path == "/api/settings":
         data = get_settings()
     elif path == "/api/gui-settings":
-        data = get_gui_settings()
-        data.update(get_access_context(writer))
-        data["default_cwd"] = DEFAULT_CWD
+        _, data = handle_settings_get(path, get_access_context(writer), DEFAULT_CWD)
     elif path == "/api/env":
         data = get_env_config()
     elif path == "/api/check-update":
@@ -2943,9 +2943,9 @@ async def handle_api_get(path: str, writer: asyncio.StreamWriter, query: dict = 
         depth = int(query.get("depth", ["1"])[0])
         data = {"context": wiki_store.retrieve_context(q, max_tokens=max_tokens, depth=depth)}
     elif path == "/api/context/settings":
-        data = context_orchestrator.normalize_context_settings(get_gui_settings())
+        _, data = handle_context_get(path)
     elif path == "/api/scheduled-tasks":
-        data = {"tasks": scheduled_task_store.list_tasks()}
+        _, data = handle_scheduled_tasks_get(path)
     elif path == "/api/feishu-gateway/config":
         data = _f.get_feishu_gateway_config(redact=True)
         data["available"] = _f.FEISHU_GATEWAY_AVAILABLE
@@ -3056,36 +3056,20 @@ async def handle_api_post(path: str, body: bytes, writer: asyncio.StreamWriter):
     elif path == "/api/settings":
         save_settings(data)
     elif path == "/api/gui-settings":
-        if "lan_access_enabled" in data and not is_localhost_ip(get_client_ip(writer)):
-            await send_response(writer, 403, "application/json", b'{"error":"localhost only"}')
-            return
-        result = update_gui_settings(data)
-        if data.get("lan_access_enabled") is False:
-            await revoke_lan_clients()
-        resp = json.dumps(result, ensure_ascii=False).encode("utf-8")
-        await send_response(writer, 200, "application/json; charset=utf-8", resp)
-        return
-    elif path == "/api/context/settings":
-        allowed = {k: data[k] for k in context_orchestrator.DEFAULT_CONTEXT_SETTINGS if k in data}
-        result = context_orchestrator.normalize_context_settings(update_gui_settings(allowed))
-        resp = json.dumps(result, ensure_ascii=False).encode("utf-8")
-        await send_response(writer, 200, "application/json; charset=utf-8", resp)
-        return
-    elif path == "/api/context/preview":
-        cwd = str(data.get("cwd") or DEFAULT_CWD)
-        query_text = str(data.get("query") or data.get("content") or "")
-        settings = context_orchestrator.normalize_context_settings(get_gui_settings())
-        if "max_tokens" in data:
-            settings["memoryInjectMaxTokens"] = data.get("max_tokens")
-        trace = context_orchestrator.retrieve_context_trace(
-            query=query_text,
-            cwd=cwd,
-            client_id=str(data.get("client_id") or ""),
-            session_id=str(data.get("session_id") or ""),
-            settings=settings,
+        status, result = await handle_settings_post(
+            path,
+            data,
+            client_ip=get_client_ip(writer),
+            is_localhost_ip=is_localhost_ip,
+            revoke_lan_clients=revoke_lan_clients,
         )
-        resp = json.dumps({"ok": True, "trace": trace}, ensure_ascii=False).encode("utf-8")
-        await send_response(writer, 200, "application/json; charset=utf-8", resp)
+        resp = json.dumps(result or {}, ensure_ascii=False).encode("utf-8")
+        await send_response(writer, status, "application/json; charset=utf-8", resp)
+        return
+    elif path in {"/api/context/settings", "/api/context/preview"}:
+        status, result = handle_context_post(path, data, DEFAULT_CWD)
+        resp = json.dumps(result or {}, ensure_ascii=False).encode("utf-8")
+        await send_response(writer, status, "application/json; charset=utf-8", resp)
         return
     elif path == "/api/env":
         update_env_config(data)
@@ -3263,39 +3247,20 @@ async def handle_api_post(path: str, body: bytes, writer: asyncio.StreamWriter):
         resp = json.dumps(result, ensure_ascii=False).encode("utf-8")
         await send_response(writer, 200, "application/json; charset=utf-8", resp)
         return
-    elif path == "/api/scheduled-tasks":
-        try:
-            task = scheduled_task_store.save_task(data)
-        except ValueError as exc:
-            resp = json.dumps({"error": str(exc)}, ensure_ascii=False).encode("utf-8")
-            await send_response(writer, 400, "application/json; charset=utf-8", resp)
-            return
-        resp = json.dumps(task, ensure_ascii=False).encode("utf-8")
-        await publish_scheduled_event("scheduled_task_updated", {"task": task})
-        await send_response(writer, 200, "application/json; charset=utf-8", resp)
-        return
-    elif path == "/api/scheduled-tasks/delete":
-        ok = scheduled_task_store.delete_task(str(data.get("id", "")))
-        await publish_scheduled_event("scheduled_task_updated", {"tasks": scheduled_task_store.list_tasks()})
-        resp = json.dumps({"ok": ok}, ensure_ascii=False).encode("utf-8")
-        await send_response(writer, 200, "application/json; charset=utf-8", resp)
-        return
-    elif path == "/api/scheduled-tasks/toggle":
-        task = scheduled_task_store.set_task_enabled(str(data.get("id", "")), bool(data.get("enabled", True)))
-        if not task:
-            await send_response(writer, 404, "application/json", b'{"error":"not found"}')
-            return
-        await publish_scheduled_event("scheduled_task_updated", {"task": task})
-        resp = json.dumps(task, ensure_ascii=False).encode("utf-8")
-        await send_response(writer, 200, "application/json; charset=utf-8", resp)
-        return
-    elif path == "/api/scheduled-tasks/run-now":
-        task_id = str(data.get("id", ""))
-        if not task_id or not scheduled_runner:
-            await send_response(writer, 400, "application/json", b'{"error":"invalid task"}')
-            return
-        asyncio.create_task(scheduled_runner.run_task(task_id, manual=True))
-        await send_response(writer, 200, "application/json", b'{"ok":true}')
+    elif path in {
+        "/api/scheduled-tasks",
+        "/api/scheduled-tasks/delete",
+        "/api/scheduled-tasks/toggle",
+        "/api/scheduled-tasks/run-now",
+    }:
+        status, result = await handle_scheduled_tasks_post(
+            path,
+            data,
+            scheduled_runner=scheduled_runner,
+            publish_scheduled_event=publish_scheduled_event,
+        )
+        resp = json.dumps(result or {}, ensure_ascii=False).encode("utf-8")
+        await send_response(writer, status, "application/json; charset=utf-8", resp)
         return
     elif path == "/api/remote-targets":
         try:

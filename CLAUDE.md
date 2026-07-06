@@ -56,13 +56,13 @@ Installer actions should be interactive by default and support unattended mode v
 Request flow: browser → `server.py` (HTTP + REST + SSE) → `ccb_bridge.py` (subprocess) → `ccb`/`claude` CLI. Streaming results flow back over SSE.
 
 - **`server.py`** — Hand-rolled async HTTP server on `asyncio.start_server`, parsing requests line-by-line. Routes static files, REST endpoints under `/api/`, the `/api/action` command channel, `/api/upload` (manual multipart parsing), and the `/sse` long-lived event stream. Holds all per-client in-memory state in module-level dicts keyed by `client_id`: `sse_clients` (event queues), `client_session_ids`, `client_meta` (model/cwd), `client_last_msg`.
-- **`ccb_bridge.py`** — Spawns and manages CLI subprocesses. `CCBSession` runs `ccb -p --output-format stream-json --verbose --include-partial-messages` and parses stdout JSONL line-by-line. `SessionManager` maps `client_id` → `CCBSession`. `discover_slash_commands()` does a short-lived CLI launch to read the `system/init` event (cached with TTL).
+- **`ccb_bridge.py`** — Spawns and manages CLI subprocesses. `CCBSession` prefers a persistent local CLI process for ordinary local sessions, and uses one-shot subprocesses with `--resume <session_id>` for remote/MCP/dynamic configuration sessions or when persistent mode fails. It parses stdout JSONL line-by-line. `SessionManager` maps `client_id` → `CCBSession`. `discover_slash_commands()` does a short-lived CLI launch to read the `system/init` event (cached with TTL).
 - **`config_manager.py`** — Reads/writes `~/.claude/settings.json`, GUI prefs in `~/.ccb/gui_settings.json`, and lists skills/agents by parsing frontmatter from `~/.claude/skills/*/SKILL.md` and `~/.claude/agents/*.md`. Model list is derived from `env` keys containing `MODEL` in settings.json.
 - **`session_store.py`** — Session metadata persistence in `~/.claude/gui_sessions.json` plus discovery/merge of native CLI sessions from `~/.claude/projects/<sanitized-cwd>/<session-id>.jsonl`.
 
 ### Concepts that span files
 
-- **One subprocess per message.** Each `send_message` spawns a fresh CLI process; multi-turn continuity is achieved with `--resume <session_id>`, not a persistent process. The `stream-json` *stdin input* mode was abandoned as unreliable — input is plain text on stdin, output is stream-json (see the module docstring in `ccb_bridge.py`).
+- **CLI process model.** Ordinary local sessions prefer a persistent `ccb -p --output-format stream-json --verbose --include-partial-messages` subprocess and write subsequent messages to stdin. Remote/MCP/dynamic configuration sessions use one-shot subprocesses; multi-turn continuity there is achieved with `--resume <session_id>`. Persistent mode falls back to one-shot if startup or runtime fails. See `docs/architecture/cli-process-model.md`.
 - **SSE instead of WebSocket** — deliberate choice to avoid Windows `asyncio` compatibility issues. Heartbeats (`: heartbeat`) keep the connection alive every 15s.
 - **session_id capture.** The CLI generates its own session UUID. `ccb_bridge.py` detects a new `session_id` in any event and emits a synthetic `session_id_captured` event; `server.py`'s `on_event` handler intercepts it to persist the session via `save_session`. This is how the frontend and store learn the real session ID.
 - **Event filtering.** `server.py` only forwards a whitelist of event types to the frontend (`assistant`, `system`, `error`, `process_ended`, `model_changed`, `result`, `session_id_captured`); others (e.g. `hook_started`) are dropped.
@@ -71,7 +71,7 @@ Request flow: browser → `server.py` (HTTP + REST + SSE) → `ccb_bridge.py` (s
 
 ### CLI detection order (`ccb_bridge.py`)
 
-`ccb.exe` in script dir → `ccb.exe` in parent dir → `ccb` on PATH → `claude` on PATH. The selected CLI is global mutable state (`_current_cli`), switchable via `POST /api/clis`.
+`ccb.exe` in script dir → `ccb.exe` in parent dir → `~/.ccb/npm-global` claude → `ccb` on PATH → `claude` on PATH. The selected CLI is global mutable state (`_current_cli`), switchable via `POST /api/clis`.
 
 ## Conventions
 

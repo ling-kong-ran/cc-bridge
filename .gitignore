@@ -12,4 +12,4 @@ dist/
 .claude/
 
 # Debug logs
-ws_debug.log
+*.log

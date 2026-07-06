@@ -769,8 +769,7 @@ function stopWorkspaceResize() {
 
 async function loadDefaultCwd() {
   try {
-    const resp = await fetch('/api/default-cwd');
-    const data = await resp.json();
+    const data = await window.CCBridge.api.json('/api/default-cwd');
     if (data.cwd && !cwdInput.value.trim()) {
       cwdInput.value = data.cwd;
       updateRuntimeSummary();
@@ -929,7 +928,7 @@ function applyMemoryAutoInjectPreference(enabled) {
 
 async function loadContextSettings() {
   try {
-    const resp = await fetch('/api/context/settings');
+    const resp = await window.CCBridge.api.request('/api/context/settings');
     if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
     const data = await resp.json();
     applyMemoryAutoInjectPreference(data.memoryAutoInject);
@@ -940,7 +939,7 @@ async function loadContextSettings() {
 
 async function saveContextSettings(settings) {
   try {
-    const resp = await fetch('/api/context/settings', {
+    const resp = await window.CCBridge.api.request('/api/context/settings', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(settings),
@@ -2026,8 +2025,7 @@ function applyTheme(theme, persist = true) {
 
 async function loadThemePreference() {
   try {
-    const resp = await fetch('/api/gui-settings');
-    const data = await resp.json();
+    const data = await window.CCBridge.api.json('/api/gui-settings');
     const language = data.language === 'zh' ? 'zh' : 'en';
     const size = normalizeFontSize(data.font_size_percent);
     savedModelPref = data.default_model || '';
@@ -2072,11 +2070,7 @@ async function saveThemePreference(theme) {
 
 async function saveGuiSettings(settings) {
   try {
-    await fetch('/api/gui-settings', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(settings),
-    });
+    await window.CCBridge.api.postJson('/api/gui-settings', settings);
   } catch (e) { /* ignore */ }
 }
 
@@ -2848,9 +2842,10 @@ function initSSE() {
   }
 
   // sessionStorage 确保每个标签页有独立的 clientId，避免跨标签页 SSE 队列冲突
-  clientId = sessionStorage.getItem('ccb_client_id') || 'c_' + Math.random().toString(36).substring(2, 10);
+  const sse = window.CCBridge?.sse;
+  clientId = sse?.getClientId ? sse.getClientId() : (sessionStorage.getItem('ccb_client_id') || 'c_' + Math.random().toString(36).substring(2, 10));
   sessionStorage.setItem('ccb_client_id', clientId);
-  eventSource = new EventSource(`/sse?id=${clientId}`);
+  eventSource = sse?.createEventSource ? sse.createEventSource(clientId) : new EventSource(`/sse?id=${clientId}`);
   bindSSEEvents();
 }
 
