@@ -570,5 +570,17 @@
   "importMemorySuccess": "已导入 {count} 个文件",
   "importMemoryEmpty": "未选择任何文件",
   "organizeMemory": "整理",
-  "organizeMemorySuccess": "已为 {linked} 对节点建立链接"
+  "organizeMemorySuccess": "已为 {linked} 对节点建立链接",
+  "contextTraceSummary": "命中并注入 {count} 条记忆 · 约 {tokens} tokens",
+  "contextTraceCompressedSummary": "{count} 条已自动摘要",
+  "contextTraceCompressed": "已自动摘要",
+  "contextTraceTokens": "约 {tokens} tokens",
+  "contextTraceFallbackTitle": "Memory",
+  "contextTraceSkipped": "未注入 {count} 条：{items}",
+  "memoryConsolidationSaved": "已自动沉淀 {count} 条记忆",
+  "memoryConsolidationSkipped": "自动沉淀已跳过重复或低价值内容",
+  "memoryConsolidationFailed": "自动沉淀失败：{error}",
+  "memoryDeleteConfirm": "确定删除记忆「{name}」吗？",
+  "memoryDeleted": "记忆已删除",
+  "memoryDeleteFailed": "记忆删除失败"
 }

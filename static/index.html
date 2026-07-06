@@ -989,7 +989,11 @@
     <div class="modal memory-view-modal">
       <div class="memory-modal-head">
         <span id="memory-modal-title" class="memory-file-title"></span>
-        <button id="memory-modal-close" class="close-btn" type="button">&times;</button>
+        <div class="memory-modal-actions">
+          <button id="memory-modal-edit" class="btn-mini" type="button"><span data-i18n="edit">Edit</span></button>
+          <button id="memory-modal-delete" class="btn-mini danger" type="button"><span data-i18n="delete">Delete</span></button>
+          <button id="memory-modal-close" class="close-btn" type="button">&times;</button>
+        </div>
       </div>
       <div id="memory-modal-body" class="memory-modal-body modal-scroll-body"></div>
     </div>

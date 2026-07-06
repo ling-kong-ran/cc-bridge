@@ -3073,6 +3073,27 @@ function bindSSEEvents() {
     renderContextTrace(data.trace || data);
   });
 
+  eventSource.addEventListener('memory_consolidation_completed', (e) => {
+    const data = JSON.parse(e.data || '{}');
+    if (!isEventForCurrentSession(data)) return;
+    const job = data.job || data;
+    const written = Number(job.written || 0);
+    const skipped = Number(job.skipped || 0);
+    if (written > 0) {
+      showToast(t('memoryConsolidationSaved', { count: written }), 'success');
+      if (typeof loadMemoryFiles === 'function') loadMemoryFiles();
+    } else if (skipped > 0 || Number(job.candidates || 0) > 0) {
+      showToast(t('memoryConsolidationSkipped'), 'info');
+    }
+  });
+
+  eventSource.addEventListener('memory_consolidation_failed', (e) => {
+    const data = JSON.parse(e.data || '{}');
+    if (!isEventForCurrentSession(data)) return;
+    const job = data.job || data;
+    showToast(t('memoryConsolidationFailed', { error: job.error || '' }), 'error');
+  });
+
   eventSource.addEventListener('session_id_captured', (e) => {
     const data = JSON.parse(e.data);
     if (data.session_id && currentSessionId && data.session_id !== currentSessionId && data.run_id !== currentRunId) {
@@ -4068,18 +4089,29 @@ function renderContextTrace(trace = {}) {
   el.className = 'context-trace';
   const usedTokens = Number(trace.used_tokens || 0);
   const skipped = Array.isArray(trace.skipped) ? trace.skipped : [];
+  const compressedCount = injected.filter(item => item.compressed).length;
+  const summaryParts = [t('contextTraceSummary', { count: injected.length, tokens: usedTokens })];
+  if (compressedCount) summaryParts.push(t('contextTraceCompressedSummary', { count: compressedCount }));
   el.innerHTML = `
-    <details>
-      <summary>Memory 已注入 ${injected.length} 条 · 约 ${usedTokens} tokens</summary>
+    <details open>
+      <summary>${esc(summaryParts.join(' · '))}</summary>
       <div class="context-trace-body">
-        ${injected.map(item => `
-          <div class="context-trace-item">
-            <div class="context-trace-title">${esc(item.title || item.path || item.id || 'Memory')} <span>${esc(String(item.score ?? ''))}</span></div>
-            <div class="context-trace-path">${esc(item.source || '')} · ${esc(item.path || '')}</div>
-            <div class="context-trace-reason">${esc(item.reason || '')}</div>
-          </div>
-        `).join('')}
-        ${skipped.length ? `<div class="context-trace-skipped">未注入 ${skipped.length} 条：${esc(skipped.slice(0, 3).map(item => item.title || item.path || item.reason).join('、'))}</div>` : ''}
+        ${injected.map(item => {
+          const meta = [item.source || '', item.path || ''].filter(Boolean).join(' · ');
+          const badges = [
+            item.compressed ? t('contextTraceCompressed') : '',
+            item.tokens ? t('contextTraceTokens', { tokens: item.tokens }) : '',
+          ].filter(Boolean).join(' · ');
+          return `
+            <div class="context-trace-item">
+              <div class="context-trace-title">${esc(item.title || item.path || item.id || t('contextTraceFallbackTitle'))} <span>${esc(String(item.score ?? ''))}</span></div>
+              <div class="context-trace-path">${esc(meta)}</div>
+              ${badges ? `<div class="context-trace-meta">${esc(badges)}</div>` : ''}
+              <div class="context-trace-reason">${esc(item.reason || '')}</div>
+            </div>
+          `;
+        }).join('')}
+        ${skipped.length ? `<div class="context-trace-skipped">${esc(t('contextTraceSkipped', { count: skipped.length, items: skipped.slice(0, 3).map(item => item.title || item.path || item.reason).join('、') }))}</div>` : ''}
       </div>
     </details>
   `;

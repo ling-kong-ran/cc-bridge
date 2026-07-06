@@ -570,5 +570,17 @@
   "importMemorySuccess": "Imported {count} files",
   "importMemoryEmpty": "No files selected",
   "organizeMemory": "Organize",
-  "organizeMemorySuccess": "Linked {linked} node pairs"
+  "organizeMemorySuccess": "Linked {linked} node pairs",
+  "contextTraceSummary": "Retrieved and injected {count} memories · ~{tokens} tokens",
+  "contextTraceCompressedSummary": "{count} auto-summarized",
+  "contextTraceCompressed": "Auto-summarized",
+  "contextTraceTokens": "~{tokens} tokens",
+  "contextTraceFallbackTitle": "Memory",
+  "contextTraceSkipped": "Skipped {count}: {items}",
+  "memoryConsolidationSaved": "Auto-saved {count} memories",
+  "memoryConsolidationSkipped": "Auto memory skipped duplicate or low-value content",
+  "memoryConsolidationFailed": "Auto memory failed: {error}",
+  "memoryDeleteConfirm": "Delete memory \"{name}\"?",
+  "memoryDeleted": "Memory deleted",
+  "memoryDeleteFailed": "Failed to delete memory"
 }

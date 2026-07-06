@@ -3394,6 +3394,7 @@ html.light-theme body.resizing-workspace-pane .workspace-pane-resizer::after {
 }
 
 .context-trace-path,
+.context-trace-meta,
 .context-trace-reason,
 .context-trace-skipped {
   margin-top: 3px;
@@ -3401,6 +3402,10 @@ html.light-theme body.resizing-workspace-pane .workspace-pane-resizer::after {
   line-height: 1.45;
   color: var(--text-subtle);
   word-break: break-all;
+}
+
+.context-trace-meta {
+  color: var(--cyan-dim);
 }
 
 .context-trace-reason {
@@ -5184,8 +5189,16 @@ html.light-theme .memory-file-snippet {
 
 .memory-modal-head {
   display: flex; align-items: center; justify-content: space-between;
+  gap: 12px;
   padding: 14px 18px 10px;
   border-bottom: 1px solid var(--border-dim);
+}
+
+.memory-modal-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
 }
 
 .memory-modal-body {

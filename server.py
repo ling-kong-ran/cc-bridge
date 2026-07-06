@@ -52,6 +52,7 @@ from artifact_store import list_artifacts as list_artifact_records
 from memory_index import list_memory_files, search_memory, get_memory_file, delete_memory_file, save_memory_file, index_memory, get_memory_tree, get_memory_graph, import_memory_files, organize_memory_links
 import wiki_store
 import context_orchestrator
+import memory_consolidator
 # 飞书模块延迟加载 — 避免 lark_oapi SDK 拖慢 server 启动
 class _LazyFeishu:
     """延迟导入飞书相关模块。首次访问任意属性时自动触发 import。"""
@@ -1439,24 +1440,122 @@ async def push_event(client_id: str, event_type: str, data: dict):
         await queue.put({"event": event_type, "data": data})
 
 
+async def schedule_memory_consolidation(client_id: str, session_id: str = "", run_id: str = "") -> None:
+    """会话完成后异步沉淀明确的长期偏好，不阻塞聊天主链路。"""
+    try:
+        settings = get_gui_settings()
+        if settings.get("memoryAutoConsolidate", "auto") == "off":
+            return
+        prompt = client_last_prompt.get(client_id, "") or client_last_msg.get(client_id, "")
+        if not prompt:
+            return
+        meta = client_meta.get(client_id, {}) or {}
+        cwd = meta.get("cwd") or DEFAULT_CWD
+        job_id = memory_consolidator.enqueue_consolidation(
+            session_id=session_id,
+            cwd=cwd,
+            run_id=run_id,
+            client_id=client_id,
+            user_message=prompt,
+            assistant_summary=client_response_buf.get(client_id, "")[:1200],
+        )
+        await push_event(client_id, "memory_consolidation_started", {"job_id": job_id, "session_id": session_id, "run_id": run_id})
+
+        async def _run():
+            result = await asyncio.to_thread(memory_consolidator.run_consolidation_job, job_id, settings)
+            event = "memory_consolidation_failed" if result.get("status") == "failed" else "memory_consolidation_completed"
+            _notify_log.info(
+                "memory consolidation %s cid=%s sid=%s run=%s written=%s skipped=%s files=%s error=%s",
+                result.get("status"),
+                client_id,
+                session_id or "-",
+                run_id or "-",
+                result.get("written", 0),
+                result.get("skipped", 0),
+                "; ".join(item.get("filename", "") for item in result.get("files", []) if isinstance(item, dict)),
+                result.get("error", ""),
+            )
+            await push_event(client_id, event, {"job": result, "session_id": session_id, "run_id": run_id})
+            if session_id:
+                for viewer_id in [target_id for target_id in get_session_subscribers(session_id) if target_id != client_id]:
+                    await push_event(viewer_id, event, {"job": result, "session_id": session_id, "run_id": run_id})
+
+        asyncio.create_task(_run())
+    except Exception as exc:
+        _notify_log.info("memory consolidation enqueue failed cid=%s sid=%s run=%s error=%s", client_id, session_id, run_id, exc)
+
+
 async def prepare_contextual_message(client_id: str, content: str, cwd: str, session_id: str = "", run_id: str = "", skip_inject: bool = False) -> str:
     """发送前注入自动召回上下文，并把 trace 推送到前端。"""
     if (content or "").lstrip().startswith("/"):
         return content
-    final_content, trace = context_orchestrator.build_contextual_prompt(
-        content=content,
-        cwd=cwd or DEFAULT_CWD,
-        client_id=client_id,
-        session_id=session_id,
-        settings=get_gui_settings(),
-        skip_inject=skip_inject,
-    )
+    try:
+        final_content, trace = await asyncio.wait_for(
+            asyncio.to_thread(
+                context_orchestrator.build_contextual_prompt,
+                content=content,
+                cwd=cwd or DEFAULT_CWD,
+                client_id=client_id,
+                session_id=session_id,
+                settings=get_gui_settings(),
+                skip_inject=skip_inject,
+            ),
+            timeout=3.0,
+        )
+    except asyncio.TimeoutError:
+        final_content = content
+        trace = {
+            "session_id": session_id,
+            "client_id": client_id,
+            "query": content,
+            "enabled": not skip_inject,
+            "budget_tokens": 0,
+            "used_tokens": 0,
+            "candidates": 0,
+            "injected": [],
+            "skipped": [],
+            "errors": ["自动上下文召回超时，已跳过注入以避免阻塞发送"],
+            "created_at": time.time(),
+        }
+    except Exception as exc:
+        final_content = content
+        trace = {
+            "session_id": session_id,
+            "client_id": client_id,
+            "query": content,
+            "enabled": not skip_inject,
+            "budget_tokens": 0,
+            "used_tokens": 0,
+            "candidates": 0,
+            "injected": [],
+            "skipped": [],
+            "errors": [f"自动上下文召回失败，已跳过注入: {exc}"],
+            "created_at": time.time(),
+        }
     if not trace:
         return final_content
     if session_id:
         trace["session_id"] = session_id
     if run_id:
         trace["run_id"] = run_id
+    injected = trace.get("injected") if isinstance(trace, dict) else []
+    if injected:
+        sources = []
+        compressed_count = sum(1 for item in injected if item.get("compressed"))
+        for item in injected[:6]:
+            label = item.get("path") or item.get("title") or item.get("id") or ""
+            sources.append(f"{item.get('source') or 'unknown'}:{label}")
+        _notify_log.info(
+            "context injected cid=%s sid=%s run=%s count=%s tokens=%s/%s compressed=%s sources=%s",
+            client_id,
+            session_id or "-",
+            run_id or "-",
+            len(injected),
+            trace.get("used_tokens", 0),
+            trace.get("budget_tokens", 0),
+            compressed_count,
+            "; ".join(sources),
+        )
     event_data = {"session_id": session_id, "run_id": run_id, "trace": trace}
     await push_event(client_id, "context_injected", event_data)
     if session_id:
@@ -2054,6 +2153,7 @@ async def handle_action(body: bytes, writer: asyncio.StreamWriter):
                 await push_event(client_id, "session_id_captured", event)
             elif evt_type == "result":
                 await push_event(client_id, evt_type, persist_result_usage(client_id, event))
+                await schedule_memory_consolidation(client_id, sid, run_id)
                 await release_session_lock_for_session(sid, client_id)
                 # 常驻进程模式下 process_ended 不触发，在 result 中发送通知
                 if not session._notified:
@@ -2199,6 +2299,7 @@ async def handle_action(body: bytes, writer: asyncio.StreamWriter):
                     await push_event(client_id, "session_id_captured", event)
                 elif evt_type == "result":
                     await push_event(client_id, evt_type, persist_result_usage(client_id, event))
+                    await schedule_memory_consolidation(client_id, sid, run_id)
                     await release_session_lock_for_session(sid, client_id)
                     if not takeover_session._notified:
                         takeover_session._notified = True
@@ -2588,6 +2689,7 @@ def make_owner_event_handler(client_id: str, run_id: str, session, model: str, c
             await push_event(client_id, "session_id_captured", event)
         elif evt_type == "result":
             await push_event(client_id, evt_type, persist_result_usage(client_id, event))
+            await schedule_memory_consolidation(client_id, sid, run_id)
             await _notify_turn_complete_once(client_id, sid, session, model, default_title)
             await release_session_lock_for_session(sid, client_id)
         elif evt_type == "user":

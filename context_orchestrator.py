@@ -7,6 +7,7 @@ Context Orchestrator - 发送前自动召回 Memory / Wiki 上下文并生成可
 from __future__ import annotations
 
 import html
+import re
 import time
 import uuid
 from pathlib import Path
@@ -18,7 +19,7 @@ import wiki_store
 
 DEFAULT_CONTEXT_SETTINGS: dict[str, Any] = {
     "memoryAutoInject": True,
-    "memoryInjectMaxTokens": 2500,
+    "memoryInjectMaxTokens": 8000,
     "memoryInjectMaxItems": 6,
     "memoryInjectDepth": 1,
     "memoryInjectIncludeRaw": False,
@@ -35,7 +36,7 @@ def normalize_context_settings(settings: dict[str, Any] | None = None) -> dict[s
     merged["memoryAutoInject"] = bool(merged.get("memoryAutoInject", True))
     merged["memoryInjectIncludeRaw"] = bool(merged.get("memoryInjectIncludeRaw", False))
     merged["memoryInjectExplain"] = bool(merged.get("memoryInjectExplain", True))
-    merged["memoryInjectMaxTokens"] = _clamp_int(merged.get("memoryInjectMaxTokens"), 500, 12000, 2500)
+    merged["memoryInjectMaxTokens"] = _clamp_int(merged.get("memoryInjectMaxTokens"), 1000, 30000, 8000)
     merged["memoryInjectMaxItems"] = _clamp_int(merged.get("memoryInjectMaxItems"), 1, 20, 6)
     merged["memoryInjectDepth"] = _clamp_int(merged.get("memoryInjectDepth"), 0, 3, 1)
     return merged
@@ -125,15 +126,33 @@ def retrieve_context_trace(
         if len(injected) >= max_items:
             skipped.append(_skip_item(item, "超过条目数量限制"))
             continue
-        item_tokens = _estimate_tokens(item.get("content", ""))
-        if item_tokens > max_tokens:
-            item = dict(item)
-            item["content"] = _trim_to_tokens(item.get("content", ""), max_tokens // 2)
-            item_tokens = _estimate_tokens(item.get("content", ""))
+
+        item = dict(item)
+        original_content = item.get("content", "")
+        remaining_tokens = max_tokens - used_tokens
+        if remaining_tokens <= 0:
+            skipped.append(_skip_item(item, "超出 token 预算"))
+            continue
+
+        target_tokens = min(_item_token_budget(max_tokens, max_items), remaining_tokens)
+        item_tokens = _estimate_tokens(original_content)
+        if item_tokens > target_tokens:
+            compressed = _summarize_to_tokens(query, original_content, target_tokens)
+            compressed_tokens = _estimate_tokens(compressed)
+            if compressed_tokens > remaining_tokens:
+                compressed = _summarize_to_tokens(query, original_content, remaining_tokens)
+                compressed_tokens = _estimate_tokens(compressed)
+            if compressed_tokens > remaining_tokens:
+                skipped.append(_skip_item(item, "摘要后仍超出 token 预算"))
+                continue
+            item["content"] = compressed
+            item["compressed"] = True
+            item["original_tokens"] = item_tokens
+            item_tokens = compressed_tokens
+
         if used_tokens + item_tokens > max_tokens:
             skipped.append(_skip_item(item, "超出 token 预算"))
             continue
-        item = dict(item)
         item["tokens"] = item_tokens
         injected.append(item)
         used_tokens += item_tokens
@@ -163,7 +182,7 @@ def _retrieve_project_memory(query: str, cwd: str, include_raw: bool, limit: int
         if not include_raw and (mem_type == "raw" or str(rel_path).startswith("raw/")):
             continue
         body = file_data.get("body") or file_data.get("content") or ""
-        content = _trim_to_tokens(body, 700)
+        content = _trim_to_tokens(body, 2400)
         score = max(0.1, 1.0 - idx * 0.05)
         if mem_type in {"feedback", "project", "user"}:
             score += 0.25
@@ -191,7 +210,7 @@ def _retrieve_wiki(query: str, depth: int, limit: int) -> list[dict[str, Any]]:
         if not node:
             continue
         seen.add(node_id)
-        content = _trim_to_tokens(node.get("body") or result.get("snippet") or "", 700)
+        content = _trim_to_tokens(node.get("body") or result.get("snippet") or "", 2400)
         score = max(0.08, 0.88 - idx * 0.04)
         score += min(float(node.get("access_count") or 0) * 0.005, 0.1)
         candidates.append({
@@ -219,7 +238,7 @@ def _retrieve_wiki(query: str, depth: int, limit: int) -> list[dict[str, Any]]:
                 "source": "wiki",
                 "path": neighbor_id,
                 "score": round(max(0.05, score - 0.18), 3),
-                "content": _trim_to_tokens(neighbor_node.get("body") or "", 500),
+                "content": _trim_to_tokens(neighbor_node.get("body") or "", 1200),
                 "reason": f"与命中 wiki 节点 {node.get('title') or node_id} 存在 wikilink 关联",
             })
     return candidates
@@ -241,6 +260,8 @@ def _format_context_block(items: list[dict[str, Any]]) -> str:
             "path": item.get("path", ""),
             "score": f"{float(item.get('score') or 0):.2f}",
         }
+        if item.get("compressed"):
+            attrs["compressed"] = "true"
         attr_text = " ".join(f'{k}="{html.escape(str(v), quote=True)}"' for k, v in attrs.items())
         parts.append(f"<memory {attr_text}>")
         parts.append(str(item.get("content") or "").strip())
@@ -288,6 +309,8 @@ def _trace_item(item: dict[str, Any]) -> dict[str, Any]:
         "source": item.get("source", ""),
         "score": item.get("score", 0),
         "tokens": item.get("tokens", _estimate_tokens(item.get("content", ""))),
+        "original_tokens": item.get("original_tokens"),
+        "compressed": bool(item.get("compressed")),
         "reason": item.get("reason", ""),
         "content": item.get("content", ""),
     }
@@ -301,6 +324,94 @@ def _skip_item(item: dict[str, Any], reason: str) -> dict[str, Any]:
         "score": item.get("score", 0),
         "reason": reason,
     }
+
+
+def _item_token_budget(max_tokens: int, max_items: int) -> int:
+    # 给单条记忆留出更宽松但受控的预算，避免前几条大块内容挤掉全部结果。
+    return max(800, min(3000, max_tokens // max(1, min(max_items, 4))))
+
+
+def _summarize_to_tokens(query: str, text: str, max_tokens: int) -> str:
+    """面向当前查询做抽取式摘要，保留相关句子，而不是机械截断。"""
+    text = (text or "").strip()
+    if _estimate_tokens(text) <= max_tokens:
+        return text
+    if max_tokens < 80:
+        return _trim_to_tokens(text, max_tokens)
+
+    terms = _query_terms(query)
+    sentences = _split_sentences(text)
+    if not sentences:
+        return _trim_to_tokens(text, max_tokens)
+
+    scored: list[tuple[float, int, str]] = []
+    total = len(sentences)
+    for idx, sentence in enumerate(sentences):
+        sentence_text = sentence.strip()
+        if not sentence_text:
+            continue
+        lower = sentence_text.lower()
+        hit_score = sum(1 for term in terms if term and term in lower)
+        heading_score = 1.5 if sentence_text.startswith(("#", "-", "*", ">")) else 0
+        early_score = max(0, 1 - idx / max(total, 1)) * 0.5
+        length_penalty = 0.35 if _estimate_tokens(sentence_text) > max_tokens // 2 else 0
+        scored.append((hit_score * 2 + heading_score + early_score - length_penalty, idx, sentence_text))
+
+    scored.sort(key=lambda item: (-item[0], item[1]))
+    selected: list[tuple[int, str]] = []
+    used = 0
+    reserved = 80
+    content_budget = max(80, max_tokens - reserved)
+    for score, idx, sentence in scored:
+        sentence_tokens = _estimate_tokens(sentence)
+        if sentence_tokens > content_budget:
+            sentence = _trim_to_tokens(sentence, content_budget)
+            sentence_tokens = _estimate_tokens(sentence)
+        if used + sentence_tokens > content_budget:
+            continue
+        selected.append((idx, sentence))
+        used += sentence_tokens
+        if used >= content_budget * 0.9:
+            break
+
+    if not selected:
+        return _trim_to_tokens(text, max_tokens)
+
+    selected.sort(key=lambda item: item[0])
+    summary = "\n".join(sentence for _, sentence in selected).strip()
+    result = "[自动摘要：原文较长，已按当前问题保留最相关片段]\n" + summary
+    return _trim_to_tokens(result, max_tokens)
+
+
+def _query_terms(query: str) -> list[str]:
+    terms: list[str] = []
+    for token in str(query or "").lower().replace('"', " ").split():
+        token = token.strip("`*_()[]{}<>:;,.!?，。！？、'\"")
+        if len(token) >= 2 and token not in terms:
+            terms.append(token)
+    return terms[:20]
+
+
+def _split_sentences(text: str) -> list[str]:
+    parts = re.split(r"(?<=[。！？.!?])\s+|\n{2,}", text.strip())
+    sentences: list[str] = []
+    for part in parts:
+        part = part.strip()
+        if not part:
+            continue
+        if _estimate_tokens(part) <= 280:
+            sentences.append(part)
+            continue
+        lines = [line.strip() for line in part.splitlines() if line.strip()]
+        if len(lines) > 1:
+            sentences.extend(lines)
+        else:
+            sentences.extend(_chunk_text(part, 600))
+    return sentences
+
+
+def _chunk_text(text: str, size: int) -> list[str]:
+    return [text[i:i + size].strip() for i in range(0, len(text), size) if text[i:i + size].strip()]
 
 
 def _estimate_tokens(text: str) -> int:

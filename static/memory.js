@@ -40,11 +40,50 @@ async function viewMemoryFile(filename) {
     });
     if (!resp.ok) return;
     const data = await resp.json();
-    document.getElementById('memory-modal-title').textContent = data.title || data.name;
-    document.getElementById('memory-modal-body').innerHTML = renderMd(data.body || data.content || '');
+    const titleEl = document.getElementById('memory-modal-title');
+    const bodyEl = document.getElementById('memory-modal-body');
+    titleEl.textContent = data.title || data.name;
+    titleEl.dataset.filename = data.name || filename;
+    bodyEl.innerHTML = renderMd(data.body || data.content || '');
     document.getElementById('memory-modal-overlay').style.display = 'flex';
   } catch (e) {
     console.error('Memory file load failed:', e);
+  }
+}
+
+function currentMemoryModalFilename() {
+  return document.getElementById('memory-modal-title')?.dataset.filename || '';
+}
+
+function editCurrentMemoryFile() {
+  const filename = currentMemoryModalFilename();
+  if (!filename) return;
+  closeMemoryModal();
+  openMemoryEditor(filename);
+}
+
+async function deleteCurrentMemoryFile() {
+  const filename = currentMemoryModalFilename();
+  if (!filename) return;
+  if (!confirm(t('memoryDeleteConfirm', { name: filename }))) return;
+  try {
+    const resp = await fetch('/api/memory/delete', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ filename, cwd: cwdInput.value.trim() || '' }),
+    });
+    const data = await resp.json().catch(() => ({}));
+    if (!resp.ok || data.ok === false) {
+      showToast(data.error || t('memoryDeleteFailed'), 'error');
+      return;
+    }
+    closeMemoryModal();
+    showToast(t('memoryDeleted'), 'success');
+    await loadMemoryFiles();
+    if (typeof refreshWikiGraph === 'function') refreshWikiGraph();
+  } catch (e) {
+    console.error('Memory delete failed:', e);
+    showToast(t('memoryDeleteFailed'), 'error');
   }
 }
 
@@ -166,11 +205,14 @@ function initMemoryUI() {
   document.getElementById('btn-memory-organize')?.addEventListener('click', organizeMemoryLinks);
   document.getElementById('btn-memory-new')?.addEventListener('click', () => openMemoryEditor());
   document.getElementById('memory-modal-close')?.addEventListener('click', closeMemoryModal);
+  document.getElementById('memory-modal-edit')?.addEventListener('click', editCurrentMemoryFile);
+  document.getElementById('memory-modal-delete')?.addEventListener('click', deleteCurrentMemoryFile);
   document.getElementById('memory-modal-overlay')?.addEventListener('click', (e) => {
     if (e.target === e.currentTarget) closeMemoryModal();
   });
   document.getElementById('btn-memory-edit-save')?.addEventListener('click', saveMemoryEdit);
   document.getElementById('btn-memory-edit-cancel')?.addEventListener('click', closeMemoryEditor);
+  document.getElementById('memory-edit-close')?.addEventListener('click', closeMemoryEditor);
   document.getElementById('memory-edit-overlay')?.addEventListener('click', (e) => {
     if (e.target === e.currentTarget) closeMemoryEditor();
   });
