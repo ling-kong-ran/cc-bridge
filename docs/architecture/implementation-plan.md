@@ -117,6 +117,7 @@ cc-bridge/
 - 新增 `backend/routes/scheduled_tasks_routes.py`，开始把定时任务 API 从 `server.py` 分支拆到路由层。
 - 新增 `backend/routes/settings_routes.py` 与 `backend/routes/context_routes.py`，把 GUI 设置和自动上下文 API 接入路由层。
 - 新增 `backend/responses.py`，开始承接 HTTP 响应写出基础设施。
+- 新增 `backend/services/sessions_service.py`，开始承接会话列表运行态标记与分页逻辑。
 
 ## 后续验收标准
 

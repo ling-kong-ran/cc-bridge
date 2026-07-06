@@ -57,6 +57,7 @@ from backend.routes.settings_routes import handle_settings_get, handle_settings_
 from backend.routes.context_routes import handle_context_get, handle_context_post
 from backend.routes.scheduled_tasks_routes import handle_scheduled_tasks_get, handle_scheduled_tasks_post
 from backend.responses import send_response
+from backend.services.sessions_service import list_gui_sessions
 # 飞书模块延迟加载 — 避免 lark_oapi SDK 拖慢 server 启动
 class _LazyFeishu:
     """延迟导入飞书相关模块。首次访问任意属性时自动触发 import。"""
@@ -2975,26 +2976,12 @@ async def handle_api_get(path: str, writer: asyncio.StreamWriter, query: dict = 
     elif path == "/api/remote-targets":
         data = {"targets": remote_manager.list_targets(), "password_supported": remote_manager.password_supported()}
     elif path == "/api/sessions":
-        sessions = list_sessions()
-        # 标记活跃中的会话（当前正在生成回复）
-        active_sids = set()
-        for sid, owner_id in session_owner.items():
-            owner_sess = get_owned_session(owner_id, sid)
-            if owner_sess and owner_sess.is_running and owner_sess._message_owner_id:
-                active_sids.add(sid)
-        for s in sessions:
-            sid = s.get("session_id")
-            s["is_active"] = sid in active_sids
-            owner_id = session_owner.get(sid) if sid else ""
-            s["active_owner_id"] = owner_id if s["is_active"] else ""
-        total = len(sessions)
-        try:
-            offset = max(0, int((query or {}).get("offset", ["0"])[0]))
-            limit = max(1, min(200, int((query or {}).get("limit", ["200"])[0])))
-        except (ValueError, IndexError):
-            offset = 0
-            limit = 200
-        data = {"sessions": sessions[offset:offset + limit], "total": total}
+        data = list_gui_sessions(
+            sessions=list_sessions(),
+            session_owner=session_owner,
+            get_owned_session=get_owned_session,
+            query=query,
+        )
     elif path == "/api/artifacts":
         try:
             limit_sessions = int((query or {}).get("limit_sessions", ["30"])[0])
