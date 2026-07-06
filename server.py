@@ -56,6 +56,7 @@ import memory_consolidator
 from backend.routes.settings_routes import handle_settings_get, handle_settings_post
 from backend.routes.context_routes import handle_context_get, handle_context_post
 from backend.routes.scheduled_tasks_routes import handle_scheduled_tasks_get, handle_scheduled_tasks_post
+from backend.responses import send_response
 # 飞书模块延迟加载 — 避免 lark_oapi SDK 拖慢 server 启动
 class _LazyFeishu:
     """延迟导入飞书相关模块。首次访问任意属性时自动触发 import。"""
@@ -3469,29 +3470,6 @@ async def handle_static(path: str, writer: asyncio.StreamWriter):
 
     await send_response(writer, 200, content_type, content)
 
-
-async def send_response(writer: asyncio.StreamWriter, status: int, content_type: str, body: bytes):
-    status_text = {
-        200: "OK",
-        201: "Created",
-        204: "No Content",
-        400: "Bad Request",
-        403: "Forbidden",
-        404: "Not Found",
-        413: "Payload Too Large",
-        500: "Internal Server Error",
-    }
-    response = (
-        f"HTTP/1.1 {status} {status_text.get(status, 'Unknown')}\r\n"
-        f"Content-Type: {content_type}\r\n"
-        f"Content-Length: {len(body)}\r\n"
-        "Cache-Control: no-cache, no-store\r\n"
-        "Access-Control-Allow-Origin: *\r\n"
-        "Connection: close\r\n"
-        "\r\n"
-    )
-    writer.write(response.encode() + body)
-    await writer.drain()
 
 
 async def main(start_port: int | None = None, desktop: bool = False, host: str | None = None):
