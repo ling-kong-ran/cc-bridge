@@ -2,8 +2,10 @@
 Session Store - 会话元数据持久化
 存储位置: ~/.claude/gui_sessions.json
 """
+import html
 import json
 import os
+import re
 from datetime import datetime
 from pathlib import Path
 from typing import Optional
@@ -558,14 +560,76 @@ def _find_jsonl_path(session_id: str, cwd: str) -> Path | None:
 
 
 def _extract_user_text(obj: dict) -> str:
+    text = _extract_raw_user_text(obj)
+    user_text, _ = _split_injected_context(text)
+    return _clean_user_text(user_text)
+
+
+def _extract_raw_user_text(obj: dict) -> str:
     content = obj.get("message", {}).get("content", "")
     if isinstance(content, str):
-        return _clean_user_text(content)
+        return content
     if isinstance(content, list):
         for block in content:
             if block.get("type") == "text":
-                return _clean_user_text(block.get("text", "") or "")
+                return block.get("text", "") or ""
     return ""
+
+
+_CONTEXT_PREFIX_RE = re.compile(
+    r"^\s*<cc_bridge_context>([\s\S]*?)</cc_bridge_context>\s*\n*\s*<user_request>\s*\n?([\s\S]*?)\n?\s*</user_request>\s*$",
+    re.IGNORECASE,
+)
+_MEMORY_TAG_RE = re.compile(r"<memory\s+([^>]*)>([\s\S]*?)</memory>", re.IGNORECASE)
+_ATTR_RE = re.compile(r"([\w:-]+)=\"([^\"]*)\"")
+
+
+def _split_injected_context(text: str) -> tuple[str, dict | None]:
+    """把注入上下文拆成原始用户请求和可用于前端复现命中卡片的 trace。"""
+    match = _CONTEXT_PREFIX_RE.match(text or "")
+    if not match:
+        return text, None
+    context_body, user_text = match.groups()
+    injected = []
+    used_tokens = 0
+    for item_match in _MEMORY_TAG_RE.finditer(context_body or ""):
+        attrs = {
+            key: html.unescape(value)
+            for key, value in _ATTR_RE.findall(item_match.group(1) or "")
+        }
+        content = (item_match.group(2) or "").strip()
+        tokens = _estimate_tokens(content)
+        used_tokens += tokens
+        score = attrs.get("score") or 0
+        try:
+            score = float(score)
+        except (TypeError, ValueError):
+            score = 0
+        injected.append({
+            "id": attrs.get("id", ""),
+            "title": attrs.get("title", ""),
+            "source": attrs.get("source", ""),
+            "path": attrs.get("path", ""),
+            "score": score,
+            "tokens": tokens,
+            "compressed": str(attrs.get("compressed", "")).lower() == "true",
+            "reason": "历史消息中的自动上下文注入",
+            "content": content,
+        })
+    trace = {
+        "used_tokens": used_tokens,
+        "injected": injected,
+        "skipped": [],
+        "from_history": True,
+    } if injected else None
+    return user_text.strip(), trace
+
+
+def _estimate_tokens(text: str) -> int:
+    text = text or ""
+    chinese_chars = sum(1 for ch in text if "\u4e00" <= ch <= "\u9fff")
+    other_chars = max(0, len(text) - chinese_chars)
+    return max(1, chinese_chars + other_chars // 4)
 
 
 def _clean_user_text(text: str) -> str:
@@ -680,7 +744,12 @@ def load_session_history(session_id: str, cwd: str, max_messages: int = 50) -> l
                     text = _extract_user_text(obj)
                     if text:
                         current_assistant_msg = None
-                        messages.append({"role": "user", "text": text})
+                        message = {"role": "user", "text": text}
+                        raw_text = _extract_raw_user_text(obj)
+                        _, context_trace = _split_injected_context(raw_text)
+                        if context_trace:
+                            message["context_trace"] = context_trace
+                        messages.append(message)
 
                 elif msg_type == "assistant":
                     if obj.get("parent_tool_use_id"):

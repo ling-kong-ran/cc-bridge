@@ -310,6 +310,8 @@ def get_memory_graph(cwd: str) -> dict:
             "title": parsed["title"],
             "size": parsed["size"],
             "file": parsed["file"],
+            "path": parsed["file"],
+            "updated_at": parsed["updated_at"],
         })
         stem_to_node[stem] = node_id
 

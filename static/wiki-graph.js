@@ -198,6 +198,9 @@ function renderGraph(data) {
       name: n.name,
       title: n.title || n.name,
       size: n.size || 0,
+      file: n.file || '',
+      path: n.path || n.file || '',
+      updated_at: n.updated_at || 0,
       degree: n.degree,
       radius: radius,
       x: cached ? cached.x : (hashString("x:" + n.id) / 2147483647) * w * 0.45,
@@ -346,6 +349,25 @@ function stopWikiGraphSimulation() {
   }
 }
 
+function formatWikiGraphNodeTime(value) {
+  if (!value) return '';
+  var timestamp = Number(value);
+  if (!timestamp) return '';
+  var date = new Date(timestamp < 10000000000 ? timestamp * 1000 : timestamp);
+  if (Number.isNaN(date.getTime())) return '';
+  return date.toLocaleString(currentLanguage === 'zh' ? 'zh-CN' : 'en-US', {
+    year: 'numeric', month: '2-digit', day: '2-digit',
+    hour: '2-digit', minute: '2-digit'
+  });
+}
+
+function shortenWikiGraphText(text, maxLen) {
+  text = String(text || '');
+  if (!text || text.length <= maxLen) return text;
+  var keep = Math.max(4, Math.floor((maxLen - 1) / 2));
+  return text.slice(0, keep) + '…' + text.slice(-keep);
+}
+
 // ─── 绘制 ────────────────────────────────────────────────────
 function drawWikiGraph() {
   var canvas = wikiGraphCanvas;
@@ -425,6 +447,20 @@ function drawWikiGraph() {
       ctx.textBaseline = "top";
       ctx.fillStyle = isHovered ? "#e4eaf2" : "#8a9bb0";
       ctx.fillText(label, node.x, node.y + node.radius + LABEL_OFFSET);
+    }
+
+    if (isHovered) {
+      var metaLines = [];
+      var updatedAt = formatWikiGraphNodeTime(node.updated_at);
+      if (updatedAt) metaLines.push((currentLanguage === 'zh' ? '更新' : 'Updated') + ': ' + updatedAt);
+      if (node.path) metaLines.push(shortenWikiGraphText(node.path, 42));
+      if (metaLines.length) {
+        ctx.font = "10px sans-serif";
+        ctx.fillStyle = "#6f859d";
+        metaLines.forEach(function(line, lineIndex) {
+          ctx.fillText(line, node.x, node.y + node.radius + LABEL_OFFSET + LABEL_FONT_SIZE + 4 + lineIndex * 12);
+        });
+      }
     }
   });
 

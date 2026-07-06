@@ -7389,6 +7389,7 @@ function renderHistory(history) {
   for (const msg of history) {
     if (msg.role === 'user') {
       addUserMessage(msg.text);
+      if (msg.context_trace) renderContextTrace(msg.context_trace);
     } else if (msg.role === 'assistant') {
       const el = createAssistantBubble(false);
       const contentEl = el.querySelector('.msg-content');
