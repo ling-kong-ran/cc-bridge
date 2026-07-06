@@ -9,7 +9,13 @@
     "desktop:dev": "electron .",
     "desktop:pack": "electron-builder --dir",
     "desktop:dist": "electron-builder",
-    "desktop:dist:win": "electron-builder --win nsis"
+    "desktop:dist:win": "electron-builder --win nsis",
+    "package:desktop": "powershell -ExecutionPolicy Bypass -File scripts/package-desktop.ps1",
+    "package:desktop:pack": "powershell -ExecutionPolicy Bypass -File scripts/package-desktop.ps1 -Target pack",
+    "package:desktop:release": "powershell -ExecutionPolicy Bypass -File scripts/package-desktop.ps1 -Release"
+  },
+  "dependencies": {
+    "electron-updater": "6.8.9"
   },
   "devDependencies": {
     "electron": "40.10.2",
@@ -19,6 +25,13 @@
     "appId": "local.cc-bridge.desktop",
     "productName": "CC Bridge",
     "artifactName": "CC-Bridge-${version}-${os}-${arch}.${ext}",
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "ling-kong-ran",
+        "repo": "cc-bridge"
+      }
+    ],
     "directories": {
       "output": "release"
     },
@@ -31,18 +44,7 @@
         "from": ".",
         "to": "cc-bridge",
         "filter": [
-          "server.py",
-          "ccb_bridge.py",
-          "config_manager.py",
-          "session_store.py",
-          "artifact_store.py",
-          "memory_index.py",
-          "wiki_store.py",
-          "remote_manager.py",
-          "scheduled_task_store.py",
-          "scheduled_task_runner.py",
-          "feishu_*.py",
-          "bootstrap.py",
+          "*.py",
           "bootstrap/**",
           "static/**",
           "requirements.txt"

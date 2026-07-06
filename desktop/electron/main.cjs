@@ -1,7 +1,7 @@
-const { app, BrowserWindow, ipcMain, shell } = require('electron')
+const { app, BrowserWindow, Menu, ipcMain, shell } = require('electron')
+const { autoUpdater } = require('electron-updater')
 const { spawn } = require('node:child_process')
 const crypto = require('node:crypto')
-const fs = require('node:fs')
 const http = require('node:http')
 const os = require('node:os')
 const path = require('node:path')
@@ -25,12 +25,15 @@ function resolvePythonCommand() {
 }
 
 function createWindow() {
+  Menu.setApplicationMenu(null)
+
   mainWindow = new BrowserWindow({
     width: 1280,
     height: 860,
     minWidth: 960,
     minHeight: 640,
-    show: false,
+    autoHideMenuBar: true,
+    menuBarVisible: false,
     webPreferences: {
       preload: path.join(__dirname, 'preload.cjs'),
       contextIsolation: true,
@@ -169,6 +172,15 @@ async function stopBackend() {
   if (backendProcess && !backendProcess.killed) backendProcess.kill()
 }
 
+function configureAutoUpdater() {
+  if (!app.isPackaged) return
+
+  autoUpdater.autoDownload = true
+  autoUpdater.autoInstallOnAppQuit = true
+  autoUpdater.on('error', error => console.error('自动更新检查失败', error))
+  autoUpdater.checkForUpdatesAndNotify()
+}
+
 const gotLock = app.requestSingleInstanceLock()
 if (!gotLock) {
   app.quit()
@@ -181,8 +193,12 @@ if (!gotLock) {
 
   app.whenReady().then(() => {
     ipcMain.handle('desktop:open-logs', () => shell.openPath(path.join(os.homedir(), '.ccb')))
+    ipcMain.handle('desktop:close-window', () => {
+      if (mainWindow && !mainWindow.isDestroyed()) mainWindow.close()
+    })
     createWindow()
     startBackend()
+    configureAutoUpdater()
   })
 
   app.on('before-quit', event => {

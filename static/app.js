@@ -147,6 +147,7 @@ const sessionSearchInput = document.getElementById('session-search');
 const sessionsCountEl = document.getElementById('sessions-count');
 const sessionsNewSessionBtn = document.getElementById('sessions-new-session');
 const btnThemeToggle = document.getElementById('btn-theme-toggle');
+const btnDesktopClose = document.getElementById('btn-desktop-close');
 const btnShortcuts = document.getElementById('btn-shortcuts');
 const shortcutsOverlay = document.getElementById('shortcuts-overlay');
 const shortcutsClose = document.getElementById('shortcuts-close');
@@ -206,8 +207,17 @@ let notificationsEnabled = false;
 let lastNotifyAt = 0;
 let accessContext = { isLocalhost: true, defaultCwd: '' };
 
+function initDesktopWindowControls() {
+  if (!btnDesktopClose || !window.ccBridgeDesktop) return;
+  btnDesktopClose.style.display = '';
+  btnDesktopClose.addEventListener('click', () => {
+    window.ccBridgeDesktop.closeWindow();
+  });
+}
+
 // ─── 初始化 ──────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', async () => {
+  initDesktopWindowControls();
   initTheme();
   initShortcutsHelp();
   initInterfaceSettings();
