@@ -202,7 +202,6 @@ const diffPreviewCloseBtn = document.getElementById('diff-preview-close');
 let diffPreviewDragState = null;
 let diffPreviewResizeState = null;
 let currentLanguage = 'en';
-let i18nMap = {};
 let fontSizePercent = 100;
 let notificationsEnabled = false;
 let lastNotifyAt = 0;
@@ -2098,9 +2097,7 @@ async function applyLanguage(language, persist = true) {
 
 async function loadLanguageMap(language) {
   try {
-    const resp = await fetch(`/static/i18n/${language}.json`);
-    if (!resp.ok) throw new Error(`missing locale: ${language}`);
-    i18nMap = await resp.json();
+    await window.CCBridge.i18n.load(language);
   } catch (e) {
     if (language !== 'en') {
       currentLanguage = 'en';
@@ -2123,11 +2120,7 @@ function renderLocalizedText() {
 }
 
 function t(key, vars = {}) {
-  let text = i18nMap[key] || key;
-  for (const [name, value] of Object.entries(vars)) {
-    text = text.replaceAll(`{${name}}`, String(value));
-  }
-  return text;
+  return window.CCBridge.i18n.t(key, vars);
 }
 
 function applyFontSize(value, persist = true) {
