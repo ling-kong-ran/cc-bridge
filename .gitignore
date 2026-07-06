@@ -4,6 +4,9 @@ __pycache__/
 uploads/
 ccb.exe
 vendor/
+node_modules/
+release/
+dist/
 
 # Claude Code local
 .claude/

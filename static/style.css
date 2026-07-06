@@ -279,6 +279,14 @@ html, body {
   padding: 0 12px;
   gap: 10px;
   user-select: none;
+  -webkit-app-region: drag;
+}
+
+.titlebar button,
+.titlebar input,
+.titlebar select,
+.titlebar a {
+  -webkit-app-region: no-drag;
 }
 
 .titlebar-left {
@@ -450,6 +458,18 @@ html, body {
 .titlebar-btn.active {
   border-color: var(--green-dim);
   color: var(--green);
+}
+
+.titlebar-close-btn {
+  color: var(--text-muted);
+  font-size: 16px;
+  line-height: 1;
+}
+
+.titlebar-close-btn:hover {
+  border-color: var(--danger);
+  color: #fff;
+  background: var(--danger);
 }
 
 .titlebar-btn svg {
