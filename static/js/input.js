@@ -91,7 +91,8 @@
     fileInput.addEventListener('change', () => {
       const filePicker = window.CCBridge?.filePicker;
       if (filePicker?.isOpen?.() && filePicker?.hasCallback?.()) {
-        filePicker.handleClientFiles(fileInput.files);
+        const filePickerOptions = typeof getFilePickerOptions === 'function' ? getFilePickerOptions() : {};
+        filePicker.handleClientFiles(fileInput.files, filePickerOptions);
         fileInput.value = '';
         return;
       }
