@@ -1101,8 +1101,7 @@ async function loadScheduledTasks() {
   if (!list) return;
   populateScheduledSelects();
   try {
-    const resp = await fetch('/api/scheduled-tasks');
-    const data = await resp.json();
+    const data = await window.CCBridge.api.json('/api/scheduled-tasks');
     scheduledTasks = Array.isArray(data.tasks) ? data.tasks : [];
     renderScheduledTasks();
   } catch (e) {
@@ -1238,7 +1237,7 @@ async function saveScheduledTask() {
     showToast(t('scheduledPromptRequired'), 'warning');
     return;
   }
-  const resp = await fetch('/api/scheduled-tasks', {
+  const resp = await window.CCBridge.api.request('/api/scheduled-tasks', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),
@@ -1255,32 +1254,20 @@ async function saveScheduledTask() {
 
 async function deleteScheduledTask(task) {
   if (!task || !confirm(t('scheduledConfirmDelete', { name: task.name || t('scheduledTask') }))) return;
-  await fetch('/api/scheduled-tasks/delete', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ id: task.id }),
-  });
+  await window.CCBridge.api.postJson('/api/scheduled-tasks/delete', { id: task.id });
   showToast(t('scheduledTaskDeleted'), 'success');
   loadScheduledTasks();
 }
 
 async function toggleScheduledTask(task) {
   if (!task) return;
-  await fetch('/api/scheduled-tasks/toggle', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ id: task.id, enabled: !task.enabled }),
-  });
+  await window.CCBridge.api.postJson('/api/scheduled-tasks/toggle', { id: task.id, enabled: !task.enabled });
   loadScheduledTasks();
 }
 
 async function runScheduledTask(task) {
   if (!task) return;
-  await fetch('/api/scheduled-tasks/run-now', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ id: task.id }),
-  });
+  await window.CCBridge.api.postJson('/api/scheduled-tasks/run-now', { id: task.id });
   showToast(t('scheduledTaskStarted'), 'info');
   loadScheduledTasks();
 }
@@ -1368,7 +1355,7 @@ async function beginFeishuOnboard() {
   if (status) status.textContent = t('feishuOnboardConnecting') || 'Connecting to Feishu...';
 
   try {
-    const resp = await fetch('/api/feishu-gateway/onboard/begin', {
+    const resp = await window.CCBridge.api.request('/api/feishu-gateway/onboard/begin', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ domain: 'feishu' }),
@@ -1405,7 +1392,7 @@ async function pollFeishuOnboard() {
   var deviceCode = feishuOnboardState.device_code;
 
   try {
-    var resp = await fetch('/api/feishu-gateway/onboard/poll', {
+    var resp = await window.CCBridge.api.request('/api/feishu-gateway/onboard/poll', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ device_code: deviceCode }),
@@ -1498,7 +1485,7 @@ function cancelFeishuOnboard(keepStatus) {
 async function loadFeishuGatewayConfig() {
   const status = document.getElementById('feishu-gateway-form-status');
   try {
-    const resp = await fetch('/api/feishu-gateway/config');
+    const resp = await window.CCBridge.api.request('/api/feishu-gateway/config');
     const data = await resp.json();
     if (!resp.ok) throw new Error(data.error || resp.statusText);
     feishuGatewayConfig = data.config || data || {};
@@ -1519,7 +1506,7 @@ async function loadFeishuGatewayScopes() {
   const list = document.getElementById('feishu-gateway-scope-list');
   if (!list) return;
   try {
-    const resp = await fetch('/api/feishu-gateway/scopes');
+    const resp = await window.CCBridge.api.request('/api/feishu-gateway/scopes');
     const data = await resp.json();
     if (!resp.ok) throw new Error(data.error || resp.statusText);
     feishuGatewayScopes = Array.isArray(data.scopes) ? data.scopes : (Array.isArray(data) ? data : []);
@@ -1571,7 +1558,7 @@ async function saveFeishuGatewayConfig(opts) {
   const payload = readFeishuGatewayConfig();
   const status = document.getElementById('feishu-gateway-form-status');
   try {
-    const resp = await fetch('/api/feishu-gateway/config', {
+    const resp = await window.CCBridge.api.request('/api/feishu-gateway/config', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),
@@ -1697,7 +1684,7 @@ async function resetFeishuGatewayScope(scopeKey) {
 
 async function postFeishuScopeAction(url, scopeKey, successMessage) {
   try {
-    const resp = await fetch(url, {
+    const resp = await window.CCBridge.api.request(url, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ scope_key: scopeKey }),
@@ -1745,7 +1732,7 @@ function initRemote() {
 
 async function loadRemoteTargets() {
   try {
-    const resp = await fetch('/api/remote-targets');
+    const resp = await window.CCBridge.api.request('/api/remote-targets');
     const data = await resp.json();
     // 兼容旧的数组返回；新版本返回 { targets, password_supported }
     if (Array.isArray(data)) {
@@ -1917,7 +1904,7 @@ async function saveRemoteTarget() {
     return;
   }
   try {
-    const resp = await fetch('/api/remote-targets', {
+    const resp = await window.CCBridge.api.request('/api/remote-targets', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(target),
@@ -1938,11 +1925,7 @@ async function deleteRemoteTarget(target) {
   if (!target) return;
   if (!window.confirm(t('remoteConfirmDelete', { name: target.name || target.host }))) return;
   try {
-    await fetch('/api/remote-targets/delete', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ id: target.id }),
-    });
+    await window.CCBridge.api.postJson('/api/remote-targets/delete', { id: target.id });
   } catch (e) { /* ignore */ }
   await loadRemoteTargets();
 }
@@ -1959,7 +1942,7 @@ async function testRemoteConnection(target, statusEl) {
   };
   setStatus(t('remoteTesting'), '');
   try {
-    const resp = await fetch('/api/remote-targets/test', {
+    const resp = await window.CCBridge.api.request('/api/remote-targets/test', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(target),
@@ -7794,7 +7777,7 @@ async function navigateFilePicker(path) {
   filePickerList.innerHTML = `<div class="picker-empty">${esc(t('pickerLoading'))}</div>`;
 
   try {
-    const resp = await fetch(filePickerMode === 'remote' ? '/api/remote-files/list' : '/api/browse-files', {
+    const resp = await window.CCBridge.api.request(filePickerMode === 'remote' ? '/api/remote-files/list' : '/api/browse-files', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(filePickerMode === 'remote' ? { target_id: remoteTargetSelect?.value || '', path } : { path }),
@@ -8072,12 +8055,11 @@ async function confirmFileSelection() {
 }
 
 async function cacheRemoteAttachment(filePath, meta) {
-  const resp = await fetch('/api/remote-files/cache', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ target_id: remoteTargetSelect?.value || '', path: filePath, cwd: cwdInput.value.trim() || '' }),
+  const data = await window.CCBridge.api.postJson('/api/remote-files/cache', {
+    target_id: remoteTargetSelect?.value || '',
+    path: filePath,
+    cwd: cwdInput.value.trim() || '',
   });
-  const data = await resp.json();
   if (!data.ok) {
     addSystemMsg(t('remoteFileCacheFailed', { message: data.error || 'failed' }), true);
     return;
