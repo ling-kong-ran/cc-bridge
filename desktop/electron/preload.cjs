@@ -7,4 +7,5 @@ contextBridge.exposeInMainWorld('ccBridgeDesktop', {
   getVersion: () => ipcRenderer.invoke('desktop:get-version'),
   checkUpdate: () => ipcRenderer.invoke('desktop:check-update'),
   installUpdate: () => ipcRenderer.invoke('desktop:install-update'),
+  notify: (payload) => ipcRenderer.invoke('desktop:notify', payload),
 })

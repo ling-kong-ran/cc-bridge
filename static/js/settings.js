@@ -38,7 +38,8 @@
 
   function initNotifications() {
     if (!notificationsToggle) return;
-    if (!("Notification" in window)) {
+    const desktopNotifications = Boolean(window.ccBridgeDesktop?.notify);
+    if (!desktopNotifications && !("Notification" in window)) {
       notificationsEnabled = false;
       notificationsToggle.checked = false;
       notificationsToggle.disabled = true;
@@ -50,6 +51,11 @@
       if (!notificationsToggle.checked) {
         notificationsEnabled = false;
         saveGuiSettings({ notifications_enabled: false });
+        return;
+      }
+      if (desktopNotifications) {
+        notificationsEnabled = true;
+        saveGuiSettings({ notifications_enabled: true });
         return;
       }
       // 同步分支：权限已确定，无需弹窗
@@ -99,8 +105,10 @@
   }
 
   function applyNotificationPreference(enabled, persist = false) {
-    const supported = "Notification" in window;
-    notificationsEnabled = Boolean(enabled && supported && Notification.permission === 'granted');
+    const desktopNotifications = Boolean(window.ccBridgeDesktop?.notify);
+    const supported = desktopNotifications || "Notification" in window;
+    const granted = desktopNotifications || ("Notification" in window && Notification.permission === 'granted');
+    notificationsEnabled = Boolean(enabled && supported && granted);
     if (notificationsToggle) {
       notificationsToggle.checked = notificationsEnabled;
       notificationsToggle.disabled = !supported;

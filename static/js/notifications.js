@@ -16,6 +16,7 @@
       getModelValue: options.getModelValue || (() => options.modelValue || ''),
       getCurrentTurnContent: options.getCurrentTurnContent || (() => options.currentTurnContent || ''),
       pageIsUnfocused: options.pageIsUnfocused || (() => document.visibilityState === 'hidden' || !document.hasFocus()),
+      desktopNotify: options.desktopNotify || window.ccBridgeDesktop?.notify,
       Notification: options.Notification || window.Notification,
       focusWindow: options.focusWindow || (() => window.focus()),
       setTimeout: options.setTimeout || window.setTimeout.bind(window),
@@ -30,7 +31,10 @@
   function notifyComplete(kind, detail = {}, options = {}) {
     const ctx = getContext(options);
     const NotificationCtor = ctx.Notification;
-    if (!ctx.getNotificationsEnabled() || !NotificationCtor || NotificationCtor.permission !== 'granted' || !ctx.pageIsUnfocused()) {
+    if (!ctx.getNotificationsEnabled() || !ctx.pageIsUnfocused()) {
+      return;
+    }
+    if (!ctx.desktopNotify && (!NotificationCtor || NotificationCtor.permission !== 'granted')) {
       return;
     }
 
@@ -61,6 +65,10 @@
     }
 
     try {
+      if (ctx.desktopNotify) {
+        ctx.desktopNotify({ title, body });
+        return;
+      }
       const notification = new NotificationCtor(title, { body, tag: `cc-bridge-${kind}`, renotify: true });
       notification.onclick = () => {
         try { ctx.focusWindow(); } catch (e) { /* ignore */ }

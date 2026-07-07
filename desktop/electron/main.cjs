@@ -1,4 +1,4 @@
-const { app, BrowserWindow, Menu, ipcMain, shell } = require('electron')
+const { app, BrowserWindow, Menu, ipcMain, shell, Notification } = require('electron')
 const { autoUpdater } = require('electron-updater')
 const { spawn } = require('node:child_process')
 const crypto = require('node:crypto')
@@ -240,6 +240,25 @@ async function installDesktopUpdate() {
   }
 }
 
+function showDesktopNotification(_event, payload = {}) {
+  if (!Notification.isSupported()) return false
+
+  const notification = new Notification({
+    title: String(payload.title || app.getName()),
+    body: String(payload.body || ''),
+    icon: iconPath(),
+    silent: false,
+  })
+  notification.on('click', () => {
+    if (!mainWindow || mainWindow.isDestroyed()) return
+    if (mainWindow.isMinimized()) mainWindow.restore()
+    mainWindow.show()
+    mainWindow.focus()
+  })
+  notification.show()
+  return true
+}
+
 const gotLock = app.requestSingleInstanceLock()
 if (!gotLock) {
   app.quit()
@@ -258,6 +277,7 @@ if (!gotLock) {
     ipcMain.handle('desktop:get-version', () => app.getVersion())
     ipcMain.handle('desktop:check-update', checkDesktopUpdate)
     ipcMain.handle('desktop:install-update', installDesktopUpdate)
+    ipcMain.handle('desktop:notify', showDesktopNotification)
     createWindow()
     startBackend()
     configureAutoUpdater()
