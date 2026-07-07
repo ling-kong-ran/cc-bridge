@@ -33,6 +33,9 @@ const COMPLETED_SSE_RUN_LIMIT = 80;
 function rememberCompletedSseRun(runId) {
   if (!runId) return;
   completedSseRuns.add(runId);
+  for (const [sessionId, state] of _tabStreamState.entries()) {
+    if (state?.currentRunId === runId) _tabStreamState.delete(sessionId);
+  }
   if (completedSseRuns.size <= COMPLETED_SSE_RUN_LIMIT) return;
   const oldest = completedSseRuns.values().next().value;
   completedSseRuns.delete(oldest);
@@ -1322,6 +1325,7 @@ function bindSSEEvents(source = eventSource) {
     updateWorkspaceSessionStatus(currentSessionId, 'running', t('streamingReply'));
     if (currentTurnHasAssistantOutput) {
       if (!currentAssistantEl) {
+        cleanupStaleAssistantStreamingBubbles();
         currentAssistantEl = createAssistantBubble();
         currentContent = [];
         streamBlocks = {};
@@ -1351,12 +1355,14 @@ function bindSSEEvents(source = eventSource) {
   source.addEventListener('stream_event', (e) => {
     const data = JSON.parse(e.data);
     if (noteBackgroundSessionEvent(data)) return;
+    if (isCompletedSseRun(data)) return;
     handleStreamEvent(data);
   });
 
   source.addEventListener('assistant', (e) => {
     const data = JSON.parse(e.data);
     if (noteBackgroundSessionEvent(data)) return;
+    if (isCompletedSseRun(data)) return;
     handleAssistantFinal(data);
   });
 
