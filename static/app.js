@@ -2464,8 +2464,36 @@ async function sendAction(action, extra = {}) {
   }
 }
 
+function getStreamEventOptions() {
+  return {
+    t,
+    isResponding,
+    currentSessionId,
+    currentAssistantEl,
+    currentTurnStartedAt,
+    getStreamBlocks: () => streamBlocks,
+    setStreamBlocks: (value) => { streamBlocks = value; },
+    getCurrentContent: () => currentContent,
+    setCurrentContent: (value) => { currentContent = value; },
+    setIsResponding: (value) => { isResponding = value; },
+    setCurrentTurnHasAssistantOutput: (value) => { currentTurnHasAssistantOutput = value; },
+    setCurrentTurnStartedAt: (value) => { currentTurnStartedAt = value; },
+    setCurrentAssistantEl: (value) => { currentAssistantEl = value; },
+    createAssistantBubble,
+    startTurnTimer,
+    updateWorkspaceSessionStatus,
+    setWorkspaceSessionPreview,
+    appendWorkspaceSessionPreview,
+    updateUI,
+    scheduleRender,
+    registerTaskBlocks,
+  };
+}
+
 // ─── 流式事件处理 ────────────────────────────────────────────
 function handleStreamEvent(data) {
+  const streamEvents = window.CCBridge?.streamEvents;
+  if (streamEvents?.handleStreamEvent) return streamEvents.handleStreamEvent(data, getStreamEventOptions());
   const evt = data.event;
   if (!evt) return;
 
