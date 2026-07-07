@@ -150,6 +150,7 @@ cc-bridge/
 - 收敛 `static/app.js` 中 toast wrapper，移除剩余本地 toast DOM 状态和 fallback 实现，统一委托 `static/js/toast.js`。
 - 新增 `static/js/directory-picker.js`，把工作目录选择器的打开、浏览、选择和新建目录逻辑从 `static/app.js` 拆出并挂载到 `window.CCBridge.directoryPicker`。
 - 新增 `static/js/tool-cards.js`，把工具卡片折叠、展开和 Shift 批量切换事件委托从 `static/app.js` 拆出并挂载到 `window.CCBridge.toolCards`。
+- 收敛 `static/app.js` 中工具卡片 wrapper，移除剩余本地折叠、展开和事件委托 fallback 实现，统一委托 `static/js/tool-cards.js`。
 - 新增 `static/js/config-reload.js`，把窗口聚焦和页面可见时刷新 CLI、模型与配置的逻辑从 `static/app.js` 拆出并挂载到 `window.CCBridge.configReload`。
 - 新增 `static/js/file-picker.js`，把附件和记忆导入文件选择器的来源切换、浏览、搜索、多选和远程缓存逻辑从 `static/app.js` 拆出并挂载到 `window.CCBridge.filePicker`。
 - 收敛 `static/app.js` 中文件选择器 wrapper，移除剩余本地 picker 状态和 fallback 实现，统一委托 `static/js/file-picker.js`。

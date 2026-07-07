@@ -237,38 +237,14 @@ document.addEventListener('DOMContentLoaded', async () => {
   if (autoUpdateEnabled) setTimeout(() => checkForUpdate(), 3000);
 });
 
+function getToolCardsModule() {
+  const mod = window.CCBridge?.toolCards;
+  if (!mod) console.error('CCBridge toolCards module is not loaded');
+  return mod;
+}
+
 function initToolCardInteractions() {
-  const toolCards = window.CCBridge?.toolCards;
-  if (toolCards?.initToolCardInteractions) {
-    toolCards.initToolCardInteractions({ root: document });
-    return;
-  }
-  function toggleCard(card, shiftKey) {
-    if (shiftKey) {
-      const allCards = document.querySelectorAll('.tool-card');
-      const anyCollapsed = Array.from(allCards).some(c => c.classList.contains('collapsed'));
-      allCards.forEach(c => c.classList.toggle('collapsed', !anyCollapsed));
-    } else {
-      card.classList.toggle('collapsed');
-    }
-  }
-  document.addEventListener('click', (e) => {
-    const toggle = e.target.closest('.tool-toggle');
-    if (!toggle) return;
-    e.preventDefault();
-    const card = toggle.closest('.tool-card');
-    if (!card) return;
-    toggleCard(card, e.shiftKey);
-  });
-  document.addEventListener('keydown', (e) => {
-    if (e.key !== 'Enter' && e.key !== ' ') return;
-    const toggle = e.target.closest('.tool-toggle');
-    if (!toggle) return;
-    e.preventDefault();
-    const card = toggle.closest('.tool-card');
-    if (!card) return;
-    toggleCard(card, e.shiftKey);
-  });
+  return getToolCardsModule()?.initToolCardInteractions?.({ root: document });
 }
 
 function initSessionWorkspace() {
