@@ -2716,6 +2716,12 @@ async def _notify_gui_complete(title: str, model: str, platforms: list, error: s
 async def handle_api_get(path: str, writer: asyncio.StreamWriter, query: dict = None):
     if path == "/api/health":
         data = {"ok": True, "app": "cc-bridge", "mode": "desktop" if DESKTOP_MODE else "web"}
+        if DESKTOP_MODE:
+            data.update({
+                "pid": os.getpid(),
+                "app_root": str(APP_ROOT).replace("\\", "/"),
+                "shutdown_token": DESKTOP_SHUTDOWN_TOKEN,
+            })
     elif path == "/api/settings":
         data = get_settings()
     elif path == "/api/gui-settings":
@@ -3208,6 +3214,8 @@ async def main(start_port: int | None = None, desktop: bool = False, host: str |
             "port": port,
             "url": local_url,
             "desktop": True,
+            "pid": os.getpid(),
+            "app_root": str(APP_ROOT).replace("\\", "/"),
             "shutdown_token": DESKTOP_SHUTDOWN_TOKEN,
         }
         print(json.dumps(ready, ensure_ascii=False), flush=True)

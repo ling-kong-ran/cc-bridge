@@ -10,10 +10,17 @@ let mainWindow = null
 let backendProcess = null
 let backendReady = null
 let isQuitting = false
+let isInstallingUpdate = false
 
 const APP_ID = 'local.cc-bridge.desktop'
 const APP_ROOT = app.isPackaged ? path.join(process.resourcesPath, 'cc-bridge') : path.resolve(__dirname, '..', '..')
 const READY_TIMEOUT_MS = Number(process.env.CCB_DESKTOP_READY_TIMEOUT_MS || 120000)
+const BACKGROUND_SERVER_ARG = '--background-server'
+const START_AS_BACKGROUND_SERVER = process.argv.includes(BACKGROUND_SERVER_ARG)
+
+function normalizedAppRoot() {
+  return APP_ROOT.replace(/\\/g, '/')
+}
 
 function pagePath(name) {
   return path.join(__dirname, name)
@@ -33,6 +40,15 @@ function resolvePythonCommand() {
   if (process.env.CCB_DESKTOP_PYTHON) return process.env.CCB_DESKTOP_PYTHON
   if (process.platform === 'win32') return 'python'
   return 'python3'
+}
+
+function configureLoginStartup() {
+  if (!app.isPackaged) return
+  app.setLoginItemSettings({
+    openAtLogin: true,
+    openAsHidden: true,
+    args: [BACKGROUND_SERVER_ARG],
+  })
 }
 
 function createWindow() {
@@ -119,7 +135,61 @@ function waitForReady(child) {
   })
 }
 
-function startBackend() {
+function requestJson(options, body = null) {
+  return new Promise((resolve, reject) => {
+    const req = http.request(options, res => {
+      let raw = ''
+      res.setEncoding('utf8')
+      res.on('data', chunk => { raw += chunk })
+      res.on('end', () => {
+        try {
+          const data = raw ? JSON.parse(raw) : {}
+          resolve({ statusCode: res.statusCode || 0, data })
+        } catch (error) {
+          reject(error)
+        }
+      })
+    })
+    req.on('error', reject)
+    req.on('timeout', () => {
+      req.destroy(new Error('请求后端超时'))
+    })
+    if (body) req.end(body)
+    else req.end()
+  })
+}
+
+function checkExistingBackend(port) {
+  return requestJson({
+    hostname: '127.0.0.1',
+    port,
+    path: '/api/health',
+    method: 'GET',
+    timeout: 800,
+  }).then(result => {
+    if (result.statusCode !== 200 || result.data?.app !== 'cc-bridge' || result.data?.mode !== 'desktop') return null
+    if (result.data?.app_root && result.data.app_root !== normalizedAppRoot()) return null
+    return {
+      type: 'server_ready',
+      host: '127.0.0.1',
+      port,
+      url: `http://127.0.0.1:${port}`,
+      desktop: true,
+      reused: true,
+      token: result.data?.shutdown_token || '',
+    }
+  }).catch(() => null)
+}
+
+async function findExistingBackend() {
+  const startPort = Number(process.env.CCB_PORT || 17878)
+  const checks = []
+  for (let port = startPort; port < startPort + 50; port += 1) checks.push(checkExistingBackend(port))
+  const results = await Promise.all(checks)
+  return results.find(Boolean) || null
+}
+
+function spawnBackend() {
   const token = crypto.randomBytes(32).toString('hex')
   const env = {
     ...process.env,
@@ -134,6 +204,7 @@ function startBackend() {
     cwd: APP_ROOT,
     env,
     windowsHide: true,
+    detached: app.isPackaged && !START_AS_BACKGROUND_SERVER,
   })
 
   backendProcess.stderr.on('data', chunk => process.stderr.write(chunk.toString()))
@@ -143,8 +214,21 @@ function startBackend() {
       mainWindow.loadFile(pagePath('backend-error.html'))
     }
   })
+  if (app.isPackaged) backendProcess.unref()
 
-  waitForReady(backendProcess)
+  return { child: backendProcess, token }
+}
+
+async function startBackend() {
+  const existing = await findExistingBackend()
+  if (existing) {
+    backendReady = existing
+    if (mainWindow && !mainWindow.isDestroyed()) mainWindow.loadURL(existing.url)
+    return
+  }
+
+  const { child, token } = spawnBackend()
+  waitForReady(child)
     .then(event => {
       backendReady = { ...event, token }
       if (mainWindow && !mainWindow.isDestroyed()) {
@@ -188,6 +272,7 @@ function postShutdown() {
 }
 
 async function stopBackend() {
+  if (backendReady?.reused && !isInstallingUpdate) return
   await postShutdown()
   if (backendProcess && !backendProcess.killed) backendProcess.kill()
 }
@@ -232,7 +317,10 @@ async function installDesktopUpdate() {
     const result = await autoUpdater.checkForUpdates()
     const downloadPromise = result?.downloadPromise || autoUpdater.downloadUpdate()
     await downloadPromise
-    setImmediate(() => autoUpdater.quitAndInstall(false, true))
+    autoUpdater.autoInstallOnAppQuit = false
+    isInstallingUpdate = true
+    await stopBackend()
+    autoUpdater.quitAndInstall(false, true)
     return { ok: true, error: null }
   } catch (error) {
     console.error('自动更新下载失败', error)
@@ -259,26 +347,40 @@ function showDesktopNotification(_event, payload = {}) {
   return true
 }
 
+function showMainWindow() {
+  if (!mainWindow || mainWindow.isDestroyed()) {
+    createWindow()
+    if (backendReady?.url) mainWindow.loadURL(backendReady.url)
+  }
+  if (mainWindow.isMinimized()) mainWindow.restore()
+  mainWindow.show()
+  mainWindow.focus()
+}
+
+function registerIpcHandlers() {
+  ipcMain.handle('desktop:open-logs', () => shell.openPath(path.join(os.homedir(), '.ccb')))
+  ipcMain.handle('desktop:close-window', () => {
+    if (mainWindow && !mainWindow.isDestroyed()) mainWindow.close()
+  })
+  ipcMain.handle('desktop:get-version', () => app.getVersion())
+  ipcMain.handle('desktop:check-update', checkDesktopUpdate)
+  ipcMain.handle('desktop:install-update', installDesktopUpdate)
+  ipcMain.handle('desktop:notify', showDesktopNotification)
+}
+
 const gotLock = app.requestSingleInstanceLock()
 if (!gotLock) {
   app.quit()
 } else {
-  app.on('second-instance', () => {
-    if (!mainWindow) return
-    if (mainWindow.isMinimized()) mainWindow.restore()
-    mainWindow.focus()
+  app.on('second-instance', (_event, argv = []) => {
+    if (START_AS_BACKGROUND_SERVER && argv.includes(BACKGROUND_SERVER_ARG)) return
+    showMainWindow()
   })
 
   app.whenReady().then(() => {
-    ipcMain.handle('desktop:open-logs', () => shell.openPath(path.join(os.homedir(), '.ccb')))
-    ipcMain.handle('desktop:close-window', () => {
-      if (mainWindow && !mainWindow.isDestroyed()) mainWindow.close()
-    })
-    ipcMain.handle('desktop:get-version', () => app.getVersion())
-    ipcMain.handle('desktop:check-update', checkDesktopUpdate)
-    ipcMain.handle('desktop:install-update', installDesktopUpdate)
-    ipcMain.handle('desktop:notify', showDesktopNotification)
-    createWindow()
+    configureLoginStartup()
+    registerIpcHandlers()
+    if (!START_AS_BACKGROUND_SERVER) createWindow()
     startBackend()
     configureAutoUpdater()
   })
@@ -286,9 +388,15 @@ if (!gotLock) {
   app.on('before-quit', event => {
     if (isQuitting) return
     isQuitting = true
+    if (!isInstallingUpdate) {
+      app.exit(0)
+      return
+    }
     event.preventDefault()
     stopBackend().finally(() => app.exit(0))
   })
 
-  app.on('window-all-closed', () => app.quit())
+  app.on('window-all-closed', () => {
+    if (!START_AS_BACKGROUND_SERVER) app.quit()
+  })
 }
