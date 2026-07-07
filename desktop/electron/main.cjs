@@ -11,6 +11,7 @@ let backendProcess = null
 let backendReady = null
 let isQuitting = false
 
+const APP_ID = 'local.cc-bridge.desktop'
 const APP_ROOT = app.isPackaged ? path.join(process.resourcesPath, 'cc-bridge') : path.resolve(__dirname, '..', '..')
 const READY_TIMEOUT_MS = Number(process.env.CCB_DESKTOP_READY_TIMEOUT_MS || 120000)
 
@@ -22,6 +23,10 @@ function iconPath() {
   if (process.platform === 'win32') return path.resolve(__dirname, '..', 'assets', 'icon.ico')
   if (process.platform === 'darwin') return path.resolve(__dirname, '..', 'assets', 'icon.icns')
   return path.resolve(__dirname, '..', 'assets', 'icon.png')
+}
+
+if (process.platform === 'win32') {
+  app.setAppUserModelId(APP_ID)
 }
 
 function resolvePythonCommand() {
