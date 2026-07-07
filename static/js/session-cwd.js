@@ -4,7 +4,7 @@
   function getContext(options = {}) {
     return {
       openPicker: options.openPicker || (() => {}),
-      cwdInput: options.cwdInput || document.getElementById('cwd'),
+      cwdInput: options.cwdInput || document.getElementById('cwd-input'),
     };
   }
 
