@@ -139,6 +139,7 @@ cc-bridge/
 - 新增 `static/js/chat-renderer.js`，把聊天流式渲染、Markdown block 渲染和工具卡片渲染基础逻辑从 `static/app.js` 拆出并挂载到 `window.CCBridge.chatRenderer`。
 - 新增 `static/js/workspace.js`，把 workspace 状态序列化、会话记录归一化、预览文本和面板宽度计算基础逻辑从 `static/app.js` 拆出并挂载到 `window.CCBridge.workspace`。
 - 新增 `static/js/navigation.js`，把页面导航、设置页标签切换和移动端侧栏布局逻辑从 `static/app.js` 拆出并挂载到 `window.CCBridge.navigation`。
+- 新增 `static/js/ui.js`，把可见性切换、display 判断和停止按钮状态更新等通用 UI helper 从 `static/app.js` 拆出并挂载到 `window.CCBridge.ui`。
 
 ## 后续验收标准
 

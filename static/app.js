@@ -80,6 +80,11 @@ function _restoreStreamState(sessionId) {
 }
 
 function updateStopButton() {
+  const ui = window.CCBridge?.ui;
+  if (ui?.updateStopButton) {
+    ui.updateStopButton({ btnStop: document.getElementById('btn-stop'), isResponding, isViewer });
+    return;
+  }
   const btnStop = document.getElementById('btn-stop');
   if (btnStop) {
     btnStop.classList.toggle('visible', isResponding);
@@ -88,15 +93,21 @@ function updateStopButton() {
 }
 
 function setVisible(el, visible, display = '') {
+  const ui = window.CCBridge?.ui;
+  if (ui?.setVisible) return ui.setVisible(el, visible, display);
   if (!el) return;
   el.style.display = visible ? display : 'none';
 }
 
 function isVisible(el) {
+  const ui = window.CCBridge?.ui;
+  if (ui?.isVisible) return ui.isVisible(el);
   return !!el && el.style.display !== 'none';
 }
 
 function isDisplay(el, display) {
+  const ui = window.CCBridge?.ui;
+  if (ui?.isDisplay) return ui.isDisplay(el, display);
   return !!el && el.style.display === display;
 }
 
