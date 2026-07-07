@@ -89,6 +89,12 @@
 
     btnAttach.addEventListener('click', () => openFilePicker());
     fileInput.addEventListener('change', () => {
+      const filePicker = window.CCBridge?.filePicker;
+      if (filePicker?.isOpen?.() && filePicker?.hasCallback?.()) {
+        filePicker.handleClientFiles(fileInput.files);
+        fileInput.value = '';
+        return;
+      }
       if (filePickerOverlay?.style.display === 'flex' && filePickerCallback) {
         for (const f of fileInput.files) {
           const itemPath = `client://${f.name}`;
@@ -100,7 +106,11 @@
       }
       uploadFiles(fileInput.files);
       fileInput.value = '';
-      if (filePickerOverlay?.style.display === 'flex') closeFilePicker();
+      if (filePicker?.isOpen?.()) {
+        filePicker.closeFilePicker();
+      } else if (filePickerOverlay?.style.display === 'flex') {
+        closeFilePicker();
+      }
     });
     initInputFileDrop();
 
