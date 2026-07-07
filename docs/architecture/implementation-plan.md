@@ -135,6 +135,7 @@ cc-bridge/
 - 新增 `static/js/agent-skills.js`，把 Agent 管理弹窗、Agent 列表渲染和 Skills 列表/详情弹窗逻辑从 `static/app.js` 拆出并挂载到 `window.CCBridge.agentSkills`。
 - 新增 `static/js/right-panel.js`，把右侧面板、文件树、review diff、文件预览和预览浮窗拖拽缩放逻辑从 `static/app.js` 拆出并挂载到 `window.CCBridge.rightPanel`。
 - 新增 `static/js/input.js`，把输入区、附件上传、slash commands、模型胶囊和 @mention 自动补全逻辑从 `static/app.js` 拆出并挂载到 `window.CCBridge.input`。
+- 新增 `static/js/sessions.js`，把会话列表、欢迎页会话、会话操作、cwd 右键菜单和会话迁移弹窗逻辑从 `static/app.js` 拆出并挂载到 `window.CCBridge.sessions`。
 
 ## 后续验收标准
 
