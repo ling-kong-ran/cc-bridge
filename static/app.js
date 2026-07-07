@@ -1904,26 +1904,12 @@ function initMobileLayout() {
 
 // ─── SSE 连接 ────────────────────────────────────────────────
 function initSSE() {
-  const sse = window.CCBridge?.sse;
-  if (sse?.connect) {
-    sse.connect({
-      getEventSource: () => eventSource,
-      setEventSource: (source) => { eventSource = source; },
-      setClientId: (id) => { clientId = id; },
-      bindEvents: bindSSEEvents,
-    });
-    return;
-  }
-
-  if (eventSource) {
-    eventSource.close();
-    eventSource = null;
-  }
-
-  clientId = sessionStorage.getItem('ccb_client_id') || 'c_' + Math.random().toString(36).substring(2, 10);
-  sessionStorage.setItem('ccb_client_id', clientId);
-  eventSource = new EventSource(`/sse?id=${clientId}`);
-  bindSSEEvents(eventSource);
+  return window.CCBridge.sse?.connect?.({
+    getEventSource: () => eventSource,
+    setEventSource: (source) => { eventSource = source; },
+    setClientId: (id) => { clientId = id; },
+    bindEvents: bindSSEEvents,
+  });
 }
 
 function getSseSessionState() {
@@ -1931,25 +1917,11 @@ function getSseSessionState() {
 }
 
 function isEventForCurrentSession(data = {}) {
-  const sse = window.CCBridge?.sse;
-  if (sse?.isEventForSession) return sse.isEventForSession(data, getSseSessionState());
-  if (data.run_id && currentRunId && data.run_id === currentRunId) return true;
-  if (data.session_id) {
-    if (activeWorkspaceSessionId && data.session_id === activeWorkspaceSessionId) return true;
-    if (currentSessionId && data.session_id === currentSessionId) return true;
-    return false;
-  }
-  return true;
+  return window.CCBridge.sse?.isEventForSession?.(data, getSseSessionState());
 }
 
 function noteBackgroundSessionEvent(data = {}) {
-  const sse = window.CCBridge?.sse;
-  const isBackground = sse?.isBackgroundSessionEvent
-    ? sse.isBackgroundSessionEvent(data, getSseSessionState())
-    : !!data.session_id &&
-      !(activeWorkspaceSessionId && data.session_id === activeWorkspaceSessionId) &&
-      !(currentSessionId && data.session_id === currentSessionId) &&
-      !(data.run_id && currentRunId && data.run_id === currentRunId);
+  const isBackground = window.CCBridge.sse?.isBackgroundSessionEvent?.(data, getSseSessionState());
   if (!isBackground) return false;
   updateBackgroundWorkspacePreview(data);
   scheduleCompletionHistorySync(data.session_id);
@@ -2059,100 +2031,22 @@ function bindSSEEvents(source = eventSource) {
 
   source.addEventListener('session_started', (e) => {
     const data = JSON.parse(e.data);
-    const sse = window.CCBridge?.sse;
-    if (sse?.handleSessionStarted) return sse.handleSessionStarted(data, getSseLifecycleOptions());
-    if (data.session_id) currentSessionId = data.session_id;
-    currentRunId = data.run_id || null;
-    const wasActive = sessionActive;
-    sessionActive = true;
-    isViewer = !!data.viewing;
-    updateUI();
-    const modelLabel = getDisplayModelName(data.model || '');
-    renderTopbarMeta(data.model || '');
-    // 恢复远程目标选择（刷新后 resume 时后端会回传 remote_target_id）
-    if (data.remote_target_id && remoteTargetSelect) {
-      remoteTargetSelect.value = data.remote_target_id;
-      updateRemoteMutateRow();
-    }
-    // 恢复 CLI 选择
-    const cliSelectEl = document.getElementById('cli-select');
-    if (data.cli && cliSelectEl && [...cliSelectEl.options].some(o => o.value === data.cli)) {
-      cliSelectEl.value = data.cli;
-      renderTopbarMeta(data.model || '');
-    }
-    // 重连时清除欢迎消息，恢复会话状态
-    if (!wasActive) {
-      const welcome = messagesEl.querySelector('.welcome-msg');
-      if (welcome) welcome.remove();
-      if (data.session_id) {
-        currentSessionId = data.session_id;
-        currentRunId = data.run_id || currentRunId;
-        ensureWorkspaceSession(data.session_id, {
-          title: data.title || undefined,
-          cwd: data.cwd || cwdInput.value.trim() || '',
-          model: data.model || modelSelect.value || '',
-          cli: data.cli || document.getElementById('cli-select')?.value || '',
-          status: data.running === false ? 'idle' : 'running',
-          runId: data.run_id || '',
-        });
-        activeWorkspaceSessionId = data.session_id;
-        if (data.cwd) {
-          cwdInput.value = data.cwd;
-          updateRuntimeSummary();
-        }
-        refreshRightPaneFiles();
-        showPage('chat');
-        loadSessionHistory(data.session_id, data.cwd || '');
-        if (isViewer) {
-          addSystemMsg(t('viewingSession'));
-        } else {
-          addSystemMsg(modelLabel ? t('sessionStarted', { model: modelLabel }) : t('sessionStartedPlain'));
-        }
-      } else if (isViewer) {
-        addSystemMsg(t('viewingSession'));
-      } else {
-        addSystemMsg(modelLabel ? t('sessionStarted', { model: modelLabel }) : t('sessionStartedPlain'));
-      }
-    }
+    return window.CCBridge.sse?.handleSessionStarted?.(data, getSseLifecycleOptions());
   });
 
   source.addEventListener('session_stopped', (e) => {
     const data = JSON.parse(e.data || '{}');
-    const sse = window.CCBridge?.sse;
-    if (sse?.handleSessionStopped) return sse.handleSessionStopped(data, getSseLifecycleOptions());
-    if (!isEventForCurrentSession(data)) return;
-    sessionActive = false;
-    isResponding = false;
-    isViewer = false;
-    currentRunId = null;
-    updateUI();
-    addSystemMsg(t('sessionStopped'));
+    return window.CCBridge.sse?.handleSessionStopped?.(data, getSseLifecycleOptions());
   });
 
   source.addEventListener('session_taken', (e) => {
-    // 会话被其他客户端接管，服务端已自动注册本端为 viewer 并推送 session_started(viewing=true)
-    // 前端只需显示提示，无需调用 resumeSession（避免 ping-pong 循环）
     const data = JSON.parse(e.data);
-    const sse = window.CCBridge?.sse;
-    if (sse?.handleSessionTaken) return sse.handleSessionTaken(data, getSseLifecycleOptions());
-    if (data.session_id && data.session_id === currentSessionId) {
-      addSystemMsg(t('sessionTaken') || '会话被其他客户端接管，切换为观察模式');
-      isViewer = true;
-      isResponding = false;
-      updateUI();
-    }
+    return window.CCBridge.sse?.handleSessionTaken?.(data, getSseLifecycleOptions());
   });
 
   source.addEventListener('user_message', (e) => {
-    // viewer 收到 owner 发送的用户消息（一问一答中的"问"）
     const data = JSON.parse(e.data);
-    const sse = window.CCBridge?.sse;
-    if (sse?.handleUserMessage) return sse.handleUserMessage(data, getSseLifecycleOptions());
-    if (!isEventForCurrentSession(data)) return;
-    if (data.content) {
-      addUserMessage(data.content);
-      scrollToBottom(true);
-    }
+    return window.CCBridge.sse?.handleUserMessage?.(data, getSseLifecycleOptions());
   });
 
   source.addEventListener('generation_started', (e) => {
@@ -2428,39 +2322,18 @@ function getSseOptions() {
 }
 
 function setConnectionStatus(connected) {
-  const sse = window.CCBridge?.sse;
-  if (sse?.setConnectionStatus) {
-    sse.setConnectionStatus(connected, getSseOptions());
-    if (btnNewSession) btnNewSession.style.opacity = connected ? '1' : '0.5';
-    return;
-  }
-  connectionOnline = connected;
-  const dot = connectionStatus.querySelector('.status-dot');
-  dot.className = `status-dot ${connected ? 'online' : 'offline'}`;
-  updateConnectionText();
-  renderTopbarStatusSummary();
+  window.CCBridge.sse?.setConnectionStatus?.(connected, getSseOptions());
   if (btnNewSession) btnNewSession.style.opacity = connected ? '1' : '0.5';
 }
 
 function updateConnectionText() {
-  const sse = window.CCBridge?.sse;
-  if (sse?.updateConnectionText) return sse.updateConnectionText(getSseOptions());
-  const text = connectionStatus.querySelector('.status-text');
-  if (text) text.textContent = connectionOnline ? t('connected') : t('connecting');
+  return window.CCBridge.sse?.updateConnectionText?.(getSseOptions());
 }
 
 // ─── 发送 action ────────────────────────────────────────────
 async function sendAction(action, extra = {}) {
   try {
-    const sse = window.CCBridge?.sse;
-    if (sse?.sendActionRequest) return await sse.sendActionRequest(action, extra, getSseOptions());
-    if (sse?.sendAction) return await sse.sendAction(clientId, action, extra);
-    const resp = await fetch('/api/action', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ client_id: clientId, action, ...extra }),
-    });
-    return await resp.json();
+    return await window.CCBridge.sse?.sendActionRequest?.(action, extra, getSseOptions());
   } catch (e) {
     addSystemMsg(t('requestFailed', { message: e.message }), true);
     return null;
