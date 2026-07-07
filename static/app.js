@@ -132,7 +132,6 @@ let savedModelPref = '';  // gui_settings 里上次使用的模型，刷新后�
 let autoUpdateEnabled = true;  // 是否启动时自动检查更新
 let skipUpdateVersion = '';    // 被跳过的远端版本 SHA
 let updateInfo = null;         // 最近一次 check-update 的结果
-let quotedMessages = [];       // 输入框上方展示的引用卡片
 let contextMenuCwd = '';       // 工作目录右键菜单暂存的 cwd
 const cwdInput = document.getElementById('cwd-input');
 const connectionStatus = document.getElementById('connection-status');
@@ -2553,127 +2552,47 @@ function consumeAttachedFiles() {
   return window.CCBridge.input?.consumeAttachedFiles?.() || [];
 }
 
+function getMessageExtrasModule() {
+  const mod = window.CCBridge?.messageExtras;
+  if (!mod) console.error('CCBridge messageExtras module is not loaded');
+  return mod;
+}
+
 async function copyConversationMarkdown() {
-  const messageExtras = window.CCBridge?.messageExtras;
-  if (messageExtras?.copyConversationMarkdown) return messageExtras.copyConversationMarkdown(getMessageExtrasOptions());
-  const markdown = buildConversationMarkdown();
-  if (!markdown) {
-    addSystemMsg(t('nothingToExport'), true);
-    return;
-  }
-  try {
-    await navigator.clipboard.writeText(markdown);
-    addSystemMsg(t('markdownCopied'));
-  } catch (e) {
-    addSystemMsg(t('copyFailed'), true);
-  }
+  return getMessageExtrasModule()?.copyConversationMarkdown?.(getMessageExtrasOptions());
 }
 
 function buildConversationMarkdown() {
-  const messageExtras = window.CCBridge?.messageExtras;
-  if (messageExtras?.buildConversationMarkdown) return messageExtras.buildConversationMarkdown(getMessageExtrasOptions());
-  const lines = [];
-  messagesEl.querySelectorAll('.message, .system-msg').forEach(el => {
-    if (el.classList.contains('user')) {
-      lines.push(`## User\n\n${domText(el)}`);
-    } else if (el.classList.contains('assistant')) {
-      lines.push(`## Assistant\n\n${domText(el)}`);
-    } else if (el.classList.contains('system-msg')) {
-      lines.push(`> ${domText(el).replace(/\n/g, '\n> ')}`);
-    }
-  });
-  return lines.filter(Boolean).join('\n\n');
+  return getMessageExtrasModule()?.buildConversationMarkdown?.(getMessageExtrasOptions()) || '';
 }
 
 function domText(el) {
-  const messageExtras = window.CCBridge?.messageExtras;
-  if (messageExtras?.domText) return messageExtras.domText(el);
-  return (el.querySelector('.msg-content') || el).textContent.trim();
+  return getMessageExtrasModule()?.domText?.(el) || '';
 }
 
 // ─── 消息引用 ────────────────────────────────────────────────
 function hideMsgContextMenu() {
-  const messageExtras = window.CCBridge?.messageExtras;
-  if (messageExtras?.hideMsgContextMenu) return messageExtras.hideMsgContextMenu();
-  const menu = document.getElementById('msg-context-menu');
-  if (menu) { menu.style.display = 'none'; menu.style.visibility = 'hidden'; }
+  return getMessageExtrasModule()?.hideMsgContextMenu?.();
 }
 
 function normalizeQuoteEntry(entry) {
-  const messageExtras = window.CCBridge?.messageExtras;
-  if (messageExtras?.normalizeQuoteEntry) return messageExtras.normalizeQuoteEntry(entry);
-  if (entry && typeof entry === 'object') {
-    return {
-      type: entry.type || 'text',
-      text: String(entry.text || entry.display || '').trim(),
-      path: entry.path || '',
-      lines: Array.isArray(entry.lines) ? entry.lines.map(n => Number(n)).filter(Boolean) : [],
-    };
-  }
-  return { type: 'text', text: String(entry || '').trim(), path: '', lines: [] };
+  return getMessageExtrasModule()?.normalizeQuoteEntry?.(entry) || { type: 'text', text: '', path: '', lines: [] };
 }
 
 function quoteDisplayText(entry) {
-  const messageExtras = window.CCBridge?.messageExtras;
-  if (messageExtras?.quoteDisplayText) return messageExtras.quoteDisplayText(entry);
-  const quote = normalizeQuoteEntry(entry);
-  return quote.text;
+  return getMessageExtrasModule()?.quoteDisplayText?.(entry) || '';
 }
 
 function quoteIntoInput(text, meta = null) {
-  const messageExtras = window.CCBridge?.messageExtras;
-  if (messageExtras?.quoteIntoInput) return messageExtras.quoteIntoInput(text, meta, getMessageExtrasOptions());
-  const normalized = (text || '').trim();
-  if (!normalized) return;
-  quotedMessages.push(normalizeQuoteEntry({ ...(meta || {}), text: normalized }));
-  showPage('chat');
-  requestAnimationFrame(() => {
-    renderQuotePreview();
-    quotePreviewBar?.scrollIntoView({ block: 'nearest' });
-    inputEl.focus();
-  });
+  return getMessageExtrasModule()?.quoteIntoInput?.(text, meta, getMessageExtrasOptions());
 }
 
 function renderQuotePreview() {
-  const messageExtras = window.CCBridge?.messageExtras;
-  if (messageExtras?.renderQuotePreview) return messageExtras.renderQuotePreview(getMessageExtrasOptions());
-  if (!quotePreviewBar) return;
-  if (quotedMessages.length === 0) {
-    setVisible(quotePreviewBar, false);
-    quotePreviewBar.innerHTML = '';
-    return;
-  }
-  setVisible(quotePreviewBar, true, 'flex');
-  quotePreviewBar.innerHTML = quotedMessages.map((quote, i) => `
-    <div class="quote-preview-item">
-      <div class="quote-preview-head">
-        <span>${esc(t('quotedMessage'))}</span>
-        <button class="quote-preview-remove" data-idx="${i}" title="${esc(t('removeQuote'))}" type="button">&times;</button>
-      </div>
-      <div class="quote-preview-text">${esc(quoteDisplayText(quote))}</div>
-    </div>
-  `).join('');
-  quotePreviewBar.querySelectorAll('.quote-preview-remove').forEach(btn => {
-    btn.addEventListener('click', () => {
-      quotedMessages.splice(parseInt(btn.dataset.idx), 1);
-      renderQuotePreview();
-    });
-  });
+  return getMessageExtrasModule()?.renderQuotePreview?.(getMessageExtrasOptions());
 }
 
 function initMessageContextMenu() {
-  const messageExtras = window.CCBridge?.messageExtras;
-  if (messageExtras?.initMessageContextMenu) return messageExtras.initMessageContextMenu(getMessageExtrasOptions());
-  const menu = document.getElementById('msg-context-menu');
-  menu?.remove();
-
-  messagesEl.addEventListener('click', (e) => {
-    const quoteBtn = e.target.closest('.msg-quote-btn');
-    if (!quoteBtn) return;
-    const msgEl = quoteBtn.closest('.message');
-    const text = domText(msgEl);
-    if (text) quoteIntoInput(text);
-  });
+  return getMessageExtrasModule()?.initMessageContextMenu?.(getMessageExtrasOptions());
 }
 
 function getMessageSendOptions() {
@@ -2753,33 +2672,19 @@ function handleGlobalShortcuts(e) {
 }
 
 function quotePayloadForBackend(quotes) {
-  const messageExtras = window.CCBridge?.messageExtras;
-  if (messageExtras?.quotePayloadForBackend) return messageExtras.quotePayloadForBackend(quotes);
-  return quotes.map(normalizeQuoteEntry).filter(q => q.text || (q.path && q.lines.length));
+  return getMessageExtrasModule()?.quotePayloadForBackend?.(quotes) || [];
 }
 
 function quoteBackendPayload(quotes) {
-  const messageExtras = window.CCBridge?.messageExtras;
-  if (messageExtras?.quoteBackendPayload) return messageExtras.quoteBackendPayload(quotes);
-  return quotes.map(normalizeQuoteEntry).map(q => {
-    if (q.type === 'file_lines' && q.path && q.lines.length) {
-      return { type: 'file_lines', path: q.path, lines: q.lines };
-    }
-    return { type: 'text', text: q.text };
-  }).filter(q => q.text || (q.path && q.lines?.length));
+  return getMessageExtrasModule()?.quoteBackendPayload?.(quotes) || [];
 }
 
 function getQuotedMessagesForSend() {
-  const messageExtras = window.CCBridge?.messageExtras;
-  if (messageExtras?.getQuotedMessages) return messageExtras.getQuotedMessages();
-  return quotedMessages;
+  return getMessageExtrasModule()?.getQuotedMessages?.() || [];
 }
 
 function clearQuotedMessagesForSend() {
-  const messageExtras = window.CCBridge?.messageExtras;
-  if (messageExtras?.clearQuotedMessages) return messageExtras.clearQuotedMessages(getMessageExtrasOptions());
-  quotedMessages = [];
-  renderQuotePreview();
+  return getMessageExtrasModule()?.clearQuotedMessages?.(getMessageExtrasOptions());
 }
 
 async function sendMessage() {

@@ -207,6 +207,7 @@ cc-bridge/
 - 扩展 `static/js/sse.js`，继续承接 session started/stopped/taken 和 viewer 用户消息等 SSE 会话生命周期事件处理逻辑。
 - 收敛 `static/app.js` 中 SSE 连接、会话事件过滤、连接状态、action 发送和基础会话生命周期 wrapper，移除剩余本地 fallback 实现，统一委托 `static/js/sse.js`。
 - 收敛 `static/app.js` 中格式化 wrapper，移除剩余本地提示摘要、时长、费用、token、时间、路径、HTML 转义、链接清洗和模型名格式化 fallback 实现，统一委托 `static/js/formatters.js`。
+- 收敛 `static/app.js` 中消息扩展 wrapper，移除剩余本地聊天导出、消息引用、引用 payload 归一化和引用状态 fallback 实现，统一委托 `static/js/message-extras.js`。
 
 ## 后续验收标准
 
