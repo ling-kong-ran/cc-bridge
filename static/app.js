@@ -443,16 +443,6 @@ function activateWorkspaceSession(sessionId, opts = {}) {
   const previousSessionId = activeWorkspaceSessionId;
   // 保存旧标签页的流式状态，以便切回时恢复
   _saveStreamState(previousSessionId);
-  // 如果旧标签页正在运行，中断其执行
-  if (isResponding && previousSessionId) {
-    const prevSession = workspaceSessions.get(previousSessionId);
-    if (prevSession?.currentRunId || currentRunId) {
-      sendAction('stop_session', {
-        session_id: prevSession?.currentRunId ? previousSessionId : (currentSessionId || ''),
-        run_id: prevSession?.currentRunId || currentRunId || ''
-      });
-    }
-  }
   activeWorkspaceSessionId = sessionId;
   // 恢复新标签页的流式状态
   _restoreStreamState(sessionId);
