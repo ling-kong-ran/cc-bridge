@@ -981,34 +981,22 @@ function notifyComplete(kind, detail = {}) {
   return getNotificationsModule()?.notifyComplete?.(kind, detail, getNotificationOptions());
 }
 
+function getFormattersModule() {
+  const mod = window.CCBridge?.formatters;
+  if (!mod) console.error('CCBridge formatters module is not loaded');
+  return mod;
+}
+
 function summarizePrompt(text, maxLen = 90) {
-  const formatters = window.CCBridge?.formatters;
-  if (formatters?.summarizePrompt) return formatters.summarizePrompt(text, maxLen);
-  const clean = (text || '').replace(/\s+/g, ' ').trim();
-  if (!clean) return '';
-  return clean.length > maxLen ? `${clean.slice(0, maxLen - 1)}…` : clean;
+  return getFormattersModule()?.summarizePrompt?.(text, maxLen) || '';
 }
 
 function formatDuration(ms) {
-  const formatters = window.CCBridge?.formatters;
-  if (formatters?.formatDuration) return formatters.formatDuration(ms, t);
-  const seconds = Math.round(Number(ms || 0) / 1000);
-  if (!Number.isFinite(seconds) || seconds <= 0) return '';
-  if (seconds < 60) return t('notifyDurationSeconds', { seconds });
-  const minutes = Math.floor(seconds / 60);
-  const rest = seconds % 60;
-  return rest ? t('notifyDurationMinutesSeconds', { minutes, seconds: rest }) : t('notifyDurationMinutes', { minutes });
+  return getFormattersModule()?.formatDuration?.(ms, t) || '';
 }
 
 function formatCompactDuration(ms) {
-  const formatters = window.CCBridge?.formatters;
-  if (formatters?.formatCompactDuration) return formatters.formatCompactDuration(ms);
-  const seconds = Math.max(0, Math.round(Number(ms || 0) / 1000));
-  if (!Number.isFinite(seconds)) return '';
-  if (seconds < 60) return `${seconds}s`;
-  const minutes = Math.floor(seconds / 60);
-  const rest = seconds % 60;
-  return rest ? `${minutes}m ${rest}s` : `${minutes}m`;
+  return getFormattersModule()?.formatCompactDuration?.(ms) || '';
 }
 
 function getTurnTimerOptions() {
@@ -1041,20 +1029,11 @@ function stopTurnTimer() {
 }
 
 function formatUsd(value) {
-  const formatters = window.CCBridge?.formatters;
-  if (formatters?.formatUsd) return formatters.formatUsd(value, t);
-  const cost = Number(value || 0);
-  if (!Number.isFinite(cost) || cost <= 0) return '';
-  return t('notifyCost', { cost: cost.toFixed(4) });
+  return getFormattersModule()?.formatUsd?.(value, t) || '';
 }
 
 function getProjectName(cwd, fallback = '') {
-  const formatters = window.CCBridge?.formatters;
-  if (formatters?.getProjectName) return formatters.getProjectName(cwd, fallback);
-  if (!cwd) return fallback;
-  const normalized = cwd.replace(/[\\\/]+$/, '');
-  const parts = normalized.split(/[\\\/]+/).filter(Boolean);
-  return parts[parts.length - 1] || normalized || fallback;
+  return getFormattersModule()?.getProjectName?.(cwd, fallback) || fallback;
 }
 
 // ─── 定时任务 ──────────────────────────────────────────────────
@@ -3403,20 +3382,7 @@ function renderHistoryToolCard(block) {
 }
 
 function formatTime(isoStr) {
-  const formatters = window.CCBridge?.formatters;
-  if (formatters?.formatTime) return formatters.formatTime(isoStr, currentLanguage);
-  if (!isoStr) return '';
-  try {
-    const d = new Date(isoStr);
-    const now = new Date();
-    const locale = currentLanguage === 'zh' ? 'zh-CN' : 'en-US';
-    if (d.toDateString() === now.toDateString()) {
-      return d.toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit' });
-    }
-    return d.toLocaleDateString(locale, { month: 'numeric', day: 'numeric' });
-  } catch(e) {
-    return isoStr.substring(5, 16);
-  }
+  return getFormattersModule()?.formatTime?.(isoStr, currentLanguage) || '';
 }
 
 // ─── Markdown 渲染 ──────────────────────────────────────────
@@ -3425,39 +3391,19 @@ function renderMd(text) {
 }
 
 function esc(str) {
-  const formatters = window.CCBridge?.formatters;
-  if (formatters?.esc) return formatters.esc(str);
-  if (!str) return '';
-  return String(str)
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;');
+  return getFormattersModule()?.esc?.(str) || '';
 }
 
 function shortenPlainPath(path, maxSegments = 3) {
-  const formatters = window.CCBridge?.formatters;
-  if (formatters?.shortenPlainPath) return formatters.shortenPlainPath(path, maxSegments);
-  if (!path) return '';
-  const normalized = String(path).replace(/\\/g, '/').replace(/\/+$/, '');
-  const parts = normalized.split('/').filter(Boolean);
-  if (parts.length <= maxSegments) return normalized;
-  const prefix = /^[A-Za-z]:$/.test(parts[0]) ? `${parts[0]}/` : '';
-  return `.../${prefix}${parts.slice(-maxSegments).join('/')}`;
+  return getFormattersModule()?.shortenPlainPath?.(path, maxSegments) || '';
 }
 
 function shortenPath(path, maxSegments = 3) {
-  const formatters = window.CCBridge?.formatters;
-  if (formatters?.shortenPath) return formatters.shortenPath(path, maxSegments);
-  return esc(shortenPlainPath(path, maxSegments));
+  return getFormattersModule()?.shortenPath?.(path, maxSegments) || '';
 }
 
 function sanitizeLinkHref(href) {
-  const formatters = window.CCBridge?.formatters;
-  if (formatters?.sanitizeLinkHref) return formatters.sanitizeLinkHref(href);
-  const value = String(href || '').trim().replace(/&amp;/g, '&');
-  if (/^(https?:|mailto:)/i.test(value)) return esc(value);
-  return '#';
+  return getFormattersModule()?.sanitizeLinkHref?.(href) || '#';
 }
 
 // ─── 目录选择器 ──────────────────────────────────────────────
@@ -3626,57 +3572,27 @@ function renderCost() {
 }
 
 function emptyTokenUsage() {
-  const formatters = window.CCBridge?.formatters;
-  if (formatters?.emptyTokenUsage) return formatters.emptyTokenUsage();
-  return { input: 0, output: 0, cache_creation: 0, cache_read: 0 };
+  return getFormattersModule()?.emptyTokenUsage?.() || { input: 0, output: 0, cache_creation: 0, cache_read: 0 };
 }
 
 function normalizeTokenUsage(value) {
-  const formatters = window.CCBridge?.formatters;
-  if (formatters?.normalizeTokenUsage) return formatters.normalizeTokenUsage(value);
-  const usage = emptyTokenUsage();
-  if (!value || typeof value !== 'object') return usage;
-  usage.input = readTokenField(value, 'input', 'input_tokens');
-  usage.output = readTokenField(value, 'output', 'output_tokens');
-  usage.cache_creation = readTokenField(value, 'cache_creation', 'cache_creation_input_tokens', 'cache_creation_tokens');
-  usage.cache_read = readTokenField(value, 'cache_read', 'cache_read_input_tokens', 'cache_read_tokens');
-  return usage;
+  return getFormattersModule()?.normalizeTokenUsage?.(value) || emptyTokenUsage();
 }
 
 function readTokenField(value, ...keys) {
-  const formatters = window.CCBridge?.formatters;
-  if (formatters?.readTokenField) return formatters.readTokenField(value, ...keys);
-  for (const key of keys) {
-    const n = Number(value[key] || 0);
-    if (Number.isFinite(n) && n > 0) return Math.trunc(n);
-  }
-  return 0;
+  return getFormattersModule()?.readTokenField?.(value, ...keys) || 0;
 }
 
 function addTokenUsage(a, b) {
-  const formatters = window.CCBridge?.formatters;
-  if (formatters?.addTokenUsage) return formatters.addTokenUsage(a, b);
-  const left = normalizeTokenUsage(a);
-  const right = normalizeTokenUsage(b);
-  return {
-    input: left.input + right.input,
-    output: left.output + right.output,
-    cache_creation: left.cache_creation + right.cache_creation,
-    cache_read: left.cache_read + right.cache_read,
-  };
+  return getFormattersModule()?.addTokenUsage?.(a, b) || emptyTokenUsage();
 }
 
 function hasTokenUsage(usage) {
-  const formatters = window.CCBridge?.formatters;
-  if (formatters?.hasTokenUsage) return formatters.hasTokenUsage(usage);
-  return tokenUsageTotal(usage) > 0;
+  return getFormattersModule()?.hasTokenUsage?.(usage) || false;
 }
 
 function tokenUsageTotal(usage) {
-  const formatters = window.CCBridge?.formatters;
-  if (formatters?.tokenUsageTotal) return formatters.tokenUsageTotal(usage);
-  const value = normalizeTokenUsage(usage);
-  return value.input + value.output + value.cache_creation + value.cache_read;
+  return getFormattersModule()?.tokenUsageTotal?.(usage) || 0;
 }
 
 function renderTokens() {
@@ -3684,63 +3600,27 @@ function renderTokens() {
 }
 
 function formatTokenUsage(usage) {
-  const formatters = window.CCBridge?.formatters;
-  if (formatters?.formatTokenUsage) return formatters.formatTokenUsage(usage, t);
-  const value = normalizeTokenUsage(usage);
-  const main = value.input + value.output;
-  const cache = value.cache_creation + value.cache_read;
-  const parts = [];
-  if (main > 0) parts.push(formatTokenCount(main));
-  if (cache > 0) parts.push(t('cachedTokens', { count: formatTokenCount(cache) }));
-  return parts.join(' · ') || '0';
+  return getFormattersModule()?.formatTokenUsage?.(usage, t) || '0';
 }
 
 function formatTokenCount(value) {
-  const formatters = window.CCBridge?.formatters;
-  if (formatters?.formatTokenCount) return formatters.formatTokenCount(value);
-  const n = Number(value || 0);
-  if (!Number.isFinite(n)) return '0';
-  if (n >= 1000000) return `${(n / 1000000).toFixed(1)}M`;
-  if (n >= 1000) return `${(n / 1000).toFixed(1)}K`;
-  return String(Math.trunc(n));
+  return getFormattersModule()?.formatTokenCount?.(value) || '0';
 }
 
 function safeJsonParse(text, fallback = null) {
-  const formatters = window.CCBridge?.formatters;
-  if (formatters?.safeJsonParse) return formatters.safeJsonParse(text, fallback);
-  try {
-    return JSON.parse(text);
-  } catch (e) {
-    return fallback;
-  }
+  return getFormattersModule()?.safeJsonParse?.(text, fallback) ?? fallback;
 }
 
 function formatModelName(model) {
-  const formatters = window.CCBridge?.formatters;
-  if (formatters?.formatModelName) return formatters.formatModelName(model);
-  model = (model || '').trim();
-  if (!model) return '';
-  const names = {
-    'claude-opus-4-6': 'Opus 4.6',
-    'claude-sonnet-4-6': 'Sonnet 4.6',
-    'claude-haiku-4-6': 'Haiku 4.6',
-  };
-  return names[model] || model.replace(/^claude-/, '');
+  return getFormattersModule()?.formatModelName?.(model) || '';
 }
 
 function isDisplayableModel(model) {
-  const formatters = window.CCBridge?.formatters;
-  if (formatters?.isDisplayableModel) return formatters.isDisplayableModel(model);
-  const value = (model || '').trim();
-  return Boolean(value && !/^<[^>]+>$/.test(value));
+  return getFormattersModule()?.isDisplayableModel?.(model) || false;
 }
 
 function getDisplayModelName(model, allowSelectedFallback = true) {
-  const formatters = window.CCBridge?.formatters;
-  if (formatters?.getDisplayModelName) return formatters.getDisplayModelName(model, allowSelectedFallback ? modelSelect?.value : '');
-  if (isDisplayableModel(model)) return formatModelName(model);
-  const selected = allowSelectedFallback ? modelSelect?.value : '';
-  return isDisplayableModel(selected) ? formatModelName(selected) : '';
+  return getFormattersModule()?.getDisplayModelName?.(model, allowSelectedFallback ? modelSelect?.value : '') || '';
 }
 
 function getRemoteTargetName() {
