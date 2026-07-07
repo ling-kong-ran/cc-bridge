@@ -180,17 +180,14 @@ let notificationsEnabled = false;
 let lastNotifyAt = 0;
 let accessContext = { isLocalhost: true, defaultCwd: '' };
 
+function getDesktopWindowModule() {
+  const mod = window.CCBridge?.desktopWindow;
+  if (!mod) console.error('CCBridge desktopWindow module is not loaded');
+  return mod;
+}
+
 function initDesktopWindowControls() {
-  const desktopWindow = window.CCBridge?.desktopWindow;
-  if (desktopWindow?.initDesktopWindowControls) {
-    desktopWindow.initDesktopWindowControls({ btnDesktopClose, desktop: window.ccBridgeDesktop });
-    return;
-  }
-  if (!btnDesktopClose || !window.ccBridgeDesktop) return;
-  btnDesktopClose.style.display = '';
-  btnDesktopClose.addEventListener('click', () => {
-    window.ccBridgeDesktop.closeWindow();
-  });
+  return getDesktopWindowModule()?.initDesktopWindowControls?.({ btnDesktopClose, desktop: window.ccBridgeDesktop });
 }
 
 // ─── 初始化 ──────────────────────────────────────────────────
