@@ -66,13 +66,13 @@ jobs:
         include:
           - platform: windows
             os: windows-latest
-            command: npm run desktop:dist:win
+            command: npm run desktop:dist:win -- --publish never
           - platform: macos
             os: macos-latest
-            command: npm run desktop:dist:mac
+            command: npm run desktop:dist:mac -- --publish never
           - platform: linux
             os: ubuntu-latest
-            command: npm run desktop:dist:linux
+            command: npm run desktop:dist:linux -- --publish never
     steps:
       - name: Checkout
         uses: actions/checkout@v4
