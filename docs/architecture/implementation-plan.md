@@ -126,6 +126,7 @@ cc-bridge/
 - 新增 `backend/services/gateway_service.py` 与 `backend/routes/gateway_routes.py`，按消息网关可热插拔平台方向承接飞书网关配置、二维码、事件、scope 和 onboard API。
 - 新增 `backend/services/remote_service.py` 与 `backend/routes/remote_routes.py`，把远程目标配置、连接测试、远程文件浏览和缓存 API 接入服务层和路由层。
 - `static/app.js` 开始使用 `window.CCBridge.api` 收敛定时任务、飞书网关、远程目标和远程文件相关 API 调用。
+- 新增 `static/js/remote.js`，把远程目标管理页面逻辑从 `static/app.js` 拆出并挂载到 `window.CCBridge.remote`。
 
 ## 后续验收标准
 
