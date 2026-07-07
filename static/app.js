@@ -3353,7 +3353,59 @@ function scheduleCompletionHistorySync(sessionId) {
   }, 600);
 }
 
+function getResultHandlerOptions() {
+  return {
+    t,
+    clearCompletionHistorySync,
+    normalizeTokenUsage,
+    stopTurnTimer,
+    finalizeCurrentAssistantMarkdown,
+    updateAssistantMeta,
+    removePendingAssistantBubble,
+    clearRunningTasks,
+    clearSubagentBubbles,
+    notifyComplete,
+    getDisplayModelName,
+    checkMemoryHits,
+    updateUI,
+    renderCost,
+    hasTokenUsage,
+    renderTokens,
+    addTokenUsage,
+    ensureWorkspaceSession,
+    addSystemMsg,
+    isSlashCommand,
+    getSlashCommandName,
+    getState: () => ({
+      currentTurnContent,
+      currentTurnHasAssistantOutput,
+      currentTurnStartedAt,
+      currentAssistantEl,
+      totalCost,
+      totalTokens,
+      currentSessionId,
+    }),
+    setState: (state = {}) => {
+      if ('isResponding' in state) isResponding = state.isResponding;
+      if ('currentAssistantEl' in state) currentAssistantEl = state.currentAssistantEl;
+      if ('currentAssistantMessageId' in state) currentAssistantMessageId = state.currentAssistantMessageId;
+      if ('currentContent' in state) currentContent = state.currentContent;
+      if ('streamBlocks' in state) streamBlocks = state.streamBlocks;
+      if ('currentTurnContent' in state) currentTurnContent = state.currentTurnContent;
+      if ('currentTurnHasAssistantOutput' in state) currentTurnHasAssistantOutput = state.currentTurnHasAssistantOutput;
+      if ('currentTurnStartedAt' in state) currentTurnStartedAt = state.currentTurnStartedAt;
+      if ('currentTurnAttachmentCount' in state) currentTurnAttachmentCount = state.currentTurnAttachmentCount;
+      if ('totalCost' in state) totalCost = state.totalCost;
+      if ('totalTokens' in state) totalTokens = state.totalTokens;
+      if ('currentSessionId' in state) currentSessionId = state.currentSessionId;
+    },
+    modelSelect,
+  };
+}
+
 function handleResult(data) {
+  const resultHandler = window.CCBridge?.resultHandler;
+  if (resultHandler?.handleResult) return resultHandler.handleResult(data, getResultHandlerOptions());
   clearCompletionHistorySync();
   const finishedTurn = currentTurnContent;
   const hadAssistantOutput = currentTurnHasAssistantOutput;

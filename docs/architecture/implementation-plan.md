@@ -171,6 +171,7 @@ cc-bridge/
 - 新增 `static/js/main-ui.js`，把主界面发送/停止按钮、会话激活态、输入框占位和基础控件禁用状态刷新逻辑从 `static/app.js` 拆出并挂载到 `window.CCBridge.mainUi`。
 - 新增 `static/js/session-control.js`，把新会话启动、会话视图状态重置和从 cwd 创建会话逻辑从 `static/app.js` 拆出并挂载到 `window.CCBridge.sessionControl`。
 - 新增 `static/js/message-send.js`，把消息发送、发送失败回滚、slash command 识别和当前运行中断逻辑从 `static/app.js` 拆出并挂载到 `window.CCBridge.messageSend`。
+- 新增 `static/js/result-handler.js`，把 assistant turn 完成后的结果收尾、费用/token 累计、完成通知和 slash command 完成提示逻辑从 `static/app.js` 拆出并挂载到 `window.CCBridge.resultHandler`。
 
 ## 后续验收标准
 
