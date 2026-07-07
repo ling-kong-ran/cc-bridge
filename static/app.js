@@ -1259,7 +1259,28 @@ function updateThemeToggle() {
   btnThemeToggle.title = isLight ? t('switchToDarkTheme') : t('switchToLightTheme');
 }
 
+function getLocalizationOptions() {
+  return {
+    t,
+    loadI18n: (language) => window.CCBridge.i18n.load(language),
+    getSessionActive: () => sessionActive,
+    getSidebarCollapsed: () => sidebarCollapsed,
+    setCurrentLanguage: (language) => { currentLanguage = language; },
+    setLanguageSelectValue: (language) => {
+      if (languageSelect) languageSelect.value = language;
+    },
+    saveGuiSettings,
+    updateThemeToggle,
+    updateConnectionText,
+    updateUI,
+    setSidebarCollapsed,
+    updateFilePickerCount,
+  };
+}
+
 async function applyLanguage(language, persist = true) {
+  const localization = window.CCBridge?.localization;
+  if (localization?.applyLanguage) return localization.applyLanguage(language, persist, getLocalizationOptions());
   currentLanguage = language === 'zh' ? 'zh' : 'en';
   if (languageSelect) languageSelect.value = currentLanguage;
   document.documentElement.lang = currentLanguage === 'zh' ? 'zh-CN' : 'en';
@@ -1275,6 +1296,8 @@ async function applyLanguage(language, persist = true) {
 }
 
 async function loadLanguageMap(language) {
+  const localization = window.CCBridge?.localization;
+  if (localization?.loadLanguageMap) return localization.loadLanguageMap(language, getLocalizationOptions());
   try {
     await window.CCBridge.i18n.load(language);
   } catch (e) {
@@ -1286,6 +1309,8 @@ async function loadLanguageMap(language) {
 }
 
 function renderLocalizedText() {
+  const localization = window.CCBridge?.localization;
+  if (localization?.renderLocalizedText) return localization.renderLocalizedText(getLocalizationOptions());
   document.querySelectorAll('[data-i18n]').forEach(el => {
     if (el.id === 'topbar-model' && sessionActive) return;
     el.textContent = t(el.dataset.i18n);

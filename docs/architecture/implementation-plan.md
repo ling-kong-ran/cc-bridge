@@ -163,6 +163,7 @@ cc-bridge/
 - 新增 `static/js/notifications.js`，把页面失焦判断和完成通知创建逻辑从 `static/app.js` 拆出并挂载到 `window.CCBridge.notifications`。
 - 新增 `static/js/stream-state.js`，把 workspace tab 流式状态保存、恢复和 assistant stream 状态重置逻辑从 `static/app.js` 拆出并挂载到 `window.CCBridge.streamState`。
 - 新增 `static/js/history-loader.js`，把会话历史加载、刷新和静态历史渲染状态保护逻辑从 `static/app.js` 拆出并挂载到 `window.CCBridge.historyLoader`。
+- 新增 `static/js/localization.js`，把语言切换、语言包加载和本地化文本渲染逻辑从 `static/app.js` 拆出并挂载到 `window.CCBridge.localization`。
 
 ## 后续验收标准
 
