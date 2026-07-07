@@ -1232,24 +1232,61 @@ function normalizeFontSize(value) {
   return window.CCBridge.settings?.normalizeFontSize?.(value) || 100;
 }
 
+function getRuntimeOptions() {
+  return {
+    t,
+    esc,
+    addSystemMsg,
+    renderModelPill,
+    renderWelcomeRuntime,
+    renderTopbarSessionActions,
+    renderTopbarStatusSummary,
+    renderInputStatus,
+    loadSlashCommands,
+    getDisplayModelName,
+    formatModelName,
+    getSavedModelPref: () => savedModelPref,
+    setSavedModelPref: (value) => { savedModelPref = value; },
+    getCliInstallPromptShown: () => cliInstallPromptShown,
+    setCliInstallPromptShown: (value) => { cliInstallPromptShown = value; },
+    setCliInstallCommand: (value) => { cliInstallCommand = value; },
+    openCliInstallModal,
+    getCurrentSessionId: () => currentSessionId,
+    modelSelect,
+    topbarModel,
+    costDisplay,
+    costValue,
+    tokenDisplay,
+    tokenValue,
+  };
+}
+
 function formatTopbarSessionId(sessionId) {
+  const runtime = window.CCBridge?.runtime;
+  if (runtime?.formatTopbarSessionId) return runtime.formatTopbarSessionId(sessionId);
   if (!sessionId) return '-';
   return sessionId.length > 13 ? `${sessionId.slice(0, 8)}…${sessionId.slice(-4)}` : sessionId;
 }
 
 function getSelectedCliLabel() {
+  const runtime = window.CCBridge?.runtime;
+  if (runtime?.getSelectedCliLabel) return runtime.getSelectedCliLabel();
   const cliSelect = document.getElementById('cli-select');
   const opt = cliSelect?.selectedOptions?.[0];
   return opt?.textContent?.trim() || opt?.value || '-';
 }
 
 function quoteCommandArg(value) {
+  const runtime = window.CCBridge?.runtime;
+  if (runtime?.quoteCommandArg) return runtime.quoteCommandArg(value);
   const text = String(value || '');
   if (!text) return '';
   return /\s/.test(text) ? `"${text.replace(/"/g, '\\"')}"` : text;
 }
 
 function getResumeCommandText() {
+  const runtime = window.CCBridge?.runtime;
+  if (runtime?.getResumeCommandText) return runtime.getResumeCommandText(getRuntimeOptions());
   if (!currentSessionId) return '';
   const cliSelect = document.getElementById('cli-select');
   const cli = cliSelect?.value || getSelectedCliLabel();
@@ -1257,6 +1294,8 @@ function getResumeCommandText() {
 }
 
 async function copyResumeCommand() {
+  const runtime = window.CCBridge?.runtime;
+  if (runtime?.copyResumeCommand) return runtime.copyResumeCommand(getRuntimeOptions());
   const text = getResumeCommandText();
   if (!text) {
     addSystemMsg(t('noSession'), true);
@@ -1271,6 +1310,8 @@ async function copyResumeCommand() {
 }
 
 function renderTopbarMeta(modelOverride = '') {
+  const runtime = window.CCBridge?.runtime;
+  if (runtime?.renderTopbarMeta) return runtime.renderTopbarMeta(modelOverride, getRuntimeOptions());
   const modelLabel = getDisplayModelName(modelOverride || modelSelect?.value || '') || t('noSession');
   if (topbarModel) topbarModel.textContent = modelLabel;
   renderTopbarSessionActions();
@@ -1285,6 +1326,8 @@ function renderTopbarSessionActions() {
 }
 
 async function loadClis() {
+  const runtime = window.CCBridge?.runtime;
+  if (runtime?.loadClis) return runtime.loadClis(getRuntimeOptions());
   const cliSelect = document.getElementById('cli-select');
   const guideBtn = document.getElementById('btn-cli-install-guide');
   try {
@@ -1332,6 +1375,8 @@ async function loadClis() {
 
 // 选中指定 CLI（若可用），并同步到服务端全局当前 CLI
 function selectCli(path) {
+  const runtime = window.CCBridge?.runtime;
+  if (runtime?.selectCli) return runtime.selectCli(path, getRuntimeOptions());
   const cliSelect = document.getElementById('cli-select');
   if (!cliSelect || !path) return false;
   const has = Array.from(cliSelect.options).some(o => o.value === path);
@@ -1650,6 +1695,8 @@ function initUpdateModal() {
 }
 
 async function loadModels() {
+  const runtime = window.CCBridge?.runtime;
+  if (runtime?.loadModels) return runtime.loadModels(getRuntimeOptions());
   // 首次加载 select 为空，回退到 gui_settings 里上次使用的模型，使刷新后保持选择
   const previousModel = modelSelect.value || savedModelPref;
   try {
@@ -4803,6 +4850,8 @@ async function navigateFilePicker(path) {
 }
 
 function hasModelOption(model) {
+  const runtime = window.CCBridge?.runtime;
+  if (runtime?.hasModelOption) return runtime.hasModelOption(model, getRuntimeOptions());
   if (!model) return false;
   for (const opt of modelSelect.options) {
     if (opt.value === model) return true;
@@ -4811,6 +4860,8 @@ function hasModelOption(model) {
 }
 
 function renderCost() {
+  const runtime = window.CCBridge?.runtime;
+  if (runtime?.renderCost) return runtime.renderCost(totalCost, getRuntimeOptions());
   costDisplay.style.display = totalCost > 0 ? 'block' : 'none';
   costValue.textContent = totalCost.toFixed(4);
   renderTopbarStatusSummary();
@@ -4871,6 +4922,8 @@ function tokenUsageTotal(usage) {
 }
 
 function renderTokens() {
+  const runtime = window.CCBridge?.runtime;
+  if (runtime?.renderTokens) return runtime.renderTokens(totalTokens, getRuntimeOptions());
   const total = tokenUsageTotal(totalTokens);
   tokenDisplay.style.display = total > 0 ? 'block' : 'none';
   tokenValue.textContent = formatTokenUsage(totalTokens);
