@@ -3376,106 +3376,27 @@ function getMessageUiOptions() {
 
 // ─── UI 组件 ─────────────────────────────────────────────────
 function createAssistantBubble(streaming = true) {
-  const messageUi = window.CCBridge?.messageUi;
-  if (messageUi?.createAssistantBubble) return messageUi.createAssistantBubble(streaming, getMessageUiOptions());
-  const el = document.createElement('div');
-  el.className = streaming ? 'message assistant streaming' : 'message assistant';
-  el.innerHTML = `
-    <div class="avatar assistant-avatar">C</div>
-    <div class="msg-bubble">
-      <div class="stream-status"><span class="stream-dot"></span><span>${esc(t('streamingReply'))}</span></div>
-      <div class="msg-content"></div>
-      <div class="msg-meta"></div>
-      <button class="msg-quote-btn" type="button" title="${esc(t('quoteMessage'))}" aria-label="${esc(t('quoteMessage'))}">${esc(t('quoteMessage'))}</button>
-    </div>
-  `;
-  messagesEl.appendChild(el);
-  return el;
+  return window.CCBridge.messageUi?.createAssistantBubble?.(streaming, getMessageUiOptions());
 }
 
 function finishAssistantStreaming(el = currentAssistantEl) {
-  const messageUi = window.CCBridge?.messageUi;
-  if (messageUi?.finishAssistantStreaming) return messageUi.finishAssistantStreaming(el);
-  if (el) el.classList.remove('streaming');
+  return window.CCBridge.messageUi?.finishAssistantStreaming?.(el);
 }
 
 function removePendingAssistantBubble(keepBubble) {
-  const messageUi = window.CCBridge?.messageUi;
-  if (messageUi?.removePendingAssistantBubble) return messageUi.removePendingAssistantBubble(currentAssistantEl, keepBubble);
-  finishAssistantStreaming();
-  if (!keepBubble && currentAssistantEl && !currentAssistantEl.querySelector('.msg-content')?.textContent.trim()) {
-    currentAssistantEl.remove();
-  }
+  return window.CCBridge.messageUi?.removePendingAssistantBubble?.(currentAssistantEl, keepBubble);
 }
 
 function addUserMessage(text, quotes = []) {
-  const messageUi = window.CCBridge?.messageUi;
-  if (messageUi?.addUserMessage) return messageUi.addUserMessage(text, quotes, getMessageUiOptions());
-  const el = document.createElement('div');
-  el.className = 'message user';
-  const quoteHtml = quotes.length ? `
-    <div class="msg-quoted-list">
-      ${quotes.map(q => `<div class="msg-quoted-item">${esc(quoteDisplayText(q))}</div>`).join('')}
-    </div>
-  ` : '';
-  el.innerHTML = `
-    <div class="avatar user-avatar">U</div>
-    <div class="msg-bubble">
-      <div class="msg-content">${quoteHtml}${esc(text)}</div>
-      <button class="msg-quote-btn" type="button" title="${esc(t('quoteMessage'))}" aria-label="${esc(t('quoteMessage'))}">${esc(t('quoteMessage'))}</button>
-    </div>
-  `;
-  messagesEl.appendChild(el);
-  scrollToBottom();
+  return window.CCBridge.messageUi?.addUserMessage?.(text, quotes, getMessageUiOptions());
 }
 
 function addSystemMsg(text, isError) {
-  const messageUi = window.CCBridge?.messageUi;
-  if (messageUi?.addSystemMsg) return messageUi.addSystemMsg(text, isError, getMessageUiOptions());
-  const el = document.createElement('div');
-  el.className = `system-msg${isError ? ' error' : ''}`;
-  el.textContent = text;
-  messagesEl.appendChild(el);
-  scrollToBottom();
+  return window.CCBridge.messageUi?.addSystemMsg?.(text, isError, getMessageUiOptions());
 }
 
 function renderContextTrace(trace = {}) {
-  const messageUi = window.CCBridge?.messageUi;
-  if (messageUi?.renderContextTrace) return messageUi.renderContextTrace(trace, getMessageUiOptions());
-  const injected = Array.isArray(trace.injected) ? trace.injected : [];
-  if (!injected.length) return;
-  const el = document.createElement('div');
-  el.className = 'context-trace';
-  const usedTokens = Number(trace.used_tokens || 0);
-  const skipped = Array.isArray(trace.skipped) ? trace.skipped : [];
-  const compressedCount = injected.filter(item => item.compressed).length;
-  const summaryParts = [t('contextTraceSummary', { count: injected.length, tokens: usedTokens })];
-  if (compressedCount) summaryParts.push(t('contextTraceCompressedSummary', { count: compressedCount }));
-  el.innerHTML = `
-    <details open>
-      <summary>${esc(summaryParts.join(' · '))}</summary>
-      <div class="context-trace-body">
-        ${injected.map(item => {
-          const meta = [item.source || '', item.path || ''].filter(Boolean).join(' · ');
-          const badges = [
-            item.compressed ? t('contextTraceCompressed') : '',
-            item.tokens ? t('contextTraceTokens', { tokens: item.tokens }) : '',
-          ].filter(Boolean).join(' · ');
-          return `
-            <div class="context-trace-item">
-              <div class="context-trace-title">${esc(item.title || item.path || item.id || t('contextTraceFallbackTitle'))} <span>${esc(String(item.score ?? ''))}</span></div>
-              <div class="context-trace-path">${esc(meta)}</div>
-              ${badges ? `<div class="context-trace-meta">${esc(badges)}</div>` : ''}
-              <div class="context-trace-reason">${esc(item.reason || '')}</div>
-            </div>
-          `;
-        }).join('')}
-        ${skipped.length ? `<div class="context-trace-skipped">${esc(t('contextTraceSkipped', { count: skipped.length, items: skipped.slice(0, 3).map(item => item.title || item.path || item.reason).join('、') }))}</div>` : ''}
-      </div>
-    </details>
-  `;
-  messagesEl.appendChild(el);
-  scrollToBottom();
+  return window.CCBridge.messageUi?.renderContextTrace?.(trace, getMessageUiOptions());
 }
 
 // ─── Toast 通知 ─────────────────────────────────────────────────
