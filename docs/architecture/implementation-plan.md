@@ -132,6 +132,7 @@ cc-bridge/
 - 新增 `static/js/config.js`，把环境变量配置页与 env profile 管理相关前端逻辑从 `static/app.js` 拆出并挂载到 `window.CCBridge.config`。
 - 新增 `static/js/gateway.js`，把消息网关配置、飞书 provider 状态、scope 管理和 onboard 相关前端逻辑从 `static/app.js` 拆出并挂载到 `window.CCBridge.gateway`。
 - 新增 `static/js/integrations.js`，把 MCP server 列表、表单和 integrations 页加载逻辑从 `static/app.js` 拆出并挂载到 `window.CCBridge.integrations`。
+- 新增 `static/js/agent-skills.js`，把 Agent 管理弹窗、Agent 列表渲染和 Skills 列表/详情弹窗逻辑从 `static/app.js` 拆出并挂载到 `window.CCBridge.agentSkills`。
 
 ## 后续验收标准
 
