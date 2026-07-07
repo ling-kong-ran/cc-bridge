@@ -6099,6 +6099,19 @@ html.light-theme .agent-status-bar {
     height: 100dvh;
   }
 
+  body {
+    padding: 0;
+  }
+
+  body::before {
+    content: none;
+  }
+
+  .titlebar,
+  .app {
+    border-radius: 0;
+  }
+
   .app {
     height: calc(100dvh - 36px);
     grid-template-columns: 1fr;
