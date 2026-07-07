@@ -81,36 +81,26 @@ function _restoreStreamState(sessionId) {
   return getStreamStateModule()?.restoreStreamState?.(sessionId, getStreamStateOptions());
 }
 
+function getUiModule() {
+  const mod = window.CCBridge?.ui;
+  if (!mod) console.error('CCBridge ui module is not loaded');
+  return mod;
+}
+
 function updateStopButton() {
-  const ui = window.CCBridge?.ui;
-  if (ui?.updateStopButton) {
-    ui.updateStopButton({ btnStop: document.getElementById('btn-stop'), isResponding, isViewer });
-    return;
-  }
-  const btnStop = document.getElementById('btn-stop');
-  if (btnStop) {
-    btnStop.classList.toggle('visible', isResponding);
-    btnStop.disabled = isViewer;
-  }
+  return getUiModule()?.updateStopButton?.({ btnStop: document.getElementById('btn-stop'), isResponding, isViewer });
 }
 
 function setVisible(el, visible, display = '') {
-  const ui = window.CCBridge?.ui;
-  if (ui?.setVisible) return ui.setVisible(el, visible, display);
-  if (!el) return;
-  el.style.display = visible ? display : 'none';
+  return getUiModule()?.setVisible?.(el, visible, display);
 }
 
 function isVisible(el) {
-  const ui = window.CCBridge?.ui;
-  if (ui?.isVisible) return ui.isVisible(el);
-  return !!el && el.style.display !== 'none';
+  return getUiModule()?.isVisible?.(el) || false;
 }
 
 function isDisplay(el, display) {
-  const ui = window.CCBridge?.ui;
-  if (ui?.isDisplay) return ui.isDisplay(el, display);
-  return !!el && el.style.display === display;
+  return getUiModule()?.isDisplay?.(el, display) || false;
 }
 
 let sessionOffset = 0;
