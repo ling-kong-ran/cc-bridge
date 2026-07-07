@@ -239,6 +239,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   loadClis();
   loadModels();
   loadConfig();
+  initDirectoryPicker();
   loadSessions();
   initFocusConfigReload();
   // 工具卡片折叠事件委托（支持 Shift+点击展开/折叠全部）
@@ -4313,66 +4314,99 @@ const btnBrowse = document.getElementById('btn-browse');
 let pickerCurrentDir = '/';
 let pickerCallback = null;  // 选择后回调，用于 CWD 更新等场景
 
-btnBrowse.addEventListener('click', async () => {
-  if (sessionActive && currentSessionId) {
-    const newCwd = await promptCwdForSession(cwdInput.value.trim());
-    if (newCwd) {
-      await updateSessionCwd(currentSessionId, newCwd);
-      // SSE cwd_changed 事件会更新 UI（cwdInput.value、loadSessions、addSystemMsg）
-    }
-    return;
-  }
-  openPicker();
-});
-pickerClose.addEventListener('click', closePicker);
-pickerOverlay.addEventListener('click', (e) => {
-  if (e.target === pickerOverlay) closePicker();
-});
-pickerUp.addEventListener('click', () => {
-  navigatePicker(pickerCurrentDir === '/' ? '/' : getParentPath(pickerCurrentDir));
-});
-pickerSelect.addEventListener('click', () => {
-  if (pickerCallback) {
-    const cb = pickerCallback;
-    pickerCallback = null;
-    cb(pickerCurrentDir);
-    closePicker();
-    return;
-  }
-  cwdInput.value = pickerCurrentDir;
-  updateRuntimeSummary();
-  closeSlashCommandPanel();
-  loadSessions();
-  closePicker();
-});
+function getDirectoryPickerOptions() {
+  return {
+    t,
+    esc,
+    getParentPath,
+    cwdInput,
+    pickerOverlay,
+    pickerList,
+    pickerCurrentPath,
+    pickerUp,
+    pickerClose,
+    pickerSelect,
+    pickerNewdir,
+    btnBrowse,
+    isSessionActive: () => sessionActive,
+    getCurrentSessionId: () => currentSessionId,
+    promptCwdForSession,
+    updateSessionCwd,
+    updateRuntimeSummary,
+    closeSlashCommandPanel,
+    loadSessions,
+  };
+}
 
-pickerNewdir.addEventListener('click', async () => {
-  const parent = pickerCurrentDir;
-  if (!parent || parent === '/') {
-    alert(t('newFolderNeedDir'));
+function initDirectoryPicker() {
+  const directoryPicker = window.CCBridge?.directoryPicker;
+  if (directoryPicker?.initDirectoryPicker) {
+    directoryPicker.initDirectoryPicker(getDirectoryPickerOptions());
     return;
   }
-  const name = prompt(t('newFolderPrompt'));
-  if (name === null) return;
-  if (!name.trim()) return;
-  try {
-    const resp = await fetch('/api/mkdir', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ parent, name: name.trim() }),
-    });
-    const data = await resp.json();
-    if (!data.ok) {
-      alert(data.error || t('requestFailed', { message: '' }));
+  btnBrowse.addEventListener('click', async () => {
+    if (sessionActive && currentSessionId) {
+      const newCwd = await promptCwdForSession(cwdInput.value.trim());
+      if (newCwd) {
+        await updateSessionCwd(currentSessionId, newCwd);
+        // SSE cwd_changed 事件会更新 UI（cwdInput.value、loadSessions、addSystemMsg）
+      }
       return;
     }
-    await navigatePicker(parent);
-  } catch (e) {
-    alert(t('requestFailed', { message: e.message }));
-  }
-});
+    openPicker();
+  });
+  pickerClose.addEventListener('click', closePicker);
+  pickerOverlay.addEventListener('click', (e) => {
+    if (e.target === pickerOverlay) closePicker();
+  });
+  pickerUp.addEventListener('click', () => {
+    navigatePicker(pickerCurrentDir === '/' ? '/' : getParentPath(pickerCurrentDir));
+  });
+  pickerSelect.addEventListener('click', () => {
+    if (pickerCallback) {
+      const cb = pickerCallback;
+      pickerCallback = null;
+      cb(pickerCurrentDir);
+      closePicker();
+      return;
+    }
+    cwdInput.value = pickerCurrentDir;
+    updateRuntimeSummary();
+    closeSlashCommandPanel();
+    loadSessions();
+    closePicker();
+  });
+
+  pickerNewdir.addEventListener('click', async () => {
+    const parent = pickerCurrentDir;
+    if (!parent || parent === '/') {
+      alert(t('newFolderNeedDir'));
+      return;
+    }
+    const name = prompt(t('newFolderPrompt'));
+    if (name === null) return;
+    if (!name.trim()) return;
+    try {
+      const resp = await fetch('/api/mkdir', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ parent, name: name.trim() }),
+      });
+      const data = await resp.json();
+      if (!data.ok) {
+        alert(data.error || t('requestFailed', { message: '' }));
+        return;
+      }
+      await navigatePicker(parent);
+    } catch (e) {
+      alert(t('requestFailed', { message: e.message }));
+    }
+  });
+}
 
 function openPicker(initialPath, callback) {
+  const directoryPicker = window.CCBridge?.directoryPicker;
+  if (directoryPicker?.openPicker) return directoryPicker.openPicker(initialPath, callback, getDirectoryPickerOptions());
   pickerOverlay.style.display = 'flex';
   if (callback) {
     pickerCallback = callback;
@@ -4381,6 +4415,8 @@ function openPicker(initialPath, callback) {
 }
 
 function closePicker() {
+  const directoryPicker = window.CCBridge?.directoryPicker;
+  if (directoryPicker?.closePicker) return directoryPicker.closePicker(getDirectoryPickerOptions());
   const cb = pickerCallback;
   pickerOverlay.style.display = 'none';
   pickerCallback = null;
@@ -4388,6 +4424,8 @@ function closePicker() {
 }
 
 async function navigatePicker(path) {
+  const directoryPicker = window.CCBridge?.directoryPicker;
+  if (directoryPicker?.navigatePicker) return directoryPicker.navigatePicker(path, getDirectoryPickerOptions());
   pickerCurrentDir = path;
   pickerCurrentPath.textContent = path || '/';
   pickerList.innerHTML = `<div class="picker-empty">${esc(t('pickerLoading'))}</div>`;
@@ -4435,6 +4473,8 @@ async function navigatePicker(path) {
 }
 
 function getParentPath(p) {
+  const directoryPicker = window.CCBridge?.directoryPicker;
+  if (directoryPicker?.getParentPath) return directoryPicker.getParentPath(p);
   if (!p || p === '/') return '/';
   const parts = p.replace(/\\/g, '/').split('/').filter(Boolean);
   if (parts.length <= 1) return '/';
