@@ -48,7 +48,7 @@ from config_manager import (
     get_agents_for_cli,
 )
 from session_store import list_sessions, save_session, add_session_usage, delete_session, load_session_history, rename_session, update_session_cwd, toggle_pin
-from memory_index import list_memory_files, search_memory, get_memory_file, delete_memory_file, save_memory_file, index_memory, get_memory_tree, get_memory_graph, import_memory_files, organize_memory_links
+from memory_index import save_memory_file, index_memory
 import wiki_store
 import context_orchestrator
 import memory_consolidator
@@ -56,6 +56,7 @@ from backend.routes.settings_routes import handle_settings_get, handle_settings_
 from backend.routes.context_routes import handle_context_get, handle_context_post
 from backend.routes.scheduled_tasks_routes import handle_scheduled_tasks_get, handle_scheduled_tasks_post
 from backend.routes.artifacts_routes import handle_artifacts_get
+from backend.routes.memory_routes import handle_memory_get, handle_memory_post
 from backend.responses import send_response
 from backend.services.sessions_service import list_gui_sessions
 # 飞书模块延迟加载 — 避免 lark_oapi SDK 拖慢 server 启动
@@ -2878,28 +2879,11 @@ async def handle_api_get(path: str, writer: asyncio.StreamWriter, query: dict = 
         data = preview_text_file(p, cwd)
     elif path == "/api/default-cwd":
         data = {"cwd": DEFAULT_CWD}
-    elif path == "/api/memory/files":
-        query = query or {}
-        cwd = query.get("cwd", [DEFAULT_CWD])[0] or DEFAULT_CWD
-        data = list_memory_files(cwd)
-    elif path == "/api/memory/search":
-        query = query or {}
-        q = query.get("q", [""])[0] or ""
-        cwd = query.get("cwd", [DEFAULT_CWD])[0] or DEFAULT_CWD
-        data = search_memory(q, cwd) if q else []
-    elif path == "/api/memory/index":
-        query = query or {}
-        cwd = query.get("cwd", [DEFAULT_CWD])[0] or DEFAULT_CWD
-        count = index_memory(cwd, force=True)
-        data = {"count": count, "ok": count >= 0}
-    elif path == "/api/memory/tree":
-        query = query or {}
-        cwd = query.get("cwd", [DEFAULT_CWD])[0] or DEFAULT_CWD
-        data = {"tree": get_memory_tree(cwd)}
-    elif path == "/api/memory/graph":
-        query = query or {}
-        cwd = query.get("cwd", [DEFAULT_CWD])[0] or DEFAULT_CWD
-        data = get_memory_graph(cwd)
+    elif path.startswith("/api/memory/"):
+        status, data = handle_memory_get(path, query, DEFAULT_CWD)
+        if status == 0:
+            await send_response(writer, 404, "application/json", b'{"error":"not found"}')
+            return
     # ── 全局 Wiki API ─────────────────────────────────────────────────
     elif path == "/api/wiki/search":
         query = query or {}
@@ -3346,62 +3330,13 @@ async def handle_api_post(path: str, body: bytes, writer: asyncio.StreamWriter):
         resp = json.dumps({"agents": agents}, ensure_ascii=False).encode("utf-8")
         await send_response(writer, 200, "application/json; charset=utf-8", resp)
         return
-    elif path == "/api/memory/file":
-        filename = data.get("filename", "")
-        cwd = data.get("cwd", DEFAULT_CWD)
-        result = get_memory_file(filename, cwd)
-        if not result:
+    elif path.startswith("/api/memory/"):
+        status, result = handle_memory_post(path, data, DEFAULT_CWD)
+        if status == 0:
             await send_response(writer, 404, "application/json", b'{"error":"not found"}')
-        else:
-            resp = json.dumps(result, ensure_ascii=False).encode("utf-8")
-            await send_response(writer, 200, "application/json; charset=utf-8", resp)
-        return
-    elif path == "/api/memory/delete":
-        filename = data.get("filename", "")
-        cwd = data.get("cwd", DEFAULT_CWD)
-        ok = delete_memory_file(filename, cwd)
-        if ok:
-            await send_response(writer, 200, "application/json", b'{"ok":true}')
-        else:
-            await send_response(writer, 404, "application/json", b'{"error":"not found"}')
-        return
-    elif path == "/api/memory/update":
-        filename = data.get("filename", "")
-        content = data.get("content", "")
-        cwd = data.get("cwd", DEFAULT_CWD)
-        if not filename or not content:
-            await send_response(writer, 400, "application/json", b'{"error":"filename and content required"}')
             return
-        result = save_memory_file(filename, content, cwd)
-        if result:
-            resp = json.dumps(result, ensure_ascii=False).encode("utf-8")
-            await send_response(writer, 200, "application/json; charset=utf-8", resp)
-        else:
-            await send_response(writer, 500, "application/json", b'{"error":"save failed"}')
-        return
-    elif path == "/api/memory/import":
-        cwd = data.get("cwd", DEFAULT_CWD)
-        paths = data.get("paths") or []
-        if not isinstance(paths, list):
-            await send_response(writer, 400, "application/json", b'{"error":"paths required"}')
-            return
-        imported = import_memory_files(paths, cwd)
-        if imported:
-            index_memory(cwd, force=True)
-        resp = json.dumps({"ok": True, "imported": imported}, ensure_ascii=False).encode("utf-8")
-        await send_response(writer, 200, "application/json; charset=utf-8", resp)
-        return
-    elif path == "/api/memory/organize":
-        cwd = data.get("cwd", DEFAULT_CWD)
-        result = organize_memory_links(cwd)
-        resp = json.dumps(result, ensure_ascii=False).encode("utf-8")
-        await send_response(writer, 200, "application/json; charset=utf-8", resp)
-        return
-    elif path == "/api/memory/index":
-        cwd = data.get("cwd", DEFAULT_CWD)
-        count = index_memory(cwd, force=True)
-        resp = json.dumps({"count": count, "ok": count >= 0}, ensure_ascii=False).encode("utf-8")
-        await send_response(writer, 200, "application/json; charset=utf-8", resp)
+        resp = json.dumps(result or {}, ensure_ascii=False).encode("utf-8")
+        await send_response(writer, status, "application/json; charset=utf-8", resp)
         return
     else:
         await send_response(writer, 404, "application/json", b'{"error":"not found"}')
