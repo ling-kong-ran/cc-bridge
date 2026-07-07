@@ -4677,12 +4677,23 @@ function isCurrentCwd(cwd) {
 }
 
 // ─── 目录更新辅助函数 ──────────────────────────────────────────
+function getSessionCwdOptions() {
+  return {
+    openPicker,
+    cwdInput,
+  };
+}
+
 function isCwdError(errorMsg) {
+  const sessionCwd = window.CCBridge?.sessionCwd;
+  if (sessionCwd?.isCwdError) return sessionCwd.isCwdError(errorMsg);
   if (!errorMsg) return false;
   return /\u5de5\u4f5c\u76ee\u5f55\u4e0d\u53ef\u7528|director|not exist|find the (file|path)/i.test(errorMsg);
 }
 
 function promptCwdForSession(oldCwd) {
+  const sessionCwd = window.CCBridge?.sessionCwd;
+  if (sessionCwd?.promptCwdForSession) return sessionCwd.promptCwdForSession(oldCwd, getSessionCwdOptions());
   return new Promise((resolve) => {
     openPicker(oldCwd || cwdInput.value.trim() || '/', (selectedPath) => {
       resolve(selectedPath || null);
@@ -4691,6 +4702,8 @@ function promptCwdForSession(oldCwd) {
 }
 
 async function updateSessionCwd(sessionId, newCwd) {
+  const sessionCwd = window.CCBridge?.sessionCwd;
+  if (sessionCwd?.updateSessionCwd) return sessionCwd.updateSessionCwd(sessionId, newCwd);
   try {
     const resp = await fetch('/api/sessions/update-cwd', {
       method: 'POST',
