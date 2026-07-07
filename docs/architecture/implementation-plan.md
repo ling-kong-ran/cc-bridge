@@ -134,6 +134,7 @@ cc-bridge/
 - 新增 `static/js/integrations.js`，把 MCP server 列表、表单和 integrations 页加载逻辑从 `static/app.js` 拆出并挂载到 `window.CCBridge.integrations`。
 - 新增 `static/js/agent-skills.js`，把 Agent 管理弹窗、Agent 列表渲染和 Skills 列表/详情弹窗逻辑从 `static/app.js` 拆出并挂载到 `window.CCBridge.agentSkills`。
 - 新增 `static/js/right-panel.js`，把右侧面板、文件树、review diff、文件预览和预览浮窗拖拽缩放逻辑从 `static/app.js` 拆出并挂载到 `window.CCBridge.rightPanel`。
+- 新增 `static/js/input.js`，把输入区、附件上传、slash commands、模型胶囊和 @mention 自动补全逻辑从 `static/app.js` 拆出并挂载到 `window.CCBridge.input`。
 
 ## 后续验收标准
 
