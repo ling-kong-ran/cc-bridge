@@ -142,6 +142,7 @@ cc-bridge/
 - 新增 `static/js/ui.js`，把可见性切换、display 判断和停止按钮状态更新等通用 UI helper 从 `static/app.js` 拆出并挂载到 `window.CCBridge.ui`。
 - 新增 `static/js/formatters.js`，把提示摘要、时长、费用、token、模型名和安全 JSON 解析等格式化基础逻辑从 `static/app.js` 拆出并挂载到 `window.CCBridge.formatters`。
 - 新增 `static/js/shortcuts.js`，把快捷键帮助弹窗和全局快捷键分发逻辑从 `static/app.js` 拆出并挂载到 `window.CCBridge.shortcuts`。
+- 新增 `static/js/statusbar.js`，把侧栏折叠状态和顶部状态摘要渲染逻辑从 `static/app.js` 拆出并挂载到 `window.CCBridge.statusbar`。
 
 ## 后续验收标准
 

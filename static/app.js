@@ -830,13 +830,41 @@ function closeShortcutsHelp() {
   setVisible(shortcutsOverlay, false);
 }
 
+function getStatusbarOptions() {
+  return {
+    t,
+    sessionActive,
+    sidebarCollapsed,
+    connectionOnline,
+    topbarStatusSummary,
+    topbarConnection,
+    topbarCost,
+    topbarCostValue,
+    topbarTokens,
+    topbarTokenValue,
+    costText: costValue?.textContent || '',
+    totalCost,
+    tokenText: tokenValue?.textContent || formatTokenUsage(totalTokens),
+  };
+}
+
 function setSidebarCollapsed(collapsed) {
+  const statusbar = window.CCBridge?.statusbar;
+  if (statusbar?.setSidebarCollapsed) {
+    sidebarCollapsed = statusbar.setSidebarCollapsed(collapsed, getStatusbarOptions());
+    return;
+  }
   sidebarCollapsed = Boolean(collapsed && sessionActive);
   document.body.classList.toggle('sidebar-collapsed', sidebarCollapsed);
   renderTopbarStatusSummary();
 }
 
 function renderTopbarStatusSummary() {
+  const statusbar = window.CCBridge?.statusbar;
+  if (statusbar?.renderTopbarStatusSummary) {
+    statusbar.renderTopbarStatusSummary(getStatusbarOptions());
+    return;
+  }
   if (!topbarStatusSummary) return;
   topbarStatusSummary.style.display = sidebarCollapsed ? '' : 'none';
   if (!sidebarCollapsed) return;
