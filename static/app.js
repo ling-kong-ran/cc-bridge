@@ -1994,7 +1994,21 @@ function noteBackgroundSessionEvent(data = {}) {
   return true;
 }
 
+function getWorkspaceEventOptions() {
+  return {
+    t,
+    hasWorkspaceSession: (sessionId) => workspaceSessions.has(sessionId),
+    appendWorkspaceSessionPreview,
+    setWorkspaceSessionPreview,
+  };
+}
+
 function updateBackgroundWorkspacePreview(data = {}) {
+  const workspace = window.CCBridge?.workspace;
+  if (workspace?.updateBackgroundWorkspacePreview) {
+    workspace.updateBackgroundWorkspacePreview(data, getWorkspaceEventOptions());
+    return;
+  }
   const sessionId = data.session_id;
   if (!sessionId || !workspaceSessions.has(sessionId)) return;
   if (data.event) {
@@ -2009,6 +2023,11 @@ function updateBackgroundWorkspacePreview(data = {}) {
 }
 
 function appendWorkspacePreviewEvent(sessionId, evt) {
+  const workspace = window.CCBridge?.workspace;
+  if (workspace?.appendWorkspacePreviewEvent) {
+    workspace.appendWorkspacePreviewEvent(sessionId, evt, getWorkspaceEventOptions());
+    return;
+  }
   if (!evt) return;
   if (evt.type === 'message_start') {
     setWorkspaceSessionPreview(sessionId, '');
@@ -2025,6 +2044,8 @@ function appendWorkspacePreviewEvent(sessionId, evt) {
 }
 
 function extractMessagePreviewText(message) {
+  const workspace = window.CCBridge?.workspace;
+  if (workspace?.extractMessagePreviewText) return workspace.extractMessagePreviewText(message);
   let text = '';
   for (const block of (message.content || [])) {
     if (block.type === 'text' && block.text) text += block.text;

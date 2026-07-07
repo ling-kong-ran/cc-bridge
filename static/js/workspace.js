@@ -119,6 +119,44 @@
     pane.style.flexBasis = width;
   }
 
+  function extractMessagePreviewText(message) {
+    let text = '';
+    for (const block of (message?.content || [])) {
+      if (block.type === 'text' && block.text) text += block.text;
+      else if (block.type === 'thinking' && block.thinking) text += block.thinking;
+      else if (block.type === 'tool_use' && block.name) text += `\n> ${block.name}\n`;
+    }
+    return text;
+  }
+
+  function appendWorkspacePreviewEvent(sessionId, evt, options = {}) {
+    if (!evt) return;
+    const t = options.t || ((key) => key);
+    if (evt.type === 'message_start') {
+      options.setWorkspaceSessionPreview?.(sessionId, '');
+      return;
+    }
+    if (evt.type === 'content_block_delta') {
+      const text = evt.delta?.text || evt.delta?.thinking || evt.delta?.partial_json || '';
+      if (text) options.appendWorkspaceSessionPreview?.(sessionId, text);
+      return;
+    }
+    if (evt.type === 'content_block_start' && evt.content_block?.type === 'tool_use') {
+      options.appendWorkspaceSessionPreview?.(sessionId, `\n> ${evt.content_block.name || t('tool')}\n`);
+    }
+  }
+
+  function updateBackgroundWorkspacePreview(data = {}, options = {}) {
+    const sessionId = data.session_id;
+    if (!sessionId || !options.hasWorkspaceSession?.(sessionId)) return;
+    if (data.event) {
+      appendWorkspacePreviewEvent(sessionId, data.event, options);
+      return;
+    }
+    const text = extractMessagePreviewText(data.message);
+    if (text) options.setWorkspaceSessionPreview?.(sessionId, text);
+  }
+
   root.workspace = {
     DEFAULT_STORAGE_KEY,
     DEFAULT_PREVIEW_MAX_CHARS,
@@ -132,5 +170,8 @@
     appendPreview,
     setPreview,
     applyPaneWidth,
+    extractMessagePreviewText,
+    appendWorkspacePreviewEvent,
+    updateBackgroundWorkspacePreview,
   };
 })();

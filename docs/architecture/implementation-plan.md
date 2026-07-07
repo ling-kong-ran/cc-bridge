@@ -154,6 +154,7 @@ cc-bridge/
 - 新增 `static/js/message-extras.js`，把聊天导出、消息引用和引用 payload 归一化逻辑从 `static/app.js` 拆出并挂载到 `window.CCBridge.messageExtras`。
 - 扩展 `static/js/sse.js`，继续承接连接状态展示与 `/api/action` 发送 wrapper，减少 `static/app.js` 的 SSE 基础设施逻辑。
 - 扩展 `static/js/chat-renderer.js`，继续承接 Markdown、历史消息和历史工具卡片渲染逻辑，减少 `static/app.js` 的聊天渲染职责。
+- 扩展 `static/js/workspace.js`，继续承接后台 session 事件预览文本提取和 workspace 预览更新逻辑。
 
 ## 后续验收标准
 
