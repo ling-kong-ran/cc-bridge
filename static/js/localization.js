@@ -53,7 +53,7 @@
     ctx.setCurrentLanguage(currentLanguage);
     ctx.setLanguageSelectValue(currentLanguage);
     ctx.document.documentElement.lang = currentLanguage === 'zh' ? 'zh-CN' : 'en';
-    await loadLanguageMap(currentLanguage, options);
+    const loadedLanguage = await loadLanguageMap(currentLanguage, options);
     ctx.document.title = ctx.t('pageTitle');
     renderLocalizedText(options);
     ctx.updateThemeToggle();
@@ -61,7 +61,7 @@
     ctx.updateUI();
     ctx.setSidebarCollapsed(ctx.getSidebarCollapsed());
     ctx.updateFilePickerCount();
-    if (persist) ctx.saveGuiSettings({ language: currentLanguage });
+    if (persist) ctx.saveGuiSettings({ language: loadedLanguage });
   }
 
   root.localization = {
