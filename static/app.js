@@ -4703,7 +4703,66 @@ async function updateSessionCwd(sessionId, newCwd) {
   }
 }
 
+function getSessionResumeOptions() {
+  return {
+    t,
+    addSystemMsg,
+    clearQuotedMessagesForSend,
+    resetAssistantStreamState,
+    normalizeTokenUsage,
+    renderTopbarMeta,
+    renderCost,
+    renderTokens,
+    updateRuntimeSummary,
+    refreshRightPaneFiles,
+    hasModelOption,
+    updateRemoteMutateRow,
+    renderStaticHistory,
+    sendAction,
+    isCwdError,
+    promptCwdForSession,
+    updateSessionCwd,
+    updateUI,
+    loadSessions,
+    getClientId: () => clientId,
+    getState: () => ({
+      currentAssistantEl,
+      currentAssistantMessageId,
+      currentContent,
+      streamBlocks,
+      isResponding,
+      currentRunId,
+      currentSessionId,
+      totalCost,
+      totalTokens,
+      sessionActive,
+    }),
+    setState: (state = {}) => {
+      if ('currentAssistantEl' in state) currentAssistantEl = state.currentAssistantEl;
+      if ('currentAssistantMessageId' in state) currentAssistantMessageId = state.currentAssistantMessageId;
+      if ('currentContent' in state) currentContent = state.currentContent;
+      if ('streamBlocks' in state) streamBlocks = state.streamBlocks;
+      if ('isResponding' in state) isResponding = state.isResponding;
+      if ('currentRunId' in state) currentRunId = state.currentRunId;
+      if ('currentSessionId' in state) currentSessionId = state.currentSessionId;
+      if ('totalCost' in state) totalCost = state.totalCost;
+      if ('totalTokens' in state) totalTokens = state.totalTokens;
+      if ('sessionActive' in state) sessionActive = state.sessionActive;
+    },
+    messagesEl,
+    cwdInput,
+    modelSelect,
+    cliSelect: document.getElementById('cli-select'),
+    skipPermissions: document.getElementById('skip-permissions'),
+    remoteTargetSelect,
+    remoteAllowMutate,
+    notifyFeishu,
+  };
+}
+
 async function resumeSession(sessionId, cwd, model, savedCost = 0, remoteTargetId = '', savedTokens = null, cli = '') {
+  const sessionResume = window.CCBridge?.sessionResume;
+  if (sessionResume?.resumeSession) return sessionResume.resumeSession(sessionId, cwd, model, savedCost, remoteTargetId, savedTokens, cli, getSessionResumeOptions());
   if (!clientId) {
     addSystemMsg(t('notConnected'), true);
     return;
