@@ -189,6 +189,11 @@ let lastNotifyAt = 0;
 let accessContext = { isLocalhost: true, defaultCwd: '' };
 
 function initDesktopWindowControls() {
+  const desktopWindow = window.CCBridge?.desktopWindow;
+  if (desktopWindow?.initDesktopWindowControls) {
+    desktopWindow.initDesktopWindowControls({ btnDesktopClose, desktop: window.ccBridgeDesktop });
+    return;
+  }
   if (!btnDesktopClose || !window.ccBridgeDesktop) return;
   btnDesktopClose.style.display = '';
   btnDesktopClose.addEventListener('click', () => {
