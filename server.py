@@ -11,7 +11,6 @@ import socket
 import uuid
 import ipaddress
 import re
-import base64
 import subprocess
 import tempfile
 import time
@@ -59,6 +58,7 @@ from backend.routes.artifacts_routes import handle_artifacts_get
 from backend.routes.memory_routes import handle_memory_get, handle_memory_post
 from backend.routes.wiki_routes import handle_wiki_get
 from backend.routes.gateway_routes import encode_gateway_get_body, handle_gateway_get, handle_gateway_post
+from backend.routes.remote_routes import handle_remote_get, handle_remote_post
 from backend.responses import send_response
 from backend.services.sessions_service import list_gui_sessions
 # 飞书模块延迟加载 — 避免 lark_oapi SDK 拖慢 server 启动
@@ -1170,98 +1170,6 @@ def create_directory(parent: str, name: str) -> dict:
     except OSError as e:
         return {"ok": False, "error": str(e)}
     return {"ok": True, "path": full.replace("\\", "/")}
-
-
-def remote_upload_dir(cwd: str = "") -> Path:
-    base = Path(cwd) if cwd and os.path.isdir(cwd) else UPLOAD_DIR_FALLBACK.parent
-    upload_dir = base / ".gui-uploads" / "remote"
-    upload_dir.mkdir(parents=True, exist_ok=True)
-    return upload_dir
-
-
-def shell_quote(value: str) -> str:
-    return shlex.quote(str(value or ""))
-
-
-def remote_ls(target_id: str, path: str) -> dict:
-    target = remote_manager.get_target(target_id or "")
-    if not target:
-        return {"ok": False, "error": "target_not_found"}
-    remote_path = path or "."
-    # 纯 shell 实现，不依赖远程 Python
-    # 用 stat 逐个输出 type|size|name，兼容性好于 find -printf
-    qpath = shell_quote(remote_path)
-    command = (
-        f"_D=$(cd {qpath} 2>/dev/null && pwd) || exit 1; "
-        f"echo \"DIR:$_D\"; "
-        f"for f in \"$_D\"/*; do "
-        f"[ -e \"$f\" ] || continue; "
-        f"_N=$(basename \"$f\"); "
-        f"if [ -d \"$f\" ]; then _T=d; else _T=f; fi; "
-        f"_S=$(stat -c%s \"$f\" 2>/dev/null || echo 0); "
-        f"echo \"$_T|$_S|$_N\"; "
-        f"done"
-    )
-    res = remote_manager.run_remote_command(target, command, timeout=30)
-    if not res.get("ok"):
-        return {"ok": False, "error": res.get("error") or res.get("stderr") or "remote_failed"}
-    stdout = (res.get("stdout") or "").strip()
-    lines = stdout.splitlines()
-    if not lines:
-        return {"ok": False, "error": "empty_response"}
-    # 解析当前目录
-    current = remote_path
-    if lines[0].startswith("DIR:"):
-        current = lines[0][4:]
-        lines = lines[1:]
-    parent = os.path.dirname(current) or "/"
-    items = []
-    for line in lines:
-        parts = line.split("|", 2)
-        if len(parts) < 3:
-            continue
-        ftype, size_str, name = parts
-        if not name or name.startswith("."):
-            continue
-        typ = "dir" if ftype == "d" else "file"
-        try:
-            size = int(size_str)
-        except ValueError:
-            size = 0
-        full = current.rstrip("/") + "/" + name
-        items.append({"name": name, "path": full, "type": typ, "size": size})
-    items.sort(key=lambda x: x["name"])
-    return {"ok": True, "current": current, "parent": parent, "items": items}
-
-
-def remote_cache_file(target_id: str, path: str, cwd: str = "") -> dict:
-    target = remote_manager.get_target(target_id or "")
-    if not target:
-        return {"ok": False, "error": "target_not_found"}
-    remote_path = path or ""
-    if not remote_path:
-        return {"ok": False, "error": "missing_path"}
-    name = Path(remote_path).name or "remote-file"
-    local_name = f"{uuid.uuid4().hex[:8]}_{name}"
-    local_path = remote_upload_dir(cwd) / local_name
-    command = "base64 " + shell_quote(remote_path)
-    res = remote_manager.run_remote_command(target, command, timeout=120)
-    if not res.get("ok"):
-        return {"ok": False, "error": res.get("error") or res.get("stderr") or "remote_failed"}
-    try:
-        data = base64.b64decode((res.get("stdout") or "").encode("ascii"), validate=False)
-    except (ValueError, UnicodeEncodeError) as exc:
-        return {"ok": False, "error": f"decode_failed: {exc}"}
-    local_path.write_bytes(data)
-    return {
-        "ok": True,
-        "name": name,
-        "path": str(local_path.resolve()).replace("\\", "/"),
-        "source": "remote",
-        "original_path": remote_path,
-        "remote_target_name": target.get("name") or target.get("host") or target_id,
-        "size": len(data),
-    }
 
 
 # ─── CLI 安装 ─────────────────────────────────────────────
@@ -2898,7 +2806,7 @@ async def handle_api_get(path: str, writer: asyncio.StreamWriter, query: dict = 
         await send_response(writer, status, content_type, encode_gateway_get_body(body or {}))
         return
     elif path == "/api/remote-targets":
-        data = {"targets": remote_manager.list_targets(), "password_supported": remote_manager.password_supported()}
+        _, data = handle_remote_get(path)
     elif path == "/api/sessions":
         data = list_gui_sessions(
             sessions=list_sessions(),
@@ -3028,15 +2936,10 @@ async def handle_api_post(path: str, body: bytes, writer: asyncio.StreamWriter):
         resp = json.dumps(result, ensure_ascii=False).encode("utf-8")
         await send_response(writer, 200, "application/json; charset=utf-8", resp)
         return
-    elif path == "/api/remote-files/list":
-        result = await asyncio.get_event_loop().run_in_executor(None, remote_ls, data.get("target_id", ""), data.get("path", ""))
-        resp = json.dumps(result, ensure_ascii=False).encode("utf-8")
-        await send_response(writer, 200, "application/json; charset=utf-8", resp)
-        return
-    elif path == "/api/remote-files/cache":
-        result = await asyncio.get_event_loop().run_in_executor(None, remote_cache_file, data.get("target_id", ""), data.get("path", ""), data.get("cwd", ""))
-        resp = json.dumps(result, ensure_ascii=False).encode("utf-8")
-        await send_response(writer, 200, "application/json; charset=utf-8", resp)
+    elif path in {"/api/remote-files/list", "/api/remote-files/cache"}:
+        status, result = await handle_remote_post(path, data)
+        resp = json.dumps(result or {}, ensure_ascii=False).encode("utf-8")
+        await send_response(writer, status, "application/json; charset=utf-8", resp)
         return
     elif path == "/api/sessions/toggle-pin":
         sid = data.get("session_id", "")
@@ -3101,25 +3004,10 @@ async def handle_api_post(path: str, body: bytes, writer: asyncio.StreamWriter):
         resp = json.dumps(result or {}, ensure_ascii=False).encode("utf-8")
         await send_response(writer, status, "application/json; charset=utf-8", resp)
         return
-    elif path == "/api/remote-targets":
-        try:
-            saved = remote_manager.save_target(data)
-        except ValueError as exc:
-            resp = json.dumps({"error": str(exc)}, ensure_ascii=False).encode("utf-8")
-            await send_response(writer, 400, "application/json; charset=utf-8", resp)
-            return
-        resp = json.dumps(saved, ensure_ascii=False).encode("utf-8")
-        await send_response(writer, 200, "application/json; charset=utf-8", resp)
-        return
-    elif path == "/api/remote-targets/delete":
-        remote_manager.delete_target(data.get("id", ""))
-        await send_response(writer, 200, "application/json", b'{"ok":true}')
-        return
-    elif path == "/api/remote-targets/test":
-        target = data if data.get("host") else data.get("id", "")
-        result = await asyncio.get_event_loop().run_in_executor(None, remote_manager.test_target, target)
-        resp = json.dumps(result, ensure_ascii=False).encode("utf-8")
-        await send_response(writer, 200, "application/json; charset=utf-8", resp)
+    elif path in {"/api/remote-targets", "/api/remote-targets/delete", "/api/remote-targets/test"}:
+        status, result = await handle_remote_post(path, data)
+        resp = json.dumps(result or {}, ensure_ascii=False).encode("utf-8")
+        await send_response(writer, status, "application/json; charset=utf-8", resp)
         return
     elif path == "/api/install-cli":
         result = await install_cli()

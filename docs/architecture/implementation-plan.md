@@ -124,6 +124,7 @@ cc-bridge/
 - 新增 `backend/services/memory_service.py` 与 `backend/routes/memory_routes.py`，把记忆文件查询、索引、读写、导入和整理 API 接入服务层和路由层。
 - 新增 `backend/services/wiki_service.py` 与 `backend/routes/wiki_routes.py`，把全局 Wiki 搜索、节点、图谱、热点、统计、索引和上下文 API 接入服务层和路由层。
 - 新增 `backend/services/gateway_service.py` 与 `backend/routes/gateway_routes.py`，按消息网关可热插拔平台方向承接飞书网关配置、二维码、事件、scope 和 onboard API。
+- 新增 `backend/services/remote_service.py` 与 `backend/routes/remote_routes.py`，把远程目标配置、连接测试、远程文件浏览和缓存 API 接入服务层和路由层。
 
 ## 后续验收标准
 
