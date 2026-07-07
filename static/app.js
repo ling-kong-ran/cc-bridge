@@ -24,10 +24,10 @@ let currentTurnStartedAt = 0;
 let currentTurnTimer = null;
 let currentTurnAttachmentCount = 0;
 let completionHistorySyncTimer = null;
-let lastFocusConfigReloadAt = 0;
 let cachedSessions = [];
 let sessionsLoaded = false;
 let chatNavAutoOpening = false;
+let lastFocusConfigReloadAt = 0;
 
 // 每个 workspace tab 独立的 SSE/流式状态，切换标签页时 save/restore
 const _tabStreamState = new Map();
@@ -1114,7 +1114,21 @@ function renderInputStatus() {
   }
 }
 
+function getConfigReloadOptions() {
+  return {
+    loadClis,
+    loadModels,
+    loadConfig,
+    closeSlashCommandPanel,
+  };
+}
+
 function initFocusConfigReload() {
+  const configReload = window.CCBridge?.configReload;
+  if (configReload?.initFocusConfigReload) {
+    configReload.initFocusConfigReload(getConfigReloadOptions());
+    return;
+  }
   window.addEventListener('focus', reloadConfigOnFocus);
   document.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'visible') {
@@ -1124,6 +1138,8 @@ function initFocusConfigReload() {
 }
 
 function reloadConfigOnFocus() {
+  const configReload = window.CCBridge?.configReload;
+  if (configReload?.reloadConfigOnFocus) return configReload.reloadConfigOnFocus(getConfigReloadOptions());
   const now = Date.now();
   if (now - lastFocusConfigReloadAt < 1500) return;
   lastFocusConfigReloadAt = now;
@@ -1131,6 +1147,8 @@ function reloadConfigOnFocus() {
 }
 
 async function reloadExternalConfig() {
+  const configReload = window.CCBridge?.configReload;
+  if (configReload?.reloadExternalConfig) return configReload.reloadExternalConfig(getConfigReloadOptions());
   await Promise.all([
     loadClis(),
     loadModels(),
