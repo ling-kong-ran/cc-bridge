@@ -158,6 +158,7 @@ cc-bridge/
 - 新增 `static/js/message-extras.js`，把聊天导出、消息引用和引用 payload 归一化逻辑从 `static/app.js` 拆出并挂载到 `window.CCBridge.messageExtras`。
 - 扩展 `static/js/sse.js`，继续承接连接状态展示与 `/api/action` 发送 wrapper，减少 `static/app.js` 的 SSE 基础设施逻辑。
 - 扩展 `static/js/chat-renderer.js`，继续承接 Markdown、历史消息和历史工具卡片渲染逻辑，减少 `static/app.js` 的聊天渲染职责。
+- 收敛 `static/app.js` 中聊天渲染 wrapper，移除剩余本地 Markdown、工具卡片、流式状态和历史消息渲染 fallback 实现，统一委托 `static/js/chat-renderer.js`。
 - 扩展 `static/js/workspace.js`，继续承接后台 session 事件预览文本提取和 workspace 预览更新逻辑。
 - 新增 `static/js/task-activity.js`，把 Task subagent 运行状态、状态栏和 subagent 气泡渲染逻辑从 `static/app.js` 拆出并挂载到 `window.CCBridge.taskActivity`。
 - 新增 `static/js/stream-events.js`，把 assistant stream event 对当前回复块、workspace 预览和 Task 注册的状态推进逻辑从 `static/app.js` 拆出并挂载到 `window.CCBridge.streamEvents`。
