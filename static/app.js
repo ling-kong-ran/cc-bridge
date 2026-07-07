@@ -792,7 +792,29 @@ function initTheme() {
   window.CCBridge.settings?.initTheme?.();
 }
 
+function getShortcutsOptions() {
+  return {
+    btnShortcuts,
+    shortcutsClose,
+    shortcutsOverlay,
+    setVisible,
+    isVisible,
+    openShortcutsHelp,
+    closeShortcutsHelp,
+    sessionSearchInput,
+    startNewSession,
+    sendMessage,
+    interruptCurrentRun,
+    copyConversationMarkdown,
+  };
+}
+
 function initShortcutsHelp() {
+  const shortcuts = window.CCBridge?.shortcuts;
+  if (shortcuts?.initShortcutsHelp) {
+    shortcuts.initShortcutsHelp(getShortcutsOptions());
+    return;
+  }
   btnShortcuts?.addEventListener('click', openShortcutsHelp);
   shortcutsClose?.addEventListener('click', closeShortcutsHelp);
   shortcutsOverlay?.addEventListener('click', (e) => {
@@ -801,10 +823,20 @@ function initShortcutsHelp() {
 }
 
 function openShortcutsHelp() {
+  const shortcuts = window.CCBridge?.shortcuts;
+  if (shortcuts?.openShortcutsHelp) {
+    shortcuts.openShortcutsHelp(getShortcutsOptions());
+    return;
+  }
   setVisible(shortcutsOverlay, true, 'flex');
 }
 
 function closeShortcutsHelp() {
+  const shortcuts = window.CCBridge?.shortcuts;
+  if (shortcuts?.closeShortcutsHelp) {
+    shortcuts.closeShortcutsHelp(getShortcutsOptions());
+    return;
+  }
   setVisible(shortcutsOverlay, false);
 }
 
@@ -3267,6 +3299,11 @@ function interruptCurrentRun() {
 }
 
 function handleGlobalShortcuts(e) {
+  const shortcuts = window.CCBridge?.shortcuts;
+  if (shortcuts?.handleGlobalShortcuts) {
+    shortcuts.handleGlobalShortcuts(e, getShortcutsOptions());
+    return;
+  }
   if (e.key === 'Escape' && isVisible(shortcutsOverlay)) {
     e.preventDefault();
     closeShortcutsHelp();
