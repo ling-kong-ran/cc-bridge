@@ -173,10 +173,6 @@ const memoryAutoInject = document.getElementById('memory-auto-inject');
 const remoteMutateRow = document.getElementById('remote-mutate-row');
 const lanAccessToggle = document.getElementById('lan-access-toggle');
 const lanAccessRow = document.getElementById('lan-access-row');
-const mcpFormSection = document.getElementById('mcp-form-section');
-const mcpFormType = document.getElementById('mcp-form-type');
-const mcpStdioFields = document.getElementById('mcp-stdio-fields');
-const mcpUrlFields = document.getElementById('mcp-url-fields');
 const previewPanel = document.getElementById('file-preview-panel');
 const previewNameEl = document.getElementById('file-preview-name');
 const previewMetaEl = document.getElementById('file-preview-meta');
@@ -3909,137 +3905,24 @@ function loadConfig() {
   return window.CCBridge.config?.loadConfig?.();
 }
 
-function renderMcpServers(servers) {
-  const el = document.getElementById('mcp-list');
-  if (!el) return;
-  if (!Array.isArray(servers) || !servers.length) {
-    el.innerHTML = `<p class="empty-state">${esc(t('mcpNoServers'))}</p>`;
-    return;
-  }
-  el.innerHTML = servers.map(s => {
-    const isUrl = s.url || s.type === 'sse' || s.type === 'http' || s.type === 'url';
-    const target = isUrl ? (s.url || '') : [s.command, ...(s.args || [])].filter(Boolean).join(' ');
-    const badge = s.scope === 'project' ? t('mcpScopeProjectShort') : t('mcpScopeGlobalShort');
-    return `<div class="mcp-item">
-      <div class="mcp-main">
-        <span class="mcp-name">${esc(s.name || '')}</span>
-        <span class="mcp-meta">${esc(badge)} · ${esc(s.type || 'stdio')}</span>
-      </div>
-      <div class="mcp-target" title="${esc(target)}">${esc(target || '-')}</div>
-    </div>`;
-  }).join('');
-}
-
-async function loadMcpServers() {
-  try {
-    const url = `/api/mcp-servers?cwd=${encodeURIComponent(cwdInput?.value?.trim() || '')}`;
-    const servers = await (await fetch(url)).json();
-    renderMcpServers(servers);
-  } catch (e) {
-    renderMcpServers([]);
-  }
-}
-
-async function loadIntegrations() {
-  loadMcpServers();
-  try {
-    const agents = await (await fetch('/api/agents')).json();
-    agentsCache = agents;
-    renderAgents(agents);
-  } catch (e) {
-    agentsCache = [];
-    renderAgents([]);
-  }
-}
-
 function initMcpManager() {
-  document.getElementById('btn-mcp-add')?.addEventListener('click', showMcpForm);
-  document.getElementById('btn-mcp-cancel')?.addEventListener('click', hideMcpForm);
-  document.getElementById('btn-mcp-save')?.addEventListener('click', saveMcpServer);
-  mcpFormType?.addEventListener('change', updateMcpFormVisibility);
+  window.CCBridge.integrations?.initMcpManager?.();
 }
 
-function showMcpForm() {
-  if (!mcpFormSection) return;
-  mcpFormSection.style.display = '';
-  document.getElementById('mcp-form-name').value = '';
-  document.getElementById('mcp-form-scope').value = 'global';
-  document.getElementById('mcp-form-type').value = 'stdio';
-  document.getElementById('mcp-form-command').value = '';
-  document.getElementById('mcp-form-args').value = '';
-  document.getElementById('mcp-form-url').value = '';
-  document.getElementById('mcp-form-env').value = '';
-  setMcpStatus('');
-  updateMcpFormVisibility();
-  document.getElementById('mcp-form-name')?.focus();
+function loadIntegrations() {
+  return window.CCBridge.integrations?.loadIntegrations?.();
 }
 
-function hideMcpForm() {
-  if (mcpFormSection) mcpFormSection.style.display = 'none';
+function loadMcpServers() {
+  return window.CCBridge.integrations?.loadMcpServers?.();
 }
 
-function updateMcpFormVisibility() {
-  const type = mcpFormType?.value || 'stdio';
-  const isUrl = type === 'sse' || type === 'http' || type === 'url';
-  if (mcpStdioFields) mcpStdioFields.style.display = isUrl ? 'none' : '';
-  if (mcpUrlFields) mcpUrlFields.style.display = isUrl ? '' : 'none';
+function setAgentsForIntegrations(agents) {
+  agentsCache = agents;
+  renderAgents(agents);
 }
 
-function setMcpStatus(message, isError = false) {
-  const el = document.getElementById('mcp-form-status');
-  if (!el) return;
-  el.style.display = message ? '' : 'none';
-  el.textContent = message || '';
-  el.classList.toggle('error', Boolean(isError));
-}
-
-async function saveMcpServer() {
-  let env = {};
-  const envText = document.getElementById('mcp-form-env')?.value?.trim() || '';
-  if (envText) {
-    try {
-      env = JSON.parse(envText);
-      if (!env || typeof env !== 'object' || Array.isArray(env)) throw new Error('not object');
-    } catch (e) {
-      setMcpStatus(t('mcpInvalidEnv'), true);
-      return;
-    }
-  }
-  const payload = {
-    name: document.getElementById('mcp-form-name')?.value?.trim() || '',
-    scope: document.getElementById('mcp-form-scope')?.value || 'global',
-    type: document.getElementById('mcp-form-type')?.value || 'stdio',
-    command: document.getElementById('mcp-form-command')?.value?.trim() || '',
-    args: splitShellLike(document.getElementById('mcp-form-args')?.value || ''),
-    url: document.getElementById('mcp-form-url')?.value?.trim() || '',
-    env,
-    cwd: cwdInput?.value?.trim() || '',
-  };
-  try {
-    const resp = await fetch('/api/mcp-servers', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
-    });
-    const data = await resp.json().catch(() => ({}));
-    if (!resp.ok) throw new Error(data.error || 'save failed');
-    hideMcpForm();
-    await loadMcpServers();
-    addSystemMsg(t('mcpSaved'));
-  } catch (e) {
-    setMcpStatus(t('mcpSaveFailed', { message: e.message || e }), true);
-  }
-}
-
-function splitShellLike(text) {
-  const args = [];
-  const re = /"([^"]*)"|'([^']*)'|\S+/g;
-  let match;
-  while ((match = re.exec(text || ''))) {
-    args.push(match[1] ?? match[2] ?? match[0]);
-  }
-  return args;
-}
+window.CCBridge.setAgentsForIntegrations = setAgentsForIntegrations;
 
 async function loadSkills() {
   const el = document.getElementById('skills-list');
