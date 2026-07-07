@@ -4380,7 +4380,6 @@ function loadMcpServers() {
 }
 
 function setAgentsForIntegrations(agents) {
-  agentsCache = agents;
   window.CCBridge.sessionAgents?.setAgents?.(agents);
   window.CCBridge.agentSkills?.renderAgents?.(agents);
 }
@@ -4415,9 +4414,6 @@ function deleteAgentPrompt(name) {
   return window.CCBridge.agentSkills?.deleteAgentPrompt?.(name);
 }
 
-let agentsCache = [];
-let sessionAgents = [];
-
 function getSessionAgentsOptions() {
   return {
     t,
@@ -4436,136 +4432,27 @@ function getSessionAgentsOptions() {
 
 // ─── 会话 Agent 面板 ──────────────────────────────────────────────
 async function loadSessionAgents() {
-  const mod = window.CCBridge?.sessionAgents;
-  if (mod?.loadSessionAgents) return mod.loadSessionAgents(getSessionAgentsOptions());
-  try {
-    const resp = await fetch(`/api/session/agents?id=${clientId}`);
-    const data = await resp.json();
-    sessionAgents = data.agents || [];
-    renderSessionAgentsPanel();
-  } catch (e) { console.error('Load session agents failed:', e); }
+  return window.CCBridge.sessionAgents?.loadSessionAgents?.(getSessionAgentsOptions());
 }
 
 async function addSessionAgent(name) {
-  const mod = window.CCBridge?.sessionAgents;
-  if (mod?.addSessionAgent) return mod.addSessionAgent(name, getSessionAgentsOptions());
-  if (!name || sessionAgents.includes(name)) return;
-  try {
-    const resp = await fetch('/api/session/agents', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ id: clientId, action: 'add', agent: name }),
-    });
-    if (!resp.ok) { console.error('Add session agent failed:', resp.status); return; }
-    const data = await resp.json();
-    sessionAgents = data.agents || [];
-    renderSessionAgentsPanel();
-    hideAgentAddPopover();
-  } catch (e) { console.error('Add session agent failed:', e); }
+  return window.CCBridge.sessionAgents?.addSessionAgent?.(name, getSessionAgentsOptions());
 }
 
 async function removeSessionAgent(name) {
-  const mod = window.CCBridge?.sessionAgents;
-  if (mod?.removeSessionAgent) return mod.removeSessionAgent(name, getSessionAgentsOptions());
-  try {
-    const resp = await fetch('/api/session/agents', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ id: clientId, action: 'remove', agent: name }),
-    });
-    const data = await resp.json();
-    sessionAgents = data.agents || [];
-    renderSessionAgentsPanel();
-  } catch (e) { console.error('Remove session agent failed:', e); }
+  return window.CCBridge.sessionAgents?.removeSessionAgent?.(name, getSessionAgentsOptions());
 }
 
 function renderSessionAgentsPanel() {
-  const mod = window.CCBridge?.sessionAgents;
-  if (mod?.renderSessionAgentsPanel) return mod.renderSessionAgentsPanel(getSessionAgentsOptions());
-  const panel = document.getElementById('group-member-panel');
-  const list = document.getElementById('group-member-list') || panel;
-  if (!panel || !list) return;
-
-  if (!sessionAgents.length) {
-    list.innerHTML = `<div class="group-member-empty">${esc(t('noSessionAgents'))}</div>`;
-    updateWorkspaceHeader('members');
-    return;
-  }
-
-  list.innerHTML = sessionAgents.map(a => `
-    <span class="group-member-chip" data-agent="${esc(a)}">
-      <span class="chip-name" title="${esc(a)}">${esc(a)}</span>
-      <span class="chip-remove" data-action="remove" data-agent="${esc(a)}">&times;</span>
-    </span>
-  `).join('');
-  updateWorkspaceHeader('members');
-
-  // 点击芯片名 → 插入 @名称
-  list.querySelectorAll('.group-member-chip .chip-name').forEach(nameEl => {
-    nameEl.addEventListener('click', () => {
-      const name = nameEl.parentElement.dataset.agent;
-      const input = document.getElementById('message-input');
-      if (!input || !name) return;
-      const cursor = input.selectionStart || input.value.length;
-      const before = input.value.substring(0, cursor);
-      const after = input.value.substring(cursor);
-      const prefix = (cursor > 0 && before[cursor - 1] !== ' ' && before[cursor - 1] !== '\n') ? ' ' : '';
-      input.value = before + prefix + '@' + name + ' ' + after;
-      const newPos = cursor + prefix.length + name.length + 2;
-      input.setSelectionRange(newPos, newPos);
-      input.focus();
-    });
-  });
-
-  // 点击 × → 移除 agent
-  list.querySelectorAll('.chip-remove').forEach(btn => {
-    btn.addEventListener('click', (e) => {
-      e.stopPropagation();
-      removeSessionAgent(btn.dataset.agent);
-    });
-  });
+  return window.CCBridge.sessionAgents?.renderSessionAgentsPanel?.(getSessionAgentsOptions());
 }
 
 function renderAgentAddPopover() {
-  const mod = window.CCBridge?.sessionAgents;
-  if (mod?.renderAgentAddPopover) return mod.renderAgentAddPopover(getSessionAgentsOptions());
-  const popover = document.getElementById('agent-add-popover');
-  if (!popover) return;
-  const all = agentsCache.filter(a => {
-    const name = a.name || a;
-    return name && !sessionAgents.includes(name);
-  });
-  if (!all.length) {
-    popover.innerHTML = `<div class="agent-add-popover-empty">${esc(t('noAgents'))}</div>`;
-  } else {
-    popover.innerHTML = `
-      <div class="agent-add-popover-search">
-        <input type="text" id="agent-add-search" placeholder="${esc(t('searchAgent'))}">
-      </div>
-      ${all.map(a => {
-        const name = a.name || a;
-        return `<div class="agent-add-popover-item" data-agent="${esc(name)}">${esc(name)}</div>`;
-      }).join('')}
-    `;
-    const searchInput = document.getElementById('agent-add-search');
-    if (searchInput) {
-      searchInput.addEventListener('input', () => {
-        const q = searchInput.value.toLowerCase();
-        popover.querySelectorAll('.agent-add-popover-item').forEach(item => {
-          setVisible(item, item.dataset.agent.toLowerCase().includes(q));
-        });
-      });
-      setTimeout(() => searchInput.focus(), 0);
-    }
-  }
-  setVisible(popover, true, 'block');
+  return window.CCBridge.sessionAgents?.renderAgentAddPopover?.(getSessionAgentsOptions());
 }
 
 function hideAgentAddPopover() {
-  const mod = window.CCBridge?.sessionAgents;
-  if (mod?.hideAgentAddPopover) return mod.hideAgentAddPopover(getSessionAgentsOptions());
-  const popover = document.getElementById('agent-add-popover');
-  setVisible(popover, false);
+  return window.CCBridge.sessionAgents?.hideAgentAddPopover?.(getSessionAgentsOptions());
 }
 
 window.CCBridge.appContext = {
@@ -4639,9 +4526,7 @@ function hideMentionPopup() {
 }
 
 function getSessionAgents() {
-  const mod = window.CCBridge?.sessionAgents;
-  if (mod?.getSessionAgents) return mod.getSessionAgents();
-  return sessionAgents.slice();
+  return window.CCBridge.sessionAgents?.getSessionAgents?.() || [];
 }
 
 window.CCBridge.getSessionAgents = getSessionAgents;
