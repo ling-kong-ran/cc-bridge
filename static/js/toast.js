@@ -17,9 +17,8 @@
     toast.addEventListener('mouseleave', () => { toast._timer = setTimeout(() => dismissToast(toast), 2000); });
     toastContainer.appendChild(toast);
     toast._timer = setTimeout(() => dismissToast(toast), duration);
-    while (toastContainer.children.length > 5) {
-      dismissToast(toastContainer.firstElementChild);
-    }
+    const activeToasts = Array.from(toastContainer.children).filter(item => !item._dismissing);
+    activeToasts.slice(0, Math.max(0, activeToasts.length - 5)).forEach(dismissToast);
     return toast;
   }
 

@@ -3309,9 +3309,8 @@ function showToast(msg, type = 'info', duration = 3000) {
   toastContainer.appendChild(el);
   el._timer = setTimeout(() => dismissToast(el), duration);
   // 最多保留 5 条，旧的自上而下消失
-  while (toastContainer.children.length > 5) {
-    dismissToast(toastContainer.firstElementChild);
-  }
+  const activeToasts = Array.from(toastContainer.children).filter(item => !item._dismissing);
+  activeToasts.slice(0, Math.max(0, activeToasts.length - 5)).forEach(dismissToast);
   return el;
 }
 
