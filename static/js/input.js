@@ -96,21 +96,10 @@
         fileInput.value = '';
         return;
       }
-      if (filePickerOverlay?.style.display === 'flex' && filePickerCallback) {
-        for (const f of fileInput.files) {
-          const itemPath = `client://${f.name}`;
-          filePickerSelected.set(itemPath, { name: f.name, source: 'client', _file: f });
-        }
-        updateFilePickerCount();
-        fileInput.value = '';
-        return;
-      }
       uploadFiles(fileInput.files);
       fileInput.value = '';
       if (filePicker?.isOpen?.()) {
         filePicker.closeFilePicker();
-      } else if (filePickerOverlay?.style.display === 'flex') {
-        closeFilePicker();
       }
     });
     initInputFileDrop();
