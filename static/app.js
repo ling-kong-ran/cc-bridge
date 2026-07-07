@@ -1009,7 +1009,20 @@ function formatCompactDuration(ms) {
   return rest ? `${minutes}m ${rest}s` : `${minutes}m`;
 }
 
+function getTurnTimerOptions() {
+  return {
+    t,
+    formatCompactDuration,
+    getCurrentAssistantEl: () => currentAssistantEl,
+    getCurrentTurnStartedAt: () => currentTurnStartedAt,
+    getTimer: () => currentTurnTimer,
+    setTimer: (value) => { currentTurnTimer = value; },
+  };
+}
+
 function updateAssistantMeta(state = 'running', durationMs = Date.now() - currentTurnStartedAt) {
+  const turnTimer = window.CCBridge?.turnTimer;
+  if (turnTimer?.updateAssistantMeta) return turnTimer.updateAssistantMeta(state, durationMs, getTurnTimerOptions());
   if (!currentAssistantEl) return;
   const meta = currentAssistantEl.querySelector('.msg-meta');
   if (!meta) return;
@@ -1019,12 +1032,16 @@ function updateAssistantMeta(state = 'running', durationMs = Date.now() - curren
 }
 
 function startTurnTimer() {
+  const turnTimer = window.CCBridge?.turnTimer;
+  if (turnTimer?.startTurnTimer) return turnTimer.startTurnTimer(getTurnTimerOptions());
   stopTurnTimer();
   updateAssistantMeta('running');
   currentTurnTimer = setInterval(() => updateAssistantMeta('running'), 1000);
 }
 
 function stopTurnTimer() {
+  const turnTimer = window.CCBridge?.turnTimer;
+  if (turnTimer?.stopTurnTimer) return turnTimer.stopTurnTimer(getTurnTimerOptions());
   if (!currentTurnTimer) return;
   clearInterval(currentTurnTimer);
   currentTurnTimer = null;

@@ -159,6 +159,7 @@ cc-bridge/
 - 新增 `static/js/stream-events.js`，把 assistant stream event 对当前回复块、workspace 预览和 Task 注册的状态推进逻辑从 `static/app.js` 拆出并挂载到 `window.CCBridge.streamEvents`。
 - 新增 `static/js/message-ui.js`，把 assistant/user/system 消息 DOM 创建和上下文注入追踪渲染逻辑从 `static/app.js` 拆出并挂载到 `window.CCBridge.messageUi`。
 - 新增 `static/js/completion-sync.js`，把后台 session 完成后的历史延迟同步逻辑从 `static/app.js` 拆出并挂载到 `window.CCBridge.completionSync`。
+- 新增 `static/js/turn-timer.js`，把 assistant 回复耗时 meta 更新和 turn timer 管理逻辑从 `static/app.js` 拆出并挂载到 `window.CCBridge.turnTimer`。
 
 ## 后续验收标准
 
