@@ -129,6 +129,7 @@ cc-bridge/
 - 新增 `static/js/remote.js`，把远程目标管理页面逻辑从 `static/app.js` 拆出并挂载到 `window.CCBridge.remote`。
 - 新增 `static/js/scheduled-tasks.js`，把定时任务页面逻辑从 `static/app.js` 拆出并挂载到 `window.CCBridge.scheduledTasks`。
 - 新增 `static/js/settings.js`，把主题、语言、字体、通知、局域网访问和上下文偏好相关前端逻辑从 `static/app.js` 拆出并挂载到 `window.CCBridge.settings`。
+- 新增 `static/js/config.js`，把环境变量配置页与 env profile 管理相关前端逻辑从 `static/app.js` 拆出并挂载到 `window.CCBridge.config`。
 
 ## 后续验收标准
 
