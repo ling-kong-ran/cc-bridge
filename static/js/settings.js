@@ -164,45 +164,9 @@
   }
 
   async function loadThemePreference() {
+    let data;
     try {
-      const data = await root.api.json('/api/gui-settings');
-      const language = data.language === 'zh' ? 'zh' : 'en';
-      const size = normalizeFontSize(data.font_size_percent);
-      savedModelPref = data.default_model || '';
-      autoUpdateEnabled = data.auto_update_enabled !== false;
-      skipUpdateVersion = data.skip_update_version || '';
-      const autoUpdateToggle = document.getElementById('auto-update-toggle');
-      if (autoUpdateToggle) autoUpdateToggle.checked = autoUpdateEnabled;
-
-      if (data.theme === 'light' || data.theme === 'dark') {
-        applyTheme(data.theme, false);
-      } else {
-        const currentTheme = document.documentElement.classList.contains('light-theme') ? 'light' : 'dark';
-        saveGuiSettings({ theme: currentTheme });
-      }
-
-      applyFontSize(size, false);
-      try {
-        await applyLanguage(language, false);
-      } catch (e) {
-        console.warn('Apply saved language failed:', e);
-      }
-      applyNotificationPreference(Boolean(data.notifications_enabled));
-      applyNotifyFeishuPreference(Boolean(data.notify_feishu));
-      try {
-        await loadContextSettings();
-      } catch (e) {
-        console.warn('Load context settings failed:', e);
-        applyMemoryAutoInjectPreference(true);
-      }
-      accessContext = { isLocalhost: Boolean(data.is_localhost), defaultCwd: data.default_cwd || '' };
-      document.body.classList.toggle('pane-right-collapsed', data.right_panel_collapsed === true);
-      applyRightPaneWidth(data.right_panel_width);
-      applyLanAccessPreference(data);
-
-      if (data.language !== language || Number(data.font_size_percent) !== size) {
-        saveGuiSettings({ language, font_size_percent: size });
-      }
+      data = await root.api.json('/api/gui-settings');
     } catch (e) {
       applyFontSize(100, false);
       try {
@@ -214,6 +178,53 @@
       applyNotifyFeishuPreference(false);
       applyMemoryAutoInjectPreference(true);
       applyLanAccessPreference({ is_localhost: false, lan_access_enabled: false });
+      return;
+    }
+
+    const language = data.language === 'zh' ? 'zh' : 'en';
+    const size = normalizeFontSize(data.font_size_percent);
+    savedModelPref = data.default_model || '';
+    autoUpdateEnabled = data.auto_update_enabled !== false;
+    skipUpdateVersion = data.skip_update_version || '';
+    const autoUpdateToggle = document.getElementById('auto-update-toggle');
+    if (autoUpdateToggle) autoUpdateToggle.checked = autoUpdateEnabled;
+
+    if (languageSelect) languageSelect.value = language;
+    if (notifyFeishu) notifyFeishu.checked = data.notify_feishu === true;
+
+    if (data.theme === 'light' || data.theme === 'dark') {
+      applyTheme(data.theme, false);
+    } else {
+      const currentTheme = document.documentElement.classList.contains('light-theme') ? 'light' : 'dark';
+      saveGuiSettings({ theme: currentTheme });
+    }
+
+    applyFontSize(size, false);
+    try {
+      await applyLanguage(language, false);
+    } catch (e) {
+      console.warn('Apply saved language failed:', e);
+      if (languageSelect) languageSelect.value = language;
+    }
+    applyNotificationPreference(Boolean(data.notifications_enabled));
+    applyNotifyFeishuPreference(data.notify_feishu === true);
+    try {
+      await loadContextSettings();
+    } catch (e) {
+      console.warn('Load context settings failed:', e);
+      applyMemoryAutoInjectPreference(true);
+    }
+    accessContext = { isLocalhost: Boolean(data.is_localhost), defaultCwd: data.default_cwd || '' };
+    document.body.classList.toggle('pane-right-collapsed', data.right_panel_collapsed === true);
+    try {
+      applyRightPaneWidth(data.right_panel_width);
+    } catch (e) {
+      console.warn('Apply right pane width failed:', e);
+    }
+    applyLanAccessPreference(data);
+
+    if (data.language !== language || Number(data.font_size_percent) !== size) {
+      saveGuiSettings({ language, font_size_percent: size });
     }
   }
 
