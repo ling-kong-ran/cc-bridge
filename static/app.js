@@ -2390,7 +2390,26 @@ function bindSSEEvents(source = eventSource) {
   };
 }
 
+function getSseOptions() {
+  return {
+    t,
+    connectionStatus,
+    topbarConnection,
+    getClientId: () => clientId,
+    getConnected: () => connectionOnline,
+    setConnected: (connected) => { connectionOnline = connected; },
+    updateConnectionText,
+    renderTopbarStatusSummary,
+  };
+}
+
 function setConnectionStatus(connected) {
+  const sse = window.CCBridge?.sse;
+  if (sse?.setConnectionStatus) {
+    sse.setConnectionStatus(connected, getSseOptions());
+    if (btnNewSession) btnNewSession.style.opacity = connected ? '1' : '0.5';
+    return;
+  }
   connectionOnline = connected;
   const dot = connectionStatus.querySelector('.status-dot');
   dot.className = `status-dot ${connected ? 'online' : 'offline'}`;
@@ -2400,6 +2419,8 @@ function setConnectionStatus(connected) {
 }
 
 function updateConnectionText() {
+  const sse = window.CCBridge?.sse;
+  if (sse?.updateConnectionText) return sse.updateConnectionText(getSseOptions());
   const text = connectionStatus.querySelector('.status-text');
   if (text) text.textContent = connectionOnline ? t('connected') : t('connecting');
 }
@@ -2408,6 +2429,7 @@ function updateConnectionText() {
 async function sendAction(action, extra = {}) {
   try {
     const sse = window.CCBridge?.sse;
+    if (sse?.sendActionRequest) return await sse.sendActionRequest(action, extra, getSseOptions());
     if (sse?.sendAction) return await sse.sendAction(clientId, action, extra);
     const resp = await fetch('/api/action', {
       method: 'POST',

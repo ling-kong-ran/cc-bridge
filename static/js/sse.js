@@ -68,6 +68,25 @@
     return resp.json();
   }
 
+  function setConnectionStatus(connected, options = {}) {
+    options.setConnected?.(connected);
+    const dot = options.connectionStatus?.querySelector?.('.status-dot');
+    if (dot) dot.className = `status-dot ${connected ? 'online' : 'offline'}`;
+    options.updateConnectionText?.();
+    options.renderTopbarStatusSummary?.();
+  }
+
+  function updateConnectionText(options = {}) {
+    const text = options.connectionStatus?.querySelector?.('.status-text');
+    if (text) text.textContent = options.getConnected?.() ? options.t?.('connected') || 'connected' : options.t?.('connecting') || 'connecting';
+  }
+
+  async function sendActionRequest(action, extra = {}, options = {}) {
+    const clientId = options.getClientId?.() || '';
+    if (!clientId) return { error: options.t?.('notConnected') || 'notConnected' };
+    return sendAction(clientId, action, extra);
+  }
+
   root.sse = {
     getClientId,
     createEventSource,
@@ -76,5 +95,8 @@
     isEventForSession,
     isBackgroundSessionEvent,
     sendAction,
+    setConnectionStatus,
+    updateConnectionText,
+    sendActionRequest,
   };
 })();
