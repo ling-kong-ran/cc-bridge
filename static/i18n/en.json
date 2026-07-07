@@ -19,6 +19,8 @@
   "browseDir": "Browse Directory",
   "history": "History",
   "sessions": "Sessions",
+  "navChat": "Chat",
+  "navSessions": "History",
   "sessionsKicker": "Conversation history",
   "sessionsSubtitle": "Browse all conversations by time and resume a session when needed.",
   "sessionsCount": "{count} sessions",

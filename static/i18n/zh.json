@@ -19,6 +19,8 @@
   "browseDir": "浏览目录",
   "history": "历史会话",
   "sessions": "会话",
+  "navChat": "聊天",
+  "navSessions": "历史",
   "sessionsKicker": "会话历史",
   "sessionsSubtitle": "按时间浏览全部会话，需要时恢复到对话页继续处理。",
   "sessionsCount": "{count} 个会话",
