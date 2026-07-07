@@ -3208,13 +3208,28 @@ function finishCurrentTurnFromProcess() {
   return { prompt: finishedTurn, hadAssistantOutput, durationMs };
 }
 
+function getCompletionSyncOptions() {
+  return {
+    getTimer: () => completionHistorySyncTimer,
+    setTimer: (value) => { completionHistorySyncTimer = value; },
+    getCurrentSessionId: () => currentSessionId,
+    getIsResponding: () => isResponding,
+    getCwd: () => cwdInput.value.trim() || '',
+    reloadSessionHistory,
+  };
+}
+
 function clearCompletionHistorySync() {
+  const completionSync = window.CCBridge?.completionSync;
+  if (completionSync?.clearCompletionHistorySync) return completionSync.clearCompletionHistorySync(getCompletionSyncOptions());
   if (!completionHistorySyncTimer) return;
   clearTimeout(completionHistorySyncTimer);
   completionHistorySyncTimer = null;
 }
 
 function scheduleCompletionHistorySync(sessionId) {
+  const completionSync = window.CCBridge?.completionSync;
+  if (completionSync?.scheduleCompletionHistorySync) return completionSync.scheduleCompletionHistorySync(sessionId, getCompletionSyncOptions());
   if (!sessionId) return;
   clearCompletionHistorySync();
   completionHistorySyncTimer = setTimeout(() => {
