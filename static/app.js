@@ -3144,23 +3144,32 @@ function renderContextTrace(trace = {}) {
 const toastContainer = document.getElementById('toast-container');
 let toastTimer = null;
 
+function getToastOptions() {
+  return { toastContainer };
+}
+
 function showToast(msg, type = 'info', duration = 3000) {
+  const toast = window.CCBridge?.toast;
+  if (toast?.showToast) return toast.showToast(msg, type, duration, getToastOptions());
   const icon = { success: '✓', error: '✗', warning: '!', info: 'i' }[type] || 'i';
-  const toast = document.createElement('div');
-  toast.className = `toast ${type}`;
-  toast.innerHTML = `<span class="toast-icon">${icon}</span><span class="toast-msg">${msg}</span><button class="toast-close">&times;</button>`;
-  toast.querySelector('.toast-close').addEventListener('click', () => dismissToast(toast));
-  toast.addEventListener('mouseenter', () => { if (toast._timer) clearTimeout(toast._timer); });
-  toast.addEventListener('mouseleave', () => { toast._timer = setTimeout(() => dismissToast(toast), 2000); });
-  toastContainer.appendChild(toast);
-  toast._timer = setTimeout(() => dismissToast(toast), duration);
+  const el = document.createElement('div');
+  el.className = `toast ${type}`;
+  el.innerHTML = `<span class="toast-icon">${icon}</span><span class="toast-msg">${msg}</span><button class="toast-close">&times;</button>`;
+  el.querySelector('.toast-close').addEventListener('click', () => dismissToast(el));
+  el.addEventListener('mouseenter', () => { if (el._timer) clearTimeout(el._timer); });
+  el.addEventListener('mouseleave', () => { el._timer = setTimeout(() => dismissToast(el), 2000); });
+  toastContainer.appendChild(el);
+  el._timer = setTimeout(() => dismissToast(el), duration);
   // 最多保留 5 条，旧的自上而下消失
   while (toastContainer.children.length > 5) {
     dismissToast(toastContainer.firstElementChild);
   }
+  return el;
 }
 
 function dismissToast(toast) {
+  const toastModule = window.CCBridge?.toast;
+  if (toastModule?.dismissToast) return toastModule.dismissToast(toast);
   if (toast._dismissing) return;
   toast._dismissing = true;
   if (toast._timer) { clearTimeout(toast._timer); toast._timer = null; }
