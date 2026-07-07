@@ -5298,31 +5298,6 @@ function getParentPath(p) {
 }
 
 // ─── 文件选择器 ──────────────────────────────────────────────
-const filePickerOverlay = document.getElementById('file-picker-overlay');
-const filePickerList = document.getElementById('file-picker-list');
-const filePickerCurrentPath = document.getElementById('file-picker-current-path');
-const filePickerUp = document.getElementById('file-picker-up');
-const filePickerClose = document.getElementById('file-picker-close');
-const filePickerConfirm = document.getElementById('file-picker-confirm');
-const filePickerSelectAll = document.getElementById('file-picker-select-all');
-const filePickerSelectedCount = document.getElementById('file-picker-selected-count');
-const filePickerSearch = document.getElementById('file-picker-search');
-const filePickerTabs = document.getElementById('file-picker-tabs');
-const filePickerLocal = document.getElementById('file-picker-local');
-const filePickerBrowser = document.getElementById('file-picker-browser');
-const filePickerClientChoose = document.getElementById('file-picker-client-choose');
-const filePickerServerBrowse = document.getElementById('file-picker-server-browse');
-const filePickerLocalHint = document.getElementById('file-picker-local-hint');
-
-let filePickerCurrentDir = '/';
-let filePickerSelected = new Map(); // path -> { name, source, originalPath, remoteTargetName }
-let filePickerItems = [];
-let filePickerVisibleItems = [];
-let filePickerSearchTimer = null;
-let filePickerSearchSeq = 0;
-let filePickerMode = 'local';
-let filePickerCallback = null;  // 自定义确认回调 (memory import 等)
-
 function getFilePickerOptions() {
   return {
     t,
@@ -5335,208 +5310,98 @@ function getFilePickerOptions() {
     addSystemMsg,
     addAttachment: (attachment, render) => window.CCBridge.input?.addAttachment?.(attachment, render),
     renderAttachments,
-    filePickerOverlay,
-    filePickerList,
-    filePickerCurrentPath,
-    filePickerUp,
-    filePickerClose,
-    filePickerConfirm,
-    filePickerSelectAll,
-    filePickerSelectedCount,
-    filePickerSearch,
-    filePickerTabs,
-    filePickerLocal,
-    filePickerBrowser,
-    filePickerClientChoose,
-    filePickerServerBrowse,
-    filePickerLocalHint,
+    filePickerOverlay: document.getElementById('file-picker-overlay'),
+    filePickerList: document.getElementById('file-picker-list'),
+    filePickerCurrentPath: document.getElementById('file-picker-current-path'),
+    filePickerUp: document.getElementById('file-picker-up'),
+    filePickerClose: document.getElementById('file-picker-close'),
+    filePickerConfirm: document.getElementById('file-picker-confirm'),
+    filePickerSelectAll: document.getElementById('file-picker-select-all'),
+    filePickerSelectedCount: document.getElementById('file-picker-selected-count'),
+    filePickerSearch: document.getElementById('file-picker-search'),
+    filePickerTabs: document.getElementById('file-picker-tabs'),
+    filePickerLocal: document.getElementById('file-picker-local'),
+    filePickerBrowser: document.getElementById('file-picker-browser'),
+    filePickerClientChoose: document.getElementById('file-picker-client-choose'),
+    filePickerServerBrowse: document.getElementById('file-picker-server-browse'),
+    filePickerLocalHint: document.getElementById('file-picker-local-hint'),
     fileInput: document.getElementById('file-input'),
     cwdInput,
   };
 }
 
 function initFilePicker() {
-  const picker = window.CCBridge?.filePicker;
-  if (picker?.initFilePicker) {
-    picker.initFilePicker(getFilePickerOptions());
-    return;
-  }
-  filePickerClose.addEventListener('click', closeFilePicker);
-  filePickerOverlay.addEventListener('click', (e) => {
-    if (e.target === filePickerOverlay) closeFilePicker();
-  });
-  filePickerUp.addEventListener('click', () => {
-    navigateFilePicker(getParentPath(filePickerCurrentDir));
-  });
-  filePickerConfirm.addEventListener('click', confirmFileSelection);
-  filePickerSelectAll?.addEventListener('click', toggleSelectAllVisibleFiles);
-  filePickerSearch.addEventListener('input', handleFilePickerSearchInput);
-  filePickerClientChoose?.addEventListener('click', () => document.getElementById('file-input')?.click());
-  filePickerServerBrowse?.addEventListener('click', () => setFilePickerMode('server'));
+  return window.CCBridge.filePicker?.initFilePicker?.(getFilePickerOptions());
 }
 
 function normalizeFilePickerMode(mode) {
-  const picker = window.CCBridge?.filePicker;
-  if (picker?.normalizeFilePickerMode) return picker.normalizeFilePickerMode(mode, getFilePickerOptions());
-  return accessContext.isLocalhost && mode === 'local' ? 'server' : mode;
+  return window.CCBridge.filePicker?.normalizeFilePickerMode?.(mode, getFilePickerOptions());
 }
 
 function getAttachmentSources() {
-  const picker = window.CCBridge?.filePicker;
-  if (picker?.getAttachmentSources) return picker.getAttachmentSources(getFilePickerOptions());
-  const hasRemote = Boolean(remoteTargetSelect?.value);
-  const sources = [];
-  if (accessContext.isLocalhost) {
-    sources.push({ id: 'server', label: t('serverWorkspace') });
-  } else {
-    sources.push({ id: 'client', label: t('thisDevice') });
-    sources.push({ id: 'server', label: t('serverWorkspace') });
-  }
-  if (hasRemote) sources.push({ id: 'remote', label: t('remoteTarget') });
-  return sources;
+  return window.CCBridge.filePicker?.getAttachmentSources?.(getFilePickerOptions()) || [];
 }
 
 function openFilePicker(callback) {
-  const picker = window.CCBridge?.filePicker;
-  if (picker?.openFilePicker) return picker.openFilePicker(callback, getFilePickerOptions());
-  filePickerCallback = callback || null;
-  filePickerSelected.clear();
-  filePickerSearch.value = '';
-  updateFilePickerCount();
-  renderFilePickerTabs();
-  filePickerOverlay.style.display = 'flex';
-  // 设置 picker 标题
-  const title = filePickerOverlay.querySelector('.picker-title');
-  if (title) title.textContent = callback ? t('importMemoryFiles') : t('chooseAttachment');
-  setFilePickerMode(accessContext.isLocalhost ? 'server' : 'client');
+  return window.CCBridge.filePicker?.openFilePicker?.(callback, getFilePickerOptions());
 }
 
 function renderFilePickerTabs() {
-  const picker = window.CCBridge?.filePicker;
-  if (picker?.renderFilePickerTabs) return picker.renderFilePickerTabs(getFilePickerOptions());
-  const sources = getAttachmentSources();
-  filePickerTabs.innerHTML = sources.map(source => `<button type="button" class="picker-tab" data-mode="${esc(source.id)}">${esc(source.label)}</button>`).join('');
-  filePickerTabs.querySelectorAll('.picker-tab').forEach(btn => {
-    btn.addEventListener('click', () => setFilePickerMode(btn.dataset.mode));
-  });
+  return window.CCBridge.filePicker?.renderFilePickerTabs?.(getFilePickerOptions());
 }
 
 function setFilePickerMode(mode) {
-  const picker = window.CCBridge?.filePicker;
-  if (picker?.setFilePickerMode) return picker.setFilePickerMode(mode, getFilePickerOptions());
-  filePickerMode = normalizeFilePickerMode(mode);
-  filePickerTabs.querySelectorAll('.picker-tab').forEach(btn => btn.classList.toggle('active', btn.dataset.mode === filePickerMode));
-  const localMode = filePickerMode === 'client' || filePickerMode === 'local';
-  filePickerLocal.style.display = localMode ? '' : 'none';
-  filePickerBrowser.style.display = localMode ? 'none' : '';
-  filePickerConfirm.style.display = localMode ? 'none' : '';
-  if (localMode) {
-    filePickerLocalHint.textContent = filePickerMode === 'local' ? t('chooseLocalHint') : t('chooseClientHint');
-    filePickerServerBrowse.style.display = filePickerMode === 'local' ? '' : 'none';
-    return;
-  }
-  filePickerConfirm.style.display = '';
-  navigateFilePicker(filePickerMode === 'remote' ? '/' : (cwdInput.value.trim() || accessContext.defaultCwd || '/'));
+  return window.CCBridge.filePicker?.setFilePickerMode?.(mode, getFilePickerOptions());
 }
 
 function closeFilePicker() {
-  const picker = window.CCBridge?.filePicker;
-  if (picker?.closeFilePicker) return picker.closeFilePicker(getFilePickerOptions());
-  filePickerOverlay.style.display = 'none';
+  return window.CCBridge.filePicker?.closeFilePicker?.(getFilePickerOptions());
 }
 
 function updateFilePickerCount() {
-  const picker = window.CCBridge?.filePicker;
-  if (picker?.updateFilePickerCount) return picker.updateFilePickerCount(getFilePickerOptions());
-  filePickerSelectedCount.textContent = t('selectedFiles', { count: filePickerSelected.size });
-  filePickerConfirm.disabled = filePickerSelected.size === 0;
-  updateFilePickerSelectAllButton();
+  return window.CCBridge.filePicker?.updateFilePickerCount?.(getFilePickerOptions());
 }
 
 function getVisibleSelectableFilePickerItems() {
-  const picker = window.CCBridge?.filePicker;
-  if (picker?.getVisibleSelectableFilePickerItems) return picker.getVisibleSelectableFilePickerItems(getFilePickerOptions());
-  if (!filePickerList) return [];
-  return Array.from(filePickerList.querySelectorAll('.file-picker-item'))
-    .filter(el => el.dataset.type !== 'dir' && el.dataset.type !== 'drive')
-    .map(el => ({
-      path: el.dataset.path,
-      name: el.dataset.name,
-      source: filePickerMode === 'remote' ? 'remote' : 'server',
-      originalPath: el.dataset.path,
-      remoteTargetName: getRemoteTargetName(),
-    }))
-    .filter(item => item.path);
+  return window.CCBridge.filePicker?.getVisibleSelectableFilePickerItems?.(getFilePickerOptions()) || [];
 }
 
 function updateFilePickerSelectAllButton() {
-  const picker = window.CCBridge?.filePicker;
-  if (picker?.updateFilePickerSelectAllButton) return picker.updateFilePickerSelectAllButton(getFilePickerOptions());
-  if (!filePickerSelectAll) return;
-  const items = getVisibleSelectableFilePickerItems();
-  const hasItems = items.length > 0;
-  const allSelected = hasItems && items.every(item => filePickerSelected.has(item.path));
-  filePickerSelectAll.style.display = filePickerMode === 'client' || filePickerMode === 'local' ? 'none' : '';
-  filePickerSelectAll.disabled = !hasItems;
-  filePickerSelectAll.textContent = allSelected ? t('clearVisibleFiles') : t('selectAllFiles');
+  return window.CCBridge.filePicker?.updateFilePickerSelectAllButton?.(getFilePickerOptions());
 }
 
 function toggleSelectAllVisibleFiles() {
-  const picker = window.CCBridge?.filePicker;
-  if (picker?.toggleSelectAllVisibleFiles) return picker.toggleSelectAllVisibleFiles(getFilePickerOptions());
-  const items = getVisibleSelectableFilePickerItems();
-  if (!items.length) return;
-  const allSelected = items.every(item => filePickerSelected.has(item.path));
-  for (const item of items) {
-    if (allSelected) {
-      filePickerSelected.delete(item.path);
-    } else {
-      filePickerSelected.set(item.path, item);
-    }
-  }
-  updateFilePickerCount();
-  renderFilePickerItems(filePickerVisibleItems.length ? filePickerVisibleItems : filePickerItems);
+  return window.CCBridge.filePicker?.toggleSelectAllVisibleFiles?.(getFilePickerOptions());
 }
 
 async function navigateFilePicker(path) {
-  const picker = window.CCBridge?.filePicker;
-  if (picker?.navigateFilePicker) return picker.navigateFilePicker(path, getFilePickerOptions());
-  filePickerCurrentDir = path;
-  filePickerCurrentPath.textContent = path || '/';
-  filePickerItems = [];
-  filePickerVisibleItems = [];
-  filePickerSearch.value = '';
-  filePickerSearchSeq += 1;
-  filePickerList.innerHTML = `<div class="picker-empty">${esc(t('pickerLoading'))}</div>`;
-
-  try {
-    const resp = await window.CCBridge.api.request(filePickerMode === 'remote' ? '/api/remote-files/list' : '/api/browse-files', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(filePickerMode === 'remote' ? { target_id: remoteTargetSelect?.value || '', path } : { path }),
-    });
-    const data = await resp.json();
-
-    if (data.error) {
-      filePickerList.innerHTML = `<div class="picker-empty">${esc(data.error)}</div>`;
-      return;
-    }
-
-    filePickerCurrentDir = data.current || path;
-    filePickerCurrentPath.textContent = filePickerCurrentDir;
-
-    filePickerItems = data.items || [];
-
-    if (filePickerItems.length === 0) {
-      filePickerList.innerHTML = `<div class="picker-empty">${esc(t('emptyDir'))}</div>`;
-      return;
-    }
-
-    renderFilePickerItems(filePickerItems);
-  } catch (e) {
-    filePickerList.innerHTML = `<div class="picker-empty">${esc(t('requestFailed', { message: e.message }))}</div>`;
-  }
+  return window.CCBridge.filePicker?.navigateFilePicker?.(path, getFilePickerOptions());
 }
+
+function handleFilePickerSearchInput() {
+  return window.CCBridge.filePicker?.handleFilePickerSearchInput?.(getFilePickerOptions());
+}
+
+async function searchFilePicker(keyword) {
+  return window.CCBridge.filePicker?.searchFilePicker?.(keyword, getFilePickerOptions());
+}
+
+function renderFilePickerItems(items, options = {}) {
+  return window.CCBridge.filePicker?.renderFilePickerItems?.(items, options, getFilePickerOptions());
+}
+
+function getFileIcon(name) {
+  return window.CCBridge.filePicker?.getFileIcon?.(name) || '&#128196;';
+}
+
+async function confirmFileSelection() {
+  return window.CCBridge.filePicker?.confirmFileSelection?.(getFilePickerOptions());
+}
+
+async function cacheRemoteAttachment(filePath, meta) {
+  return window.CCBridge.filePicker?.cacheRemoteAttachment?.(filePath, meta, getFilePickerOptions());
+}
+
 
 function hasModelOption(model) {
   const runtime = window.CCBridge?.runtime;
@@ -5677,177 +5542,6 @@ function getDisplayModelName(model, allowSelectedFallback = true) {
   if (isDisplayableModel(model)) return formatModelName(model);
   const selected = allowSelectedFallback ? modelSelect?.value : '';
   return isDisplayableModel(selected) ? formatModelName(selected) : '';
-}
-
-function handleFilePickerSearchInput() {
-  const picker = window.CCBridge?.filePicker;
-  if (picker?.handleFilePickerSearchInput) return picker.handleFilePickerSearchInput(getFilePickerOptions());
-  window.clearTimeout(filePickerSearchTimer);
-  const keyword = filePickerSearch.value.trim();
-
-  if (!keyword) {
-    renderFilePickerItems(filePickerItems);
-    return;
-  }
-
-  if (filePickerMode === 'remote') {
-    renderFilePickerItems(filePickerItems);
-    return;
-  }
-
-  filePickerSearchTimer = window.setTimeout(() => {
-    searchFilePicker(keyword);
-  }, 250);
-}
-
-async function searchFilePicker(keyword) {
-  const picker = window.CCBridge?.filePicker;
-  if (picker?.searchFilePicker) return picker.searchFilePicker(keyword, getFilePickerOptions());
-  const seq = ++filePickerSearchSeq;
-  filePickerList.innerHTML = `<div class="picker-empty">${esc(t('searchLoading'))}</div>`;
-
-  try {
-    const resp = await fetch('/api/search-files', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ path: filePickerCurrentDir, query: keyword }),
-    });
-    const data = await resp.json();
-    if (seq !== filePickerSearchSeq || filePickerSearch.value.trim() !== keyword) return;
-
-    if (data.error) {
-      filePickerList.innerHTML = `<div class="picker-empty">${esc(data.error)}</div>`;
-      return;
-    }
-
-    renderFilePickerItems(data.items || [], {
-      emptyText: t('noMatches'),
-      truncated: data.truncated,
-    });
-  } catch (e) {
-    if (seq === filePickerSearchSeq) {
-      filePickerList.innerHTML = `<div class="picker-empty">${esc(t('searchFailed', { message: e.message }))}</div>`;
-    }
-  }
-}
-
-function renderFilePickerItems(items, options = {}) {
-  const picker = window.CCBridge?.filePicker;
-  if (picker?.renderFilePickerItems) return picker.renderFilePickerItems(items, options, getFilePickerOptions());
-  const keyword = filePickerSearch.value.trim().toLowerCase();
-  const filteredItems = keyword && items === filePickerItems
-    ? items.filter(item => `${item.name} ${item.path}`.toLowerCase().includes(keyword))
-    : items;
-  filePickerVisibleItems = filteredItems;
-
-  if (filteredItems.length === 0) {
-    filePickerList.innerHTML = `<div class="picker-empty">${esc(options.emptyText || (keyword ? t('noMatches') : t('emptyDir')))}</div>`;
-    updateFilePickerSelectAllButton();
-    return;
-  }
-
-  filePickerList.innerHTML = `${options.truncated ? `<div class="picker-empty compact">${esc(t('tooManyResults'))}</div>` : ''}${filteredItems.map(item => {
-    const isDir = item.type === 'dir' || item.type === 'drive';
-    const icon = item.type === 'drive' ? '&#128423;' : isDir ? '&#128193;' : getFileIcon(item.name);
-    const isSelected = filePickerSelected.has(item.path);
-    const displayName = item.display || item.name;
-    return `<div class="picker-item file-picker-item ${item.type === 'drive' ? 'drive' : ''} ${isSelected ? 'selected' : ''}"
-        data-path="${esc(item.path)}" data-type="${esc(item.type)}" data-name="${esc(displayName)}">
-      <span class="picker-item-icon">${icon}</span>
-      <span class="picker-item-name">${esc(displayName)}</span>
-      ${!isDir && isSelected ? '<span class="picker-check">✓</span>' : ''}
-    </div>`;
-  }).join('')}`;
-
-  filePickerList.querySelectorAll('.file-picker-item').forEach(el => {
-    el.addEventListener('click', () => {
-      const type = el.dataset.type;
-      const itemPath = el.dataset.path;
-      const itemName = el.dataset.name;
-
-      if (type === 'dir' || type === 'drive') {
-        navigateFilePicker(itemPath);
-        return;
-      }
-
-      if (filePickerSelected.has(itemPath)) {
-        filePickerSelected.delete(itemPath);
-      } else {
-          filePickerSelected.set(itemPath, {
-            name: itemName,
-            source: filePickerMode === 'remote' ? 'remote' : 'server',
-            originalPath: itemPath,
-            remoteTargetName: getRemoteTargetName(),
-          });
-      }
-      updateFilePickerCount();
-      renderFilePickerItems(filePickerSearch.value.trim() ? filteredItems : filePickerItems);
-    });
-  });
-  updateFilePickerSelectAllButton();
-}
-
-function getFileIcon(name) {
-  const picker = window.CCBridge?.filePicker;
-  if (picker?.getFileIcon) return picker.getFileIcon(name);
-  const ext = name.split('.').pop().toLowerCase();
-  const imageExts = ['png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp', 'svg'];
-  const codeExts = ['js', 'ts', 'py', 'go', 'rs', 'java', 'c', 'cpp', 'h', 'cs', 'rb', 'php', 'sh', 'bat'];
-  const docExts = ['pdf', 'doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx'];
-  const textExts = ['txt', 'md', 'log', 'csv', 'json', 'yaml', 'yml', 'toml', 'xml', 'html', 'css'];
-  if (imageExts.includes(ext)) return '&#128444;';
-  if (codeExts.includes(ext)) return '&#128196;';
-  if (docExts.includes(ext)) return '&#128209;';
-  if (textExts.includes(ext)) return '&#128196;';
-  return '&#128196;';
-}
-
-async function confirmFileSelection() {
-  const picker = window.CCBridge?.filePicker;
-  if (picker?.confirmFileSelection) return picker.confirmFileSelection(getFilePickerOptions());
-  if (filePickerSelected.size === 0) return;
-
-  if (filePickerCallback) {
-    const items = Array.from(filePickerSelected.entries()).map(([path, meta]) => ({ path, ...meta }));
-    await filePickerCallback(items);
-    filePickerCallback = null;
-    closeFilePicker();
-    return;
-  }
-
-  for (const [filePath, meta] of filePickerSelected) {
-    if (meta.source === 'remote') {
-      await cacheRemoteAttachment(filePath, meta);
-    } else {
-      window.CCBridge.input?.addAttachment?.({ name: meta.name, path: filePath, isImage: false, uploaded: false, source: 'server', originalPath: filePath }, false);
-    }
-  }
-
-  renderAttachments();
-  closeFilePicker();
-}
-
-async function cacheRemoteAttachment(filePath, meta) {
-  const picker = window.CCBridge?.filePicker;
-  if (picker?.cacheRemoteAttachment) return picker.cacheRemoteAttachment(filePath, meta, getFilePickerOptions());
-  const data = await window.CCBridge.api.postJson('/api/remote-files/cache', {
-    target_id: remoteTargetSelect?.value || '',
-    path: filePath,
-    cwd: cwdInput.value.trim() || '',
-  });
-  if (!data.ok) {
-    addSystemMsg(t('remoteFileCacheFailed', { message: data.error || 'failed' }), true);
-    return;
-  }
-  window.CCBridge.input?.addAttachment?.({
-    name: data.name || meta.name,
-    path: data.path,
-    isImage: false,
-    uploaded: true,
-    source: 'remote',
-    originalPath: data.original_path || filePath,
-    remoteTargetName: data.remote_target_name || meta.remoteTargetName,
-  }, false);
 }
 
 function getRemoteTargetName() {
