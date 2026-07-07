@@ -18,6 +18,12 @@ function pagePath(name) {
   return path.join(__dirname, name)
 }
 
+function iconPath() {
+  if (process.platform === 'win32') return path.resolve(__dirname, '..', 'assets', 'icon.ico')
+  if (process.platform === 'darwin') return path.resolve(__dirname, '..', 'assets', 'icon.icns')
+  return path.resolve(__dirname, '..', 'assets', 'icon.png')
+}
+
 function resolvePythonCommand() {
   if (process.env.CCB_DESKTOP_PYTHON) return process.env.CCB_DESKTOP_PYTHON
   if (process.platform === 'win32') return 'python'
@@ -32,6 +38,10 @@ function createWindow() {
     height: 860,
     minWidth: 960,
     minHeight: 640,
+    show: false,
+    frame: false,
+    titleBarStyle: 'hidden',
+    icon: iconPath(),
     autoHideMenuBar: true,
     menuBarVisible: false,
     webPreferences: {
@@ -129,7 +139,10 @@ function startBackend() {
   waitForReady(backendProcess)
     .then(event => {
       backendReady = { ...event, token }
-      if (mainWindow && !mainWindow.isDestroyed()) mainWindow.loadURL(event.url)
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.loadURL(event.url)
+          .then(() => mainWindow.webContents.insertCSS('html { --desktop-window-frame: 1; }'))
+      }
     })
     .catch(error => {
       console.error(error)

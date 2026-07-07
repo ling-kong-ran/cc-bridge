@@ -30,6 +30,7 @@
   "build": {
     "appId": "local.cc-bridge.desktop",
     "productName": "CC Bridge",
+    "icon": "desktop/assets/icon",
     "artifactName": "CC-Bridge-${version}-${os}-${arch}.${ext}",
     "publish": [
       {
@@ -43,6 +44,7 @@
     },
     "files": [
       "desktop/electron/**",
+      "desktop/assets/**",
       "package.json"
     ],
     "extraResources": [
