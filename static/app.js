@@ -4527,7 +4527,34 @@ function resetAssistantStreamState() {
   streamBlocks = {};
 }
 
+function getHistoryLoaderOptions() {
+  return {
+    messagesEl,
+    getCwd: () => cwdInput.value.trim() || '',
+    getAssistantState: () => ({
+      currentAssistantEl,
+      currentAssistantMessageId,
+      currentContent,
+      streamBlocks,
+    }),
+    setAssistantState: (state = {}) => {
+      currentAssistantEl = state.currentAssistantEl;
+      currentAssistantMessageId = state.currentAssistantMessageId;
+      currentContent = state.currentContent;
+      streamBlocks = state.streamBlocks;
+    },
+    resetAssistantStreamState,
+    renderHistory,
+    toolResults,
+    toolStartTimes,
+    captureActiveWorkspaceSnapshot,
+    addSystemMsg,
+  };
+}
+
 function renderStaticHistory(history) {
+  const historyLoader = window.CCBridge?.historyLoader;
+  if (historyLoader?.renderStaticHistory) return historyLoader.renderStaticHistory(history, getHistoryLoaderOptions());
   const previousAssistantEl = currentAssistantEl;
   const previousAssistantMessageId = currentAssistantMessageId;
   const previousContent = currentContent;
@@ -4541,6 +4568,8 @@ function renderStaticHistory(history) {
 }
 
 async function loadSessionHistory(sessionId, cwd) {
+  const historyLoader = window.CCBridge?.historyLoader;
+  if (historyLoader?.loadSessionHistory) return historyLoader.loadSessionHistory(sessionId, cwd, getHistoryLoaderOptions());
   try {
     const resp = await fetch('/api/sessions/history', {
       method: 'POST',
@@ -4557,6 +4586,8 @@ async function loadSessionHistory(sessionId, cwd) {
 }
 
 async function reloadSessionHistory(sessionId, cwd) {
+  const historyLoader = window.CCBridge?.historyLoader;
+  if (historyLoader?.reloadSessionHistory) return historyLoader.reloadSessionHistory(sessionId, cwd, getHistoryLoaderOptions());
   try {
     const resp = await fetch('/api/sessions/history', {
       method: 'POST',
