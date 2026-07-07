@@ -2108,100 +2108,30 @@ function getTaskActivityOptions() {
   };
 }
 
+function getTaskActivityModule() {
+  const mod = window.CCBridge?.taskActivity;
+  if (!mod) console.error('CCBridge taskActivity module is not loaded');
+  return mod;
+}
+
 function registerTaskBlocks(content) {
-  const taskActivity = window.CCBridge?.taskActivity;
-  if (taskActivity?.registerTaskBlocks) return taskActivity.registerTaskBlocks(content, getTaskActivityOptions());
-  let changed = false;
-  for (const block of content) {
-    if (block.type !== 'tool_use' || block.name !== 'Task' || !block.id) continue;
-    if (finishedTaskIds.has(block.id)) continue;
-    let input = block.input;
-    if (typeof input === 'string') { try { input = JSON.parse(input); } catch (e) { input = {}; } }
-    if (!input || typeof input !== 'object') input = {};
-    const existing = runningTasks.get(block.id) || {};
-    runningTasks.set(block.id, {
-      type: input.subagent_type || existing.type || '',
-      desc: input.description || existing.desc || '',
-      last: existing.last || '',
-    });
-    changed = true;
-  }
-  if (changed) renderAgentStatus();
+  return getTaskActivityModule()?.registerTaskBlocks?.(content, getTaskActivityOptions());
 }
 
 function updateTaskActivity(parentToolUseId, message) {
-  const taskActivity = window.CCBridge?.taskActivity;
-  if (taskActivity?.updateTaskActivity) return taskActivity.updateTaskActivity(parentToolUseId, message, getTaskActivityOptions());
-  if (!parentToolUseId || finishedTaskIds.has(parentToolUseId)) return;
-  // 会话恢复到一半时可能没见过对应 Task 块，此处兜底注册
-  const entry = runningTasks.get(parentToolUseId) || { type: '', desc: '', last: '' };
-  const content = message?.content;
-  if (Array.isArray(content)) {
-    for (const block of content) {
-      if (block.type === 'text' && block.text) {
-        entry.last = block.text.replace(/\s+/g, ' ').trim().slice(-60);
-      } else if (block.type === 'tool_use' && block.name) {
-        entry.last = `> ${block.name}`;
-      }
-    }
-  }
-  runningTasks.set(parentToolUseId, entry);
-  renderAgentStatus();
+  return getTaskActivityModule()?.updateTaskActivity?.(parentToolUseId, message, getTaskActivityOptions());
 }
 
 function finishTasks(ids) {
-  const taskActivity = window.CCBridge?.taskActivity;
-  if (taskActivity?.finishTasks) return taskActivity.finishTasks(ids, getTaskActivityOptions());
-  let changed = false;
-  let completedTask = null;
-  for (const id of ids || []) {
-    const taskInfo = runningTasks.get(id);
-    if (taskInfo && !completedTask) completedTask = taskInfo;
-    finishedTaskIds.add(id);
-    if (runningTasks.delete(id)) changed = true;
-  }
-  if (changed) {
-    notifyComplete('subagent', {
-      agent: completedTask?.type || t('subagent'),
-      task: completedTask?.last || completedTask?.desc || '',
-      model: getDisplayModelName(modelSelect.value),
-    });
-    renderAgentStatus();
-    if (currentAssistantEl) scheduleRender();
-  }
+  return getTaskActivityModule()?.finishTasks?.(ids, getTaskActivityOptions());
 }
 
 function clearRunningTasks({ keepFinished = false } = {}) {
-  const taskActivity = window.CCBridge?.taskActivity;
-  if (taskActivity?.clearRunningTasks) return taskActivity.clearRunningTasks(getTaskActivityOptions(), { keepFinished });
-  if (runningTasks.size) {
-    runningTasks.clear();
-    renderAgentStatus();
-  }
-  if (!keepFinished) finishedTaskIds.clear();
+  return getTaskActivityModule()?.clearRunningTasks?.(getTaskActivityOptions(), { keepFinished });
 }
 
 function renderAgentStatus() {
-  const taskActivity = window.CCBridge?.taskActivity;
-  if (taskActivity?.renderAgentStatus) return taskActivity.renderAgentStatus(getTaskActivityOptions());
-  const bar = document.getElementById('agent-status-bar');
-  if (!bar) return;
-  if (runningTasks.size === 0) {
-    bar.style.display = 'none';
-    bar.innerHTML = '';
-    return;
-  }
-  bar.style.display = '';
-  let html = `<span class="agent-status-title">${esc(t('agentsRunning', { count: runningTasks.size }))}</span>`;
-  for (const [id, info] of runningTasks) {
-    const label = info.type || t('subagent');
-    const detail = info.last || info.desc || '';
-    html += `<span class="agent-chip" title="${esc(info.desc || '')}">` +
-      `<span class="agent-spinner"></span>${esc(label)}` +
-      `${detail ? `<span class="agent-chip-detail">${esc(detail.substring(0, 40))}</span>` : ''}` +
-      `</span>`;
-  }
-  bar.innerHTML = html;
+  return getTaskActivityModule()?.renderAgentStatus?.(getTaskActivityOptions());
 }
 
 // ─── Subagent 行内消息渲染 ────────────────────────────────────────
@@ -2210,71 +2140,16 @@ const subagentBubbles = new Map();
 const SUBAGENT_COLORS = ['#c792ea', '#82aaff', '#c3e88d', '#ffcb6b', '#f78c6c', '#89ddff'];
 
 function getSubagentColor(id) {
-  const taskActivity = window.CCBridge?.taskActivity;
-  if (taskActivity?.getSubagentColor) return taskActivity.getSubagentColor(id, getTaskActivityOptions());
-  let hash = 0;
-  for (let i = 0; i < id.length; i++) hash = ((hash << 5) - hash) + id.charCodeAt(i);
-  return SUBAGENT_COLORS[Math.abs(hash) % SUBAGENT_COLORS.length];
+  return getTaskActivityModule()?.getSubagentColor?.(id, getTaskActivityOptions());
 }
 
 function renderSubagentBubble(parentToolUseId, message) {
-  const taskActivity = window.CCBridge?.taskActivity;
-  if (taskActivity?.renderSubagentBubble) return taskActivity.renderSubagentBubble(parentToolUseId, message, getTaskActivityOptions());
-  if (!currentAssistantEl && !isResponding) return;
-  const taskInfo = runningTasks.get(parentToolUseId);
-  const agentName = taskInfo?.type || t('subagent');
-  const desc = taskInfo?.desc || '';
-  const color = getSubagentColor(parentToolUseId);
-
-  let el = subagentBubbles.get(parentToolUseId);
-  if (!el) {
-    el = document.createElement('div');
-    el.className = 'subagent-bubble';
-    el.style.borderLeftColor = color;
-    const container = currentAssistantEl || document.querySelector('#chat-messages .assistant:last-child');
-    if (container) {
-      container.after(el);
-    } else {
-      document.getElementById('chat-messages')?.appendChild(el);
-    }
-    subagentBubbles.set(parentToolUseId, el);
-  }
-
-  const content = message?.content;
-  if (!Array.isArray(content)) return;
-
-  let textParts = [];
-  let toolParts = [];
-  for (const block of content) {
-    if (block.type === 'text' && block.text) {
-      textParts.push(block.text);
-    } else if (block.type === 'tool_use') {
-      toolParts.push(block.name || 'tool');
-    }
-  }
-
-  const text = textParts.join('\n\n');
-  const toolInfo = toolParts.length ? `<span class="subagent-tools">${toolParts.map(t => esc(t)).join(', ')}</span>` : '';
-
-  el.innerHTML = `
-    <div class="subagent-head">
-      <span class="subagent-dot" style="background:${color}"></span>
-      <span class="subagent-name">${esc(agentName)}</span>
-      ${desc ? `<span class="subagent-desc">${esc(desc)}</span>` : ''}
-      ${toolInfo}
-    </div>
-    <div class="subagent-body">${text ? renderMd(text) : ''}</div>
-  `;
-
-  scrollToBottom();
+  return getTaskActivityModule()?.renderSubagentBubble?.(parentToolUseId, message, getTaskActivityOptions());
 }
 
 // 清理 subagent 气泡
 function clearSubagentBubbles() {
-  const taskActivity = window.CCBridge?.taskActivity;
-  if (taskActivity?.clearSubagentBubbles) return taskActivity.clearSubagentBubbles(getTaskActivityOptions());
-  subagentBubbles.forEach(el => el.remove());
-  subagentBubbles.clear();
+  return getTaskActivityModule()?.clearSubagentBubbles?.(getTaskActivityOptions());
 }
 
 function finalizeCurrentAssistantMarkdown() {

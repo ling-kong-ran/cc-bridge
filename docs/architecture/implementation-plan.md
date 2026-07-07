@@ -210,6 +210,7 @@ cc-bridge/
 - 收敛 `static/app.js` 中消息扩展 wrapper，移除剩余本地聊天导出、消息引用、引用 payload 归一化和引用状态 fallback 实现，统一委托 `static/js/message-extras.js`。
 - 收敛 `static/app.js` 中本地化 wrapper，移除剩余本地语言切换、语言包加载和本地化文本渲染 fallback 实现，统一委托 `static/js/localization.js`。
 - 收敛 `static/app.js` 中历史加载 wrapper，移除剩余本地会话历史请求、静态历史渲染和历史刷新 fallback 实现，统一委托 `static/js/history-loader.js`。
+- 收敛 `static/app.js` 中 Task 活动 wrapper，移除剩余本地 subagent 运行状态、状态栏和 subagent 气泡 fallback 实现，统一委托 `static/js/task-activity.js`。
 
 ## 后续验收标准
 
