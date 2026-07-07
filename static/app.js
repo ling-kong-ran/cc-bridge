@@ -4060,6 +4060,7 @@ function loadMcpServers() {
 
 function setAgentsForIntegrations(agents) {
   agentsCache = agents;
+  window.CCBridge.sessionAgents?.setAgents?.(agents);
   window.CCBridge.agentSkills?.renderAgents?.(agents);
 }
 
@@ -4096,8 +4097,26 @@ function deleteAgentPrompt(name) {
 let agentsCache = [];
 let sessionAgents = [];
 
+function getSessionAgentsOptions() {
+  return {
+    t,
+    esc,
+    fetch,
+    getClientId: () => clientId,
+    quoteIntoInput,
+    updateWorkspaceHeader,
+    setVisible,
+    groupMemberPanel: document.getElementById('group-member-panel'),
+    groupMemberList: document.getElementById('group-member-list'),
+    agentAddPopover: document.getElementById('agent-add-popover'),
+    messageInput: document.getElementById('message-input'),
+  };
+}
+
 // ─── 会话 Agent 面板 ──────────────────────────────────────────────
 async function loadSessionAgents() {
+  const mod = window.CCBridge?.sessionAgents;
+  if (mod?.loadSessionAgents) return mod.loadSessionAgents(getSessionAgentsOptions());
   try {
     const resp = await fetch(`/api/session/agents?id=${clientId}`);
     const data = await resp.json();
@@ -4107,6 +4126,8 @@ async function loadSessionAgents() {
 }
 
 async function addSessionAgent(name) {
+  const mod = window.CCBridge?.sessionAgents;
+  if (mod?.addSessionAgent) return mod.addSessionAgent(name, getSessionAgentsOptions());
   if (!name || sessionAgents.includes(name)) return;
   try {
     const resp = await fetch('/api/session/agents', {
@@ -4123,6 +4144,8 @@ async function addSessionAgent(name) {
 }
 
 async function removeSessionAgent(name) {
+  const mod = window.CCBridge?.sessionAgents;
+  if (mod?.removeSessionAgent) return mod.removeSessionAgent(name, getSessionAgentsOptions());
   try {
     const resp = await fetch('/api/session/agents', {
       method: 'POST',
@@ -4136,6 +4159,8 @@ async function removeSessionAgent(name) {
 }
 
 function renderSessionAgentsPanel() {
+  const mod = window.CCBridge?.sessionAgents;
+  if (mod?.renderSessionAgentsPanel) return mod.renderSessionAgentsPanel(getSessionAgentsOptions());
   const panel = document.getElementById('group-member-panel');
   const list = document.getElementById('group-member-list') || panel;
   if (!panel || !list) return;
@@ -4181,6 +4206,8 @@ function renderSessionAgentsPanel() {
 }
 
 function renderAgentAddPopover() {
+  const mod = window.CCBridge?.sessionAgents;
+  if (mod?.renderAgentAddPopover) return mod.renderAgentAddPopover(getSessionAgentsOptions());
   const popover = document.getElementById('agent-add-popover');
   if (!popover) return;
   const all = agentsCache.filter(a => {
@@ -4214,6 +4241,8 @@ function renderAgentAddPopover() {
 }
 
 function hideAgentAddPopover() {
+  const mod = window.CCBridge?.sessionAgents;
+  if (mod?.hideAgentAddPopover) return mod.hideAgentAddPopover(getSessionAgentsOptions());
   const popover = document.getElementById('agent-add-popover');
   setVisible(popover, false);
 }
@@ -4289,6 +4318,8 @@ function hideMentionPopup() {
 }
 
 function getSessionAgents() {
+  const mod = window.CCBridge?.sessionAgents;
+  if (mod?.getSessionAgents) return mod.getSessionAgents();
   return sessionAgents.slice();
 }
 
