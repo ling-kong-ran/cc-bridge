@@ -57,6 +57,7 @@ from backend.routes.context_routes import handle_context_get, handle_context_pos
 from backend.routes.scheduled_tasks_routes import handle_scheduled_tasks_get, handle_scheduled_tasks_post
 from backend.routes.artifacts_routes import handle_artifacts_get
 from backend.routes.memory_routes import handle_memory_get, handle_memory_post
+from backend.routes.wiki_routes import handle_wiki_get
 from backend.responses import send_response
 from backend.services.sessions_service import list_gui_sessions
 # 飞书模块延迟加载 — 避免 lark_oapi SDK 拖慢 server 启动
@@ -2885,49 +2886,11 @@ async def handle_api_get(path: str, writer: asyncio.StreamWriter, query: dict = 
             await send_response(writer, 404, "application/json", b'{"error":"not found"}')
             return
     # ── 全局 Wiki API ─────────────────────────────────────────────────
-    elif path == "/api/wiki/search":
-        query = query or {}
-        q = query.get("q", [""])[0] or ""
-        limit = int(query.get("limit", ["20"])[0])
-        offset = int(query.get("offset", ["0"])[0])
-        mem_type = query.get("type", [""])[0] or ""
-        project = query.get("project", [""])[0] or ""
-        data = wiki_store.search(q, limit=limit, offset=offset, mem_type=mem_type, project=project)
-    elif path == "/api/wiki/node":
-        query = query or {}
-        node_id = query.get("id", [""])[0] or ""
-        if not node_id:
-            data = {"error": "id 参数必填"}
-        else:
-            node = wiki_store.get_node(node_id)
-            data = node if node else {"error": "节点不存在"}
-    elif path == "/api/wiki/neighbors":
-        query = query or {}
-        node_id = query.get("id", [""])[0] or ""
-        depth = int(query.get("depth", ["2"])[0])
-        data = {"neighbors": wiki_store.get_neighbors(node_id, depth=depth)}
-    elif path == "/api/wiki/graph":
-        query = query or {}
-        mem_type = query.get("type", [""])[0] or ""
-        project = query.get("project", [""])[0] or ""
-        limit = int(query.get("limit", ["200"])[0])
-        data = wiki_store.get_graph(mem_type=mem_type, project=project, limit=limit)
-    elif path == "/api/wiki/hot":
-        query = query or {}
-        limit = int(query.get("limit", ["20"])[0])
-        mem_type = query.get("type", [""])[0] or ""
-        data = {"hot": wiki_store.get_hot_nodes(limit=limit, mem_type=mem_type)}
-    elif path == "/api/wiki/stats":
-        data = wiki_store.get_stats()
-    elif path == "/api/wiki/index":
-        count = wiki_store.index_all(force=True)
-        data = {"count": count, "ok": count >= 0}
-    elif path == "/api/wiki/context":
-        query = query or {}
-        q = query.get("q", [""])[0] or ""
-        max_tokens = int(query.get("max_tokens", ["4000"])[0])
-        depth = int(query.get("depth", ["1"])[0])
-        data = {"context": wiki_store.retrieve_context(q, max_tokens=max_tokens, depth=depth)}
+    elif path.startswith("/api/wiki/"):
+        status, data = handle_wiki_get(path, query)
+        if status == 0:
+            await send_response(writer, 404, "application/json", b'{"error":"not found"}')
+            return
     elif path == "/api/context/settings":
         _, data = handle_context_get(path)
     elif path == "/api/scheduled-tasks":
