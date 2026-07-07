@@ -55,9 +55,10 @@ cc-bridge/
 1. `server.py` 不继续承载大块新功能；新 API 优先进入 `backend/routes/`。
 2. 核心聊天流、SSE 协议、session 持久化最后迁移。
 3. 先迁移低耦合模块：memory、wiki、scheduled tasks、artifacts、feishu、remote。
-4. 前端优先抽公共基础设施：API 请求、SSE 连接、i18n、workspace。
-5. 保持无构建步骤，前端先采用普通脚本加载；需要时再引入 ES modules。
-6. 迁移 Python 文件时可以保留根目录兼容 shim，避免一次性修改所有 import。
+4. 消息网关按可热插拔平台设计，飞书只是首个 provider，后续可接入微信等其他网关；内部新增抽象优先使用 gateway/platform/provider 语义。
+5. 前端优先抽公共基础设施：API 请求、SSE 连接、i18n、workspace。
+6. 保持无构建步骤，前端先采用普通脚本加载；需要时再引入 ES modules。
+7. 迁移 Python 文件时可以保留根目录兼容 shim，避免一次性修改所有 import。
 
 ## 阶段计划
 
@@ -122,6 +123,7 @@ cc-bridge/
 - 新增 `backend/services/artifacts_service.py` 与 `backend/routes/artifacts_routes.py`，把资产索引 API 接入服务层和路由层。
 - 新增 `backend/services/memory_service.py` 与 `backend/routes/memory_routes.py`，把记忆文件查询、索引、读写、导入和整理 API 接入服务层和路由层。
 - 新增 `backend/services/wiki_service.py` 与 `backend/routes/wiki_routes.py`，把全局 Wiki 搜索、节点、图谱、热点、统计、索引和上下文 API 接入服务层和路由层。
+- 新增 `backend/services/gateway_service.py` 与 `backend/routes/gateway_routes.py`，按消息网关可热插拔平台方向承接飞书网关配置、二维码、事件、scope 和 onboard API。
 
 ## 后续验收标准
 

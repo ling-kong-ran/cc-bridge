@@ -58,6 +58,7 @@ from backend.routes.scheduled_tasks_routes import handle_scheduled_tasks_get, ha
 from backend.routes.artifacts_routes import handle_artifacts_get
 from backend.routes.memory_routes import handle_memory_get, handle_memory_post
 from backend.routes.wiki_routes import handle_wiki_get
+from backend.routes.gateway_routes import encode_gateway_get_body, handle_gateway_get, handle_gateway_post
 from backend.responses import send_response
 from backend.services.sessions_service import list_gui_sessions
 # 飞书模块延迟加载 — 避免 lark_oapi SDK 拖慢 server 启动
@@ -94,12 +95,6 @@ class _LazyFeishu:
 
 _f = _LazyFeishu()
 
-try:
-    import qrcode
-    import qrcode.image.svg
-    QRCODE_AVAILABLE = True
-except ImportError:
-    QRCODE_AVAILABLE = False
 import remote_manager
 from scheduled_task_runner import ScheduledTaskRunner
 
@@ -2895,30 +2890,12 @@ async def handle_api_get(path: str, writer: asyncio.StreamWriter, query: dict = 
         _, data = handle_context_get(path)
     elif path == "/api/scheduled-tasks":
         _, data = handle_scheduled_tasks_get(path)
-    elif path == "/api/feishu-gateway/config":
-        data = _f.get_feishu_gateway_config(redact=True)
-        data["available"] = _f.FEISHU_GATEWAY_AVAILABLE
-        data["unavailable_reason"] = _f.FEISHU_GATEWAY_UNAVAILABLE_REASON
-        data["qrcode_available"] = QRCODE_AVAILABLE
-        data["lan_ips"] = get_lan_ips()
-        data["ws_available"] = _f.FEISHU_WS_AVAILABLE
-    elif path == "/api/feishu-gateway/scopes":
-        data = {"scopes": _f.list_feishu_scopes()}
-    elif path == "/api/feishu-gateway/qr":
-        if not QRCODE_AVAILABLE:
-            await send_response(writer, 503, "application/json; charset=utf-8", b'{"error":"QR code library not installed"}')
+    elif path.startswith("/api/feishu-gateway/"):
+        status, content_type, body = handle_gateway_get(path, query, feishu=_f, get_lan_ips=get_lan_ips)
+        if status == 0:
+            await send_response(writer, 404, "application/json", b'{"error":"not found"}')
             return
-        query = query or {}
-        url = query.get("url", [""])[0]
-        if not url:
-            await send_response(writer, 400, "application/json; charset=utf-8", b'{"error":"url query parameter required"}')
-            return
-        qr = qrcode.QRCode(version=None, error_correction=qrcode.constants.ERROR_CORRECT_M, box_size=5, border=3)
-        qr.add_data(url)
-        qr.make(fit=True)
-        img = qr.make_image(image_factory=qrcode.image.svg.SvgFillImage)
-        resp = img.to_string()
-        await send_response(writer, 200, "image/svg+xml; charset=utf-8", resp)
+        await send_response(writer, status, content_type, encode_gateway_get_body(body or {}))
         return
     elif path == "/api/remote-targets":
         data = {"targets": remote_manager.list_targets(), "password_supported": remote_manager.password_supported()}
@@ -2948,14 +2925,6 @@ async def handle_api_get(path: str, writer: asyncio.StreamWriter, query: dict = 
         ct = MIME_TYPES.get(ext, "application/octet-stream")
         await send_response(writer, 200, ct, fp.read_bytes())
         return
-    elif path == "/api/feishu-gateway/events":
-        data = {
-            "ok": True,
-            "endpoint": "Feishu event subscription",
-            "method": "POST",
-            "description": "Configure this URL in your Feishu open platform app's event subscription settings.",
-            "event_types": ["im.message.receive_v1"],
-        }
     else:
         await send_response(writer, 404, "application/json", b'{"error":"not found"}')
         return
@@ -3004,74 +2973,13 @@ async def handle_api_post(path: str, body: bytes, writer: asyncio.StreamWriter):
         return
     elif path == "/api/env":
         update_env_config(data)
-    elif path == "/api/feishu-gateway/config":
-        result = _f.update_feishu_gateway_config(data)
-        result["available"] = _f.FEISHU_GATEWAY_AVAILABLE
-        result["unavailable_reason"] = _f.FEISHU_GATEWAY_UNAVAILABLE_REASON
-        result["qrcode_available"] = QRCODE_AVAILABLE
-        result["ws_available"] = _f.FEISHU_WS_AVAILABLE
-        # 如果启用了 WebSocket 模式，尝试启动连接
-        _f.ws_log(f"server.py: 配置已保存，connection_mode={result.get('connection_mode')} enabled={result.get('enabled')}")
-        if result.get("connection_mode") == "websocket" and result.get("enabled"):
-            get_feishu_gateway().ensure_ws_running()
-        else:
-            get_feishu_gateway().stop_ws()
-        resp = json.dumps(result, ensure_ascii=False).encode("utf-8")
-        await send_response(writer, 200, "application/json; charset=utf-8", resp)
-        return
-    elif path == "/api/feishu-gateway/events":
-        if not _f.FEISHU_GATEWAY_AVAILABLE:
-            resp = json.dumps({"ok": False, "error": _f.FEISHU_GATEWAY_UNAVAILABLE_REASON}, ensure_ascii=False).encode("utf-8")
-            await send_response(writer, 503, "application/json; charset=utf-8", resp)
+    elif path.startswith("/api/feishu-gateway/"):
+        status, result = await handle_gateway_post(path, data, feishu=_f, get_gateway=get_feishu_gateway)
+        if status == 0:
+            await send_response(writer, 404, "application/json", b'{"error":"not found"}')
             return
-        result = await get_feishu_gateway().handle_event(data)
-        status = 200 if result.get("ok", True) else 400
-        resp = json.dumps(result, ensure_ascii=False).encode("utf-8")
+        resp = json.dumps(result or {}, ensure_ascii=False).encode("utf-8")
         await send_response(writer, status, "application/json; charset=utf-8", resp)
-        return
-    elif path == "/api/feishu-gateway/reset-scope":
-        scope_key = str(data.get("scope_key") or "").strip()
-        chat_id = str(data.get("chat_id") or "").strip()
-        if not chat_id and scope_key.startswith("feishu:chat:"):
-            chat_id = scope_key.removeprefix("feishu:chat:")
-        if not chat_id:
-            await send_response(writer, 400, "application/json", b'{"error":"chat_id required"}')
-            return
-        ok = await get_feishu_gateway().reset_scope(chat_id)
-        resp = json.dumps({"ok": ok}, ensure_ascii=False).encode("utf-8")
-        await send_response(writer, 200, "application/json; charset=utf-8", resp)
-        return
-    elif path == "/api/feishu-gateway/stop-scope":
-        scope_key = str(data.get("scope_key") or "").strip()
-        chat_id = str(data.get("chat_id") or "").strip()
-        if not chat_id and scope_key.startswith("feishu:chat:"):
-            chat_id = scope_key.removeprefix("feishu:chat:")
-        if not chat_id:
-            await send_response(writer, 400, "application/json", b'{"error":"chat_id required"}')
-            return
-        ok = await get_feishu_gateway().stop_scope(chat_id)
-        resp = json.dumps({"ok": ok}, ensure_ascii=False).encode("utf-8")
-        await send_response(writer, 200, "application/json; charset=utf-8", resp)
-        return
-    elif path == "/api/feishu-gateway/onboard/begin":
-        domain = str(data.get("domain") or "feishu").strip()
-        try:
-            result = _f.api_begin_onboard(domain)
-        except _f.OnboardRegistrationError as exc:
-            resp = json.dumps({"ok": False, "error": str(exc)}, ensure_ascii=False).encode("utf-8")
-            await send_response(writer, 400, "application/json; charset=utf-8", resp)
-            return
-        resp = json.dumps({"ok": True, **result}, ensure_ascii=False).encode("utf-8")
-        await send_response(writer, 200, "application/json; charset=utf-8", resp)
-        return
-    elif path == "/api/feishu-gateway/onboard/poll":
-        device_code = str(data.get("device_code") or "").strip()
-        if not device_code:
-            await send_response(writer, 400, "application/json", b'{"error":"device_code required"}')
-            return
-        result = _f.api_poll_onboard(device_code)
-        resp = json.dumps(result, ensure_ascii=False).encode("utf-8")
-        await send_response(writer, 200, "application/json; charset=utf-8", resp)
         return
     elif path == "/api/mcp-servers":
         try:
