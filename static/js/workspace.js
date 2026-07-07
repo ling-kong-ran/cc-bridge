@@ -119,6 +119,69 @@
     pane.style.flexBasis = width;
   }
 
+  function getResizeContext(options = {}) {
+    return {
+      t: options.t || ((key) => key),
+      getMode: options.getMode || (() => 'focus'),
+      getActiveSessionId: options.getActiveSessionId || (() => ''),
+      getLivePane: options.getLivePane || (() => null),
+      getWidths: options.getWidths || (() => new Map()),
+      getResizeState: options.getResizeState || (() => null),
+      setResizeState: options.setResizeState || (() => {}),
+      saveWorkspaceState: options.saveWorkspaceState || (() => {}),
+      applyWorkspacePaneWidth: options.applyWorkspacePaneWidth || (() => {}),
+    };
+  }
+
+  function ensureLivePaneResizer(options = {}) {
+    const ctx = getResizeContext(options);
+    const livePane = ctx.getLivePane();
+    if (!livePane) return;
+    let resizer = livePane.querySelector('.workspace-pane-resizer');
+    if (ctx.getMode() !== 'grid') {
+      if (resizer) resizer.remove();
+      return;
+    }
+    if (!resizer) {
+      resizer = document.createElement('div');
+      resizer.className = 'workspace-pane-resizer';
+      livePane.appendChild(resizer);
+    }
+    resizer.title = ctx.t('workspaceResize');
+    resizer.onpointerdown = (e) => startWorkspaceResize(e, ctx.getActiveSessionId(), livePane, options);
+  }
+
+  function startWorkspaceResize(event, sessionId, pane, options = {}) {
+    const ctx = getResizeContext(options);
+    if (!sessionId || !pane) return;
+    event.preventDefault();
+    ctx.setResizeState({
+      sessionId,
+      pane,
+      startX: event.clientX,
+      startWidth: pane.getBoundingClientRect().width,
+    });
+    document.body.classList.add('resizing-workspace-pane');
+    pane.setPointerCapture?.(event.pointerId);
+  }
+
+  function handleWorkspaceResizeMove(event, options = {}) {
+    const ctx = getResizeContext(options);
+    const state = ctx.getResizeState();
+    if (!state) return;
+    const nextWidth = Math.max(260, Math.min(900, state.startWidth + event.clientX - state.startX));
+    ctx.getWidths().set(state.sessionId, nextWidth);
+    ctx.applyWorkspacePaneWidth(state.pane, state.sessionId);
+  }
+
+  function stopWorkspaceResize(options = {}) {
+    const ctx = getResizeContext(options);
+    if (!ctx.getResizeState()) return;
+    ctx.setResizeState(null);
+    document.body.classList.remove('resizing-workspace-pane');
+    ctx.saveWorkspaceState();
+  }
+
   function extractMessagePreviewText(message) {
     let text = '';
     for (const block of (message?.content || [])) {
@@ -170,6 +233,10 @@
     appendPreview,
     setPreview,
     applyPaneWidth,
+    ensureLivePaneResizer,
+    startWorkspaceResize,
+    handleWorkspaceResizeMove,
+    stopWorkspaceResize,
     extractMessagePreviewText,
     appendWorkspacePreviewEvent,
     updateBackgroundWorkspacePreview,

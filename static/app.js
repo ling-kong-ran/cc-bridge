@@ -755,7 +755,23 @@ function renderWorkspacePanes() {
   ensureLivePaneResizer();
 }
 
+function getWorkspaceResizeOptions() {
+  return {
+    t,
+    getMode: () => workspaceMode,
+    getActiveSessionId: () => activeWorkspaceSessionId,
+    getLivePane: () => workspaceLivePane,
+    getWidths: () => workspacePaneWidths,
+    getResizeState: () => workspaceResizeState,
+    setResizeState: (state) => { workspaceResizeState = state; },
+    saveWorkspaceState,
+    applyWorkspacePaneWidth,
+  };
+}
+
 function ensureLivePaneResizer() {
+  const workspace = window.CCBridge?.workspace;
+  if (workspace?.ensureLivePaneResizer) return workspace.ensureLivePaneResizer(getWorkspaceResizeOptions());
   let resizer = workspaceLivePane.querySelector('.workspace-pane-resizer');
   if (workspaceMode !== 'grid') {
     if (resizer) resizer.remove();
@@ -801,6 +817,8 @@ function applyWorkspacePaneWidth(pane, sessionId) {
 }
 
 function startWorkspaceResize(event, sessionId, pane) {
+  const workspace = window.CCBridge?.workspace;
+  if (workspace?.startWorkspaceResize) return workspace.startWorkspaceResize(event, sessionId, pane, getWorkspaceResizeOptions());
   if (!sessionId || !pane) return;
   event.preventDefault();
   workspaceResizeState = {
@@ -814,6 +832,8 @@ function startWorkspaceResize(event, sessionId, pane) {
 }
 
 function handleWorkspaceResizeMove(event) {
+  const workspace = window.CCBridge?.workspace;
+  if (workspace?.handleWorkspaceResizeMove) return workspace.handleWorkspaceResizeMove(event, getWorkspaceResizeOptions());
   if (!workspaceResizeState) return;
   const nextWidth = Math.max(260, Math.min(900, workspaceResizeState.startWidth + event.clientX - workspaceResizeState.startX));
   workspacePaneWidths.set(workspaceResizeState.sessionId, nextWidth);
@@ -821,6 +841,8 @@ function handleWorkspaceResizeMove(event) {
 }
 
 function stopWorkspaceResize() {
+  const workspace = window.CCBridge?.workspace;
+  if (workspace?.stopWorkspaceResize) return workspace.stopWorkspaceResize(getWorkspaceResizeOptions());
   if (!workspaceResizeState) return;
   workspaceResizeState = null;
   document.body.classList.remove('resizing-workspace-pane');
