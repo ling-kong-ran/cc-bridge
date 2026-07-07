@@ -934,11 +934,33 @@ function saveContextSettings(settings) {
   return window.CCBridge.settings?.saveContextSettings?.(settings);
 }
 
+function getNotificationOptions() {
+  return {
+    t,
+    summarizePrompt,
+    formatDuration,
+    formatUsd,
+    getProjectName,
+    getDisplayModelName,
+    getNotificationsEnabled: () => notificationsEnabled,
+    getLastNotifyAt: () => lastNotifyAt,
+    setLastNotifyAt: (value) => { lastNotifyAt = value; },
+    getCwd: () => cwdInput.value.trim(),
+    getModelValue: () => modelSelect.value,
+    getCurrentTurnContent: () => currentTurnContent,
+    pageIsUnfocused,
+  };
+}
+
 function pageIsUnfocused() {
+  const notifications = window.CCBridge?.notifications;
+  if (notifications?.pageIsUnfocused) return notifications.pageIsUnfocused();
   return document.visibilityState === 'hidden' || !document.hasFocus();
 }
 
 function notifyComplete(kind, detail = {}) {
+  const notifications = window.CCBridge?.notifications;
+  if (notifications?.notifyComplete) return notifications.notifyComplete(kind, detail, getNotificationOptions());
   if (!notificationsEnabled || !("Notification" in window) || Notification.permission !== 'granted' || !pageIsUnfocused()) {
     return;
   }

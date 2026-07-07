@@ -160,6 +160,7 @@ cc-bridge/
 - 新增 `static/js/message-ui.js`，把 assistant/user/system 消息 DOM 创建和上下文注入追踪渲染逻辑从 `static/app.js` 拆出并挂载到 `window.CCBridge.messageUi`。
 - 新增 `static/js/completion-sync.js`，把后台 session 完成后的历史延迟同步逻辑从 `static/app.js` 拆出并挂载到 `window.CCBridge.completionSync`。
 - 新增 `static/js/turn-timer.js`，把 assistant 回复耗时 meta 更新和 turn timer 管理逻辑从 `static/app.js` 拆出并挂载到 `window.CCBridge.turnTimer`。
+- 新增 `static/js/notifications.js`，把页面失焦判断和完成通知创建逻辑从 `static/app.js` 拆出并挂载到 `window.CCBridge.notifications`。
 
 ## 后续验收标准
 
