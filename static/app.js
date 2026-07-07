@@ -915,12 +915,16 @@ function notifyComplete(kind, detail = {}) {
 }
 
 function summarizePrompt(text, maxLen = 90) {
+  const formatters = window.CCBridge?.formatters;
+  if (formatters?.summarizePrompt) return formatters.summarizePrompt(text, maxLen);
   const clean = (text || '').replace(/\s+/g, ' ').trim();
   if (!clean) return '';
   return clean.length > maxLen ? `${clean.slice(0, maxLen - 1)}…` : clean;
 }
 
 function formatDuration(ms) {
+  const formatters = window.CCBridge?.formatters;
+  if (formatters?.formatDuration) return formatters.formatDuration(ms, t);
   const seconds = Math.round(Number(ms || 0) / 1000);
   if (!Number.isFinite(seconds) || seconds <= 0) return '';
   if (seconds < 60) return t('notifyDurationSeconds', { seconds });
@@ -930,6 +934,8 @@ function formatDuration(ms) {
 }
 
 function formatCompactDuration(ms) {
+  const formatters = window.CCBridge?.formatters;
+  if (formatters?.formatCompactDuration) return formatters.formatCompactDuration(ms);
   const seconds = Math.max(0, Math.round(Number(ms || 0) / 1000));
   if (!Number.isFinite(seconds)) return '';
   if (seconds < 60) return `${seconds}s`;
@@ -960,12 +966,16 @@ function stopTurnTimer() {
 }
 
 function formatUsd(value) {
+  const formatters = window.CCBridge?.formatters;
+  if (formatters?.formatUsd) return formatters.formatUsd(value, t);
   const cost = Number(value || 0);
   if (!Number.isFinite(cost) || cost <= 0) return '';
   return t('notifyCost', { cost: cost.toFixed(4) });
 }
 
 function getProjectName(cwd, fallback = '') {
+  const formatters = window.CCBridge?.formatters;
+  if (formatters?.getProjectName) return formatters.getProjectName(cwd, fallback);
   if (!cwd) return fallback;
   const normalized = cwd.replace(/[\\\/]+$/, '');
   const parts = normalized.split(/[\\\/]+/).filter(Boolean);
@@ -4559,10 +4569,14 @@ function renderCost() {
 }
 
 function emptyTokenUsage() {
+  const formatters = window.CCBridge?.formatters;
+  if (formatters?.emptyTokenUsage) return formatters.emptyTokenUsage();
   return { input: 0, output: 0, cache_creation: 0, cache_read: 0 };
 }
 
 function normalizeTokenUsage(value) {
+  const formatters = window.CCBridge?.formatters;
+  if (formatters?.normalizeTokenUsage) return formatters.normalizeTokenUsage(value);
   const usage = emptyTokenUsage();
   if (!value || typeof value !== 'object') return usage;
   usage.input = readTokenField(value, 'input', 'input_tokens');
@@ -4573,6 +4587,8 @@ function normalizeTokenUsage(value) {
 }
 
 function readTokenField(value, ...keys) {
+  const formatters = window.CCBridge?.formatters;
+  if (formatters?.readTokenField) return formatters.readTokenField(value, ...keys);
   for (const key of keys) {
     const n = Number(value[key] || 0);
     if (Number.isFinite(n) && n > 0) return Math.trunc(n);
@@ -4581,6 +4597,8 @@ function readTokenField(value, ...keys) {
 }
 
 function addTokenUsage(a, b) {
+  const formatters = window.CCBridge?.formatters;
+  if (formatters?.addTokenUsage) return formatters.addTokenUsage(a, b);
   const left = normalizeTokenUsage(a);
   const right = normalizeTokenUsage(b);
   return {
@@ -4592,10 +4610,14 @@ function addTokenUsage(a, b) {
 }
 
 function hasTokenUsage(usage) {
+  const formatters = window.CCBridge?.formatters;
+  if (formatters?.hasTokenUsage) return formatters.hasTokenUsage(usage);
   return tokenUsageTotal(usage) > 0;
 }
 
 function tokenUsageTotal(usage) {
+  const formatters = window.CCBridge?.formatters;
+  if (formatters?.tokenUsageTotal) return formatters.tokenUsageTotal(usage);
   const value = normalizeTokenUsage(usage);
   return value.input + value.output + value.cache_creation + value.cache_read;
 }
@@ -4608,6 +4630,8 @@ function renderTokens() {
 }
 
 function formatTokenUsage(usage) {
+  const formatters = window.CCBridge?.formatters;
+  if (formatters?.formatTokenUsage) return formatters.formatTokenUsage(usage, t);
   const value = normalizeTokenUsage(usage);
   const main = value.input + value.output;
   const cache = value.cache_creation + value.cache_read;
@@ -4618,6 +4642,8 @@ function formatTokenUsage(usage) {
 }
 
 function formatTokenCount(value) {
+  const formatters = window.CCBridge?.formatters;
+  if (formatters?.formatTokenCount) return formatters.formatTokenCount(value);
   const n = Number(value || 0);
   if (!Number.isFinite(n)) return '0';
   if (n >= 1000000) return `${(n / 1000000).toFixed(1)}M`;
@@ -4626,6 +4652,8 @@ function formatTokenCount(value) {
 }
 
 function safeJsonParse(text, fallback = null) {
+  const formatters = window.CCBridge?.formatters;
+  if (formatters?.safeJsonParse) return formatters.safeJsonParse(text, fallback);
   try {
     return JSON.parse(text);
   } catch (e) {
@@ -4634,6 +4662,8 @@ function safeJsonParse(text, fallback = null) {
 }
 
 function formatModelName(model) {
+  const formatters = window.CCBridge?.formatters;
+  if (formatters?.formatModelName) return formatters.formatModelName(model);
   model = (model || '').trim();
   if (!model) return '';
   const names = {
@@ -4645,11 +4675,15 @@ function formatModelName(model) {
 }
 
 function isDisplayableModel(model) {
+  const formatters = window.CCBridge?.formatters;
+  if (formatters?.isDisplayableModel) return formatters.isDisplayableModel(model);
   const value = (model || '').trim();
   return Boolean(value && !/^<[^>]+>$/.test(value));
 }
 
 function getDisplayModelName(model, allowSelectedFallback = true) {
+  const formatters = window.CCBridge?.formatters;
+  if (formatters?.getDisplayModelName) return formatters.getDisplayModelName(model, allowSelectedFallback ? modelSelect?.value : '');
   if (isDisplayableModel(model)) return formatModelName(model);
   const selected = allowSelectedFallback ? modelSelect?.value : '';
   return isDisplayableModel(selected) ? formatModelName(selected) : '';
