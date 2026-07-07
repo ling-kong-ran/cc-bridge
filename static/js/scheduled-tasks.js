@@ -4,8 +4,15 @@
   let scheduledTasks = [];
 
   function init() {
-    document.getElementById('btn-scheduled-refresh')?.addEventListener('click', loadTasks);
-    document.getElementById('btn-scheduled-save')?.addEventListener('click', saveTask);
+    document.getElementById('btn-scheduled-refresh')?.addEventListener('click', () => {
+      loadTasks().catch((e) => console.warn('Load scheduled tasks failed:', e));
+    });
+    document.getElementById('btn-scheduled-save')?.addEventListener('click', () => {
+      saveTask().catch((e) => {
+        console.warn('Save scheduled task failed:', e);
+        showToast(t('scheduledSaveFailed'), 'error');
+      });
+    });
     document.getElementById('btn-scheduled-reset')?.addEventListener('click', resetForm);
     document.getElementById('scheduled-type')?.addEventListener('change', updateScheduleFields);
     document.getElementById('scheduled-task-list')?.addEventListener('click', handleTaskAction);
@@ -64,10 +71,10 @@
     if (!actionEl || !item) return;
     const task = scheduledTasks.find(t => t.id === item.dataset.id);
     if (!task) return;
-    if (actionEl.dataset.act === 'run') runTask(task);
-    if (actionEl.dataset.act === 'toggle') toggleTask(task);
+    if (actionEl.dataset.act === 'run') runTask(task).catch((err) => console.warn('Run scheduled task failed:', err));
+    if (actionEl.dataset.act === 'toggle') toggleTask(task).catch((err) => console.warn('Toggle scheduled task failed:', err));
     if (actionEl.dataset.act === 'edit') fillForm(task);
-    if (actionEl.dataset.act === 'delete') deleteTask(task);
+    if (actionEl.dataset.act === 'delete') deleteTask(task).catch((err) => console.warn('Delete scheduled task failed:', err));
   }
 
   function renderTasks() {
@@ -198,27 +205,27 @@
     }
     showToast(t('scheduledTaskSaved'), 'success');
     resetForm();
-    loadTasks();
+    await loadTasks();
   }
 
   async function deleteTask(task) {
     if (!task || !confirm(t('scheduledConfirmDelete', { name: task.name || t('scheduledTask') }))) return;
     await root.api.postJson('/api/scheduled-tasks/delete', { id: task.id });
     showToast(t('scheduledTaskDeleted'), 'success');
-    loadTasks();
+    await loadTasks();
   }
 
   async function toggleTask(task) {
     if (!task) return;
     await root.api.postJson('/api/scheduled-tasks/toggle', { id: task.id, enabled: !task.enabled });
-    loadTasks();
+    await loadTasks();
   }
 
   async function runTask(task) {
     if (!task) return;
     await root.api.postJson('/api/scheduled-tasks/run-now', { id: task.id });
     showToast(t('scheduledTaskStarted'), 'info');
-    loadTasks();
+    await loadTasks();
   }
 
   root.scheduledTasks = {

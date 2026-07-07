@@ -11,13 +11,17 @@
   }
 
   function initSkillsUI() {
-    document.getElementById('btn-skills-refresh')?.addEventListener('click', loadSkills);
+    document.getElementById('btn-skills-refresh')?.addEventListener('click', () => {
+      loadSkills().catch((e) => console.warn('Load skills failed:', e));
+    });
     document.getElementById('skill-modal-close')?.addEventListener('click', closeSkillModal);
     document.getElementById('btn-skill-close')?.addEventListener('click', closeSkillModal);
     document.getElementById('skill-modal-overlay')?.addEventListener('click', (e) => {
       if (e.target?.id === 'skill-modal-overlay') closeSkillModal();
     });
-    document.getElementById('btn-skill-uninstall')?.addEventListener('click', uninstallCurrentSkill);
+    document.getElementById('btn-skill-uninstall')?.addEventListener('click', () => {
+      uninstallCurrentSkill().catch((e) => console.warn('Uninstall skill failed:', e));
+    });
   }
 
   async function loadSkills() {
@@ -174,6 +178,8 @@
           formMemory.value = agent.memory || '';
           formPrompt.value = agent.body || '';
         }
+      }).catch((e) => {
+        console.warn('Load agent for edit failed:', e);
       });
     } else {
       title.textContent = t('newAgent');
@@ -241,7 +247,9 @@
 
   function initAgentModal() {
     document.getElementById('btn-agent-add')?.addEventListener('click', () => openAgentModal());
-    document.getElementById('btn-agent-save')?.addEventListener('click', saveAgent);
+    document.getElementById('btn-agent-save')?.addEventListener('click', () => {
+      saveAgent().catch((e) => console.warn('Save agent failed:', e));
+    });
     document.getElementById('btn-agent-cancel')?.addEventListener('click', closeAgentModal);
     document.getElementById('agent-modal-overlay')?.addEventListener('click', (e) => {
       if (e.target === e.currentTarget) closeAgentModal();

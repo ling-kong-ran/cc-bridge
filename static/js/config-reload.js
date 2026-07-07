@@ -3,10 +3,16 @@
   let lastFocusConfigReloadAt = 0;
 
   function initFocusConfigReload(options = {}) {
-    window.addEventListener('focus', () => reloadConfigOnFocus(options));
+    window.addEventListener('focus', () => {
+      reloadConfigOnFocus(options)?.catch?.((e) => {
+        console.warn('Reload config on focus failed:', e);
+      });
+    });
     document.addEventListener('visibilitychange', () => {
       if (document.visibilityState === 'visible') {
-        reloadConfigOnFocus(options);
+        reloadConfigOnFocus(options)?.catch?.((e) => {
+          console.warn('Reload config on visibility change failed:', e);
+        });
       }
     });
   }
@@ -20,7 +26,7 @@
   }
 
   async function reloadExternalConfig(options = {}) {
-    await Promise.all([
+    await Promise.allSettled([
       options.loadClis?.(),
       options.loadModels?.(),
       options.loadConfig?.(),

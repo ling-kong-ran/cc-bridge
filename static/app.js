@@ -29,6 +29,33 @@ let sessionsLoaded = false;
 let chatNavAutoOpening = false;
 
 // 每个 workspace tab 独立的 SSE/流式状态，切换标签页时 save/restore
+function runAsyncTask(task, label = 'Async task') {
+  try {
+    const result = typeof task === 'function' ? task() : task;
+    result?.catch?.((e) => {
+      console.warn(`${label} failed:`, e);
+    });
+    return result;
+  } catch (e) {
+    console.warn(`${label} failed:`, e);
+    return null;
+  }
+}
+
+function initUnhandledRejectionGuard() {
+  window.addEventListener('unhandledrejection', (event) => {
+    const reason = event.reason;
+    const message = String(reason?.message || reason?.httpStatusText || reason || '');
+    const isNetworkFailure = reason?.httpStatus === 0
+      || reason?.code === 0
+      || message.includes('Failed to fetch')
+      || message.includes('NetworkError');
+    if (!isNetworkFailure) return;
+    event.preventDefault();
+    console.warn('Network request failed:', reason);
+  });
+}
+
 const _tabStreamState = new Map();
 
 function getStreamStateOptions() {
@@ -139,6 +166,8 @@ const costDisplay = document.getElementById('cost-display');
 const costValue = document.getElementById('cost-value');
 const tokenDisplay = document.getElementById('token-display');
 const tokenValue = document.getElementById('token-value');
+const inputCliStatus = document.getElementById('input-cli-status');
+const inputCwdStatus = document.getElementById('input-cwd-status');
 const sessionSearchInput = document.getElementById('session-search');
 const sessionsCountEl = document.getElementById('sessions-count');
 const sessionsNewSessionBtn = document.getElementById('sessions-new-session');
@@ -190,6 +219,7 @@ function initDesktopWindowControls() {
 
 // ─── 初始化 ──────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', async () => {
+  initUnhandledRejectionGuard();
   initDesktopWindowControls();
   initTheme();
   initShortcutsHelp();
@@ -222,13 +252,13 @@ document.addEventListener('DOMContentLoaded', async () => {
   initScheduledTasksUI();
   initFeishuGatewayUI();
   initSessionWorkspace();
-  loadDefaultCwd();
-  loadClis();
-  loadModels();
-  loadConfig();
+  runAsyncTask(loadDefaultCwd, 'Load default cwd');
+  runAsyncTask(loadClis, 'Load CLIs');
+  runAsyncTask(loadModels, 'Load models');
+  runAsyncTask(loadConfig, 'Load config');
   initDirectoryPicker();
   initFilePicker();
-  loadSessions();
+  runAsyncTask(loadSessions, 'Load sessions');
   initFocusConfigReload();
   initToolCardInteractions();
   showPage('home');
@@ -2343,7 +2373,7 @@ function updateUI() {
 function getMessageScrollOptions() {
   return {
     messagesEl,
-    requestAnimationFrame,
+    requestAnimationFrame: window.requestAnimationFrame.bind(window),
   };
 }
 
@@ -2421,7 +2451,7 @@ function getSessionAgentsOptions() {
   return {
     t,
     esc,
-    fetch,
+    fetch: window.fetch.bind(window),
     getClientId: () => clientId,
     quoteIntoInput,
     updateWorkspaceHeader,

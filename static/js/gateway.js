@@ -404,7 +404,7 @@
       const data = await resp.json();
       if (!resp.ok) throw new Error(data.error || resp.statusText);
       showToast(successMessage, 'success');
-      loadScopes();
+      await loadScopes();
     } catch (e) {
       showToast(t('requestFailed', { message: e.message || t('unknownError') }), 'error');
     }

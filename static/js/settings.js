@@ -27,6 +27,8 @@
         loadConfig();
         loadSessions();
         renderSessionList(cachedSessions);
+      }).catch((e) => {
+        console.warn('Apply language failed:', e);
       });
     });
     fontSizeRange?.addEventListener('input', () => {
