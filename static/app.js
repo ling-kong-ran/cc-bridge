@@ -2228,7 +2228,20 @@ function scheduleRender() {
   });
 }
 
+function getChatRendererOptions() {
+  return { esc, t, renderMd, runningTasks, toolResults, toolStartTimes };
+}
+
+function getChatRendererState(final = false) {
+  return { currentAssistantEl, currentContent, streamBlocks, isResponding, final };
+}
+
 function renderCurrentState(final = false) {
+  const renderer = window.CCBridge?.chatRenderer;
+  if (renderer?.renderCurrentState) {
+    renderer.renderCurrentState(getChatRendererState(final), getChatRendererOptions());
+    return;
+  }
   if (!currentAssistantEl) return;
   const el = currentAssistantEl.querySelector('.msg-content');
   let html = '';
@@ -2260,6 +2273,8 @@ function renderCurrentState(final = false) {
 }
 
 function formatToolSummary(block) {
+  const renderer = window.CCBridge?.chatRenderer;
+  if (renderer?.formatToolSummary) return renderer.formatToolSummary(block);
   let input = {};
   try {
     input = typeof block.input === 'string' ? JSON.parse(block.input) : (block.input || {});
@@ -2294,6 +2309,8 @@ function formatToolSummary(block) {
 }
 
 function formatToolBody(block) {
+  const renderer = window.CCBridge?.chatRenderer;
+  if (renderer?.formatToolBody) return renderer.formatToolBody(block, getChatRendererOptions());
   let input = {};
   try {
     input = typeof block.input === 'string' ? JSON.parse(block.input) : (block.input || {});
@@ -2398,6 +2415,8 @@ function formatToolBody(block) {
 }
 
 function renderToolCard(block, opts = {}) {
+  const renderer = window.CCBridge?.chatRenderer;
+  if (renderer?.renderToolCard) return renderer.renderToolCard(block, opts, getChatRendererOptions());
   const info = formatToolSummary(block);
   const bodyHtml = formatToolBody(block);
   const isHistory = !!opts.history;
@@ -2434,6 +2453,8 @@ function renderToolCard(block, opts = {}) {
 }
 
 function updateToolResult(toolId, content, isError) {
+  const renderer = window.CCBridge?.chatRenderer;
+  if (renderer?.updateToolResult) return renderer.updateToolResult(toolId, content, isError, getChatRendererOptions());
   const card = document.querySelector(`.tool-card[data-tool-id="${toolId}"]`);
   if (!card) return;
   card.classList.remove('tool-card-running');
@@ -2479,10 +2500,14 @@ function updateToolResult(toolId, content, isError) {
 }
 
 function renderStreamingText(text) {
+  const renderer = window.CCBridge?.chatRenderer;
+  if (renderer?.renderStreamingText) return renderer.renderStreamingText(text, getChatRendererOptions());
   return esc(text).replace(/\n/g, '<br>');
 }
 
 function renderBlock(block) {
+  const renderer = window.CCBridge?.chatRenderer;
+  if (renderer?.renderBlock) return renderer.renderBlock(block, getChatRendererOptions());
   if (block.type === 'thinking' && block.thinking) {
     const preview = block.thinking.replace(/\n/g, ' ').substring(0, 100);
     return `<div class="thinking-block">
