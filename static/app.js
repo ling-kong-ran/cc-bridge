@@ -67,55 +67,18 @@ function getStreamStateOptions() {
   };
 }
 
+function getStreamStateModule() {
+  const mod = window.CCBridge?.streamState;
+  if (!mod) console.error('CCBridge streamState module is not loaded');
+  return mod;
+}
+
 function _saveStreamState(sessionId) {
-  const streamState = window.CCBridge?.streamState;
-  if (streamState?.saveStreamState) return streamState.saveStreamState(sessionId, getStreamStateOptions());
-  if (!sessionId) return;
-  _tabStreamState.set(sessionId, {
-    isResponding,
-    currentRunId,
-    currentSessionId,
-    currentContent: currentContent.slice(),
-    streamBlocks: JSON.parse(JSON.stringify(streamBlocks)),
-    currentAssistantMessageId,
-    currentTurnContent,
-    currentTurnHasAssistantOutput,
-    currentTurnStartedAt,
-    currentTurnAttachmentCount,
-  });
+  return getStreamStateModule()?.saveStreamState?.(sessionId, getStreamStateOptions());
 }
 
 function _restoreStreamState(sessionId) {
-  const streamState = window.CCBridge?.streamState;
-  if (streamState?.restoreStreamState) return streamState.restoreStreamState(sessionId, getStreamStateOptions());
-  const saved = _tabStreamState.get(sessionId);
-  if (saved) {
-    isResponding = saved.isResponding;
-    currentRunId = saved.currentRunId;
-    currentSessionId = saved.currentSessionId;
-    currentContent = saved.currentContent;
-    streamBlocks = saved.streamBlocks;
-    currentAssistantMessageId = saved.currentAssistantMessageId;
-    currentTurnContent = saved.currentTurnContent;
-    currentTurnHasAssistantOutput = saved.currentTurnHasAssistantOutput;
-    currentTurnStartedAt = saved.currentTurnStartedAt;
-    currentTurnAttachmentCount = saved.currentTurnAttachmentCount;
-  } else {
-    isResponding = false;
-    currentRunId = null;
-    currentSessionId = null;
-    currentContent = [];
-    streamBlocks = {};
-    currentAssistantMessageId = null;
-    currentTurnContent = '';
-    currentTurnHasAssistantOutput = false;
-    currentTurnStartedAt = 0;
-    currentTurnAttachmentCount = 0;
-  }
-  currentAssistantEl = null;
-  totalCost = 0;
-  totalTokens = emptyTokenUsage();
-  updateStopButton();
+  return getStreamStateModule()?.restoreStreamState?.(sessionId, getStreamStateOptions());
 }
 
 function updateStopButton() {
@@ -3774,12 +3737,7 @@ async function resumeSession(sessionId, cwd, model, savedCost = 0, remoteTargetI
 }
 
 function resetAssistantStreamState() {
-  const streamState = window.CCBridge?.streamState;
-  if (streamState?.resetAssistantStreamState) return streamState.resetAssistantStreamState(getStreamStateOptions());
-  currentAssistantEl = null;
-  currentAssistantMessageId = null;
-  currentContent = [];
-  streamBlocks = {};
+  return getStreamStateModule()?.resetAssistantStreamState?.(getStreamStateOptions());
 }
 
 function getHistoryLoaderOptions() {

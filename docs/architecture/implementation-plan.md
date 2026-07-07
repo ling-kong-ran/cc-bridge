@@ -168,6 +168,7 @@ cc-bridge/
 - 新增 `static/js/turn-timer.js`，把 assistant 回复耗时 meta 更新和 turn timer 管理逻辑从 `static/app.js` 拆出并挂载到 `window.CCBridge.turnTimer`。
 - 新增 `static/js/notifications.js`，把页面失焦判断和完成通知创建逻辑从 `static/app.js` 拆出并挂载到 `window.CCBridge.notifications`。
 - 新增 `static/js/stream-state.js`，把 workspace tab 流式状态保存、恢复和 assistant stream 状态重置逻辑从 `static/app.js` 拆出并挂载到 `window.CCBridge.streamState`。
+- 收敛 `static/app.js` 中 stream-state wrapper，移除剩余本地流式状态保存、恢复和重置 fallback 实现，统一委托 `static/js/stream-state.js`。
 - 新增 `static/js/history-loader.js`，把会话历史加载、刷新和静态历史渲染状态保护逻辑从 `static/app.js` 拆出并挂载到 `window.CCBridge.historyLoader`。
 - 新增 `static/js/localization.js`，把语言切换、语言包加载和本地化文本渲染逻辑从 `static/app.js` 拆出并挂载到 `window.CCBridge.localization`。
 - 扩展 `static/js/formatters.js`，继续承接时间、HTML 转义、路径缩短和链接安全处理等文本工具逻辑，减少 `static/app.js` 的通用格式化职责。
