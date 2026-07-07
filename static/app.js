@@ -1311,6 +1311,7 @@ function bindSSEEvents(source = eventSource) {
     // 刷新后重连到正在回复的会话，恢复响应状态和 server 端真实耗时。
     // 未收到实际 assistant 输出前不创建空回复气泡，避免历史加载/进程结束竞态造成短暂流式闪烁。
     const data = JSON.parse(e.data || '{}');
+    if (isCompletedSseRun(data)) return;
     if (!isEventForCurrentSession(data)) return;
     if (data.running === false) return;
     currentRunId = data.run_id || currentRunId;
@@ -1447,6 +1448,7 @@ function bindSSEEvents(source = eventSource) {
     if (noteBackgroundSessionEvent(data)) return;
     if (isCompletedSseRun(data)) return;
     handleResult(data);
+    cleanupStaleAssistantStreamingBubbles();
     rememberCompletedSseRun(getCompletedSseRunId(data));
   });
 
@@ -1472,6 +1474,7 @@ function bindSSEEvents(source = eventSource) {
     isResponding = !!data.locked;
     if (!isResponding && wasResponding) {
       finishCurrentTurnFromProcess();
+      cleanupStaleAssistantStreamingBubbles();
       rememberCompletedSseRun(getCompletedSseRunId(data));
       updateWorkspaceSessionStatus(data.session_id || currentSessionId, 'done');
       scheduleCompletionHistorySync(data.session_id || currentSessionId);
@@ -1485,6 +1488,7 @@ function bindSSEEvents(source = eventSource) {
     if (noteBackgroundSessionEvent(data)) return;
     if (isCompletedSseRun(data)) return;
     const finishedTurn = finishCurrentTurnFromProcess();
+    cleanupStaleAssistantStreamingBubbles();
     rememberCompletedSseRun(getCompletedSseRunId(data));
     updateWorkspaceSessionStatus(data.session_id || currentSessionId, Number(data.exit_code || 0) === 0 ? 'done' : 'error');
     if (isSlashCommand(finishedTurn.prompt) && !finishedTurn.hadAssistantOutput) {
@@ -1620,6 +1624,7 @@ function getStreamEventOptions() {
     setCurrentTurnStartedAt: (value) => { currentTurnStartedAt = value; },
     setCurrentAssistantEl: (value) => { currentAssistantEl = value; },
     createAssistantBubble,
+    cleanupStaleAssistantStreamingBubbles,
     startTurnTimer,
     updateWorkspaceSessionStatus,
     setWorkspaceSessionPreview,
@@ -1650,6 +1655,7 @@ function handleStreamEvent(data) {
   switch (evt.type) {
     case 'message_start':
       if (!currentAssistantEl) {
+        cleanupStaleAssistantStreamingBubbles();
         currentAssistantEl = createAssistantBubble();
         currentContent = [];
         streamBlocks = {};
@@ -1790,6 +1796,7 @@ function handleAssistantFinal(data) {
     streamBlocks = {};
   }
   if (!currentAssistantEl) {
+    cleanupStaleAssistantStreamingBubbles();
     currentAssistantEl = createAssistantBubble();
     currentContent = [];
     streamBlocks = {};
@@ -2061,6 +2068,12 @@ function finishAssistantStreaming(el = currentAssistantEl) {
 
 function removePendingAssistantBubble(keepBubble) {
   return window.CCBridge.messageUi?.removePendingAssistantBubble?.(currentAssistantEl, keepBubble);
+}
+
+function cleanupStaleAssistantStreamingBubbles() {
+  messagesEl?.querySelectorAll?.('.message.assistant.streaming')?.forEach(el => {
+    if (el !== currentAssistantEl) el.remove();
+  });
 }
 
 function addUserMessage(text, quotes = []) {

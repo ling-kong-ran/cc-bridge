@@ -58,6 +58,7 @@
       }));
       ctx.messagesEl.innerHTML = '';
       ctx.resetAssistantStreamState();
+      ctx.messagesEl.querySelectorAll('.message.assistant.streaming').forEach(el => el.remove());
       ctx.toolResults?.clear?.();
       ctx.toolStartTimes?.clear?.();
       renderStaticHistory(history, options);
