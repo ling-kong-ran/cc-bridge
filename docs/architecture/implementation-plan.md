@@ -109,7 +109,7 @@ cc-bridge/
 - 新增 `docs/architecture/implementation-plan.md` 作为迁移总纲。
 - 新增 `docs/architecture/cli-process-model.md`，明确持久子进程与 one-shot 子进程的边界。
 - 新增 `static/js/api.js`，提供前端 API 请求基础封装。
-- 新增 `static/js/sse.js`，提供 SSE 创建和 client id 管理基础封装。
+- 新增 `static/js/sse.js`，扩展 SSE 连接、session/run 事件归属判断和 `/api/action` 发送封装，`static/app.js` 保留业务事件处理回调。
 - `static/index.html` 先加载上述基础脚本，后续逐步替换 `app.js` 中的重复逻辑。
 - 新增 `backend/` 包骨架，开始承接服务层与路由层迁移。
 - 新增 `backend/services/settings_service.py`，承接 GUI settings 读取/保存逻辑。

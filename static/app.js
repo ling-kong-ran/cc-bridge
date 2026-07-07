@@ -1666,38 +1666,53 @@ function initMobileLayout() {
 
 // ─── SSE 连接 ────────────────────────────────────────────────
 function initSSE() {
+  const sse = window.CCBridge?.sse;
+  if (sse?.connect) {
+    sse.connect({
+      getEventSource: () => eventSource,
+      setEventSource: (source) => { eventSource = source; },
+      setClientId: (id) => { clientId = id; },
+      bindEvents: bindSSEEvents,
+    });
+    return;
+  }
+
   if (eventSource) {
     eventSource.close();
     eventSource = null;
   }
 
-  // sessionStorage 确保每个标签页有独立的 clientId，避免跨标签页 SSE 队列冲突
-  const sse = window.CCBridge?.sse;
-  clientId = sse?.getClientId ? sse.getClientId() : (sessionStorage.getItem('ccb_client_id') || 'c_' + Math.random().toString(36).substring(2, 10));
+  clientId = sessionStorage.getItem('ccb_client_id') || 'c_' + Math.random().toString(36).substring(2, 10);
   sessionStorage.setItem('ccb_client_id', clientId);
-  eventSource = sse?.createEventSource ? sse.createEventSource(clientId) : new EventSource(`/sse?id=${clientId}`);
-  bindSSEEvents();
+  eventSource = new EventSource(`/sse?id=${clientId}`);
+  bindSSEEvents(eventSource);
+}
+
+function getSseSessionState() {
+  return { currentRunId, currentSessionId, activeWorkspaceSessionId };
 }
 
 function isEventForCurrentSession(data = {}) {
-  // run_id 精确匹配当前运行
+  const sse = window.CCBridge?.sse;
+  if (sse?.isEventForSession) return sse.isEventForSession(data, getSseSessionState());
   if (data.run_id && currentRunId && data.run_id === currentRunId) return true;
-  // 有 session_id 时，必须匹配当前活跃 workspace 标签页或 currentSessionId
   if (data.session_id) {
     if (activeWorkspaceSessionId && data.session_id === activeWorkspaceSessionId) return true;
     if (currentSessionId && data.session_id === currentSessionId) return true;
-    return false; // 属于其他标签页，不渲染到当前窗口
+    return false;
   }
-  // 无 session_id/run_id 的系统事件（如 heartbeat）允许通过
   return true;
 }
 
 function noteBackgroundSessionEvent(data = {}) {
-  if (!data.session_id) return false;
-  // 如果是活跃 workspace 标签页的事件，不视为后台
-  if (activeWorkspaceSessionId && data.session_id === activeWorkspaceSessionId) return false;
-  if (currentSessionId && data.session_id === currentSessionId) return false;
-  if (data.run_id && currentRunId && data.run_id === currentRunId) return false;
+  const sse = window.CCBridge?.sse;
+  const isBackground = sse?.isBackgroundSessionEvent
+    ? sse.isBackgroundSessionEvent(data, getSseSessionState())
+    : !!data.session_id &&
+      !(activeWorkspaceSessionId && data.session_id === activeWorkspaceSessionId) &&
+      !(currentSessionId && data.session_id === currentSessionId) &&
+      !(data.run_id && currentRunId && data.run_id === currentRunId);
+  if (!isBackground) return false;
   updateBackgroundWorkspacePreview(data);
   scheduleCompletionHistorySync(data.session_id);
   return true;
@@ -1743,14 +1758,14 @@ function extractMessagePreviewText(message) {
   return text;
 }
 
-function bindSSEEvents() {
-  eventSource.addEventListener('connected', (e) => {
+function bindSSEEvents(source = eventSource) {
+  source.addEventListener('connected', (e) => {
     const data = JSON.parse(e.data);
     clientId = data.client_id;
     setConnectionStatus(true);
   });
 
-  eventSource.addEventListener('session_started', (e) => {
+  source.addEventListener('session_started', (e) => {
     const data = JSON.parse(e.data);
     if (data.session_id) currentSessionId = data.session_id;
     currentRunId = data.run_id || null;
@@ -1807,7 +1822,7 @@ function bindSSEEvents() {
     }
   });
 
-  eventSource.addEventListener('session_stopped', (e) => {
+  source.addEventListener('session_stopped', (e) => {
     const data = JSON.parse(e.data || '{}');
     if (!isEventForCurrentSession(data)) return;
     sessionActive = false;
@@ -1818,7 +1833,7 @@ function bindSSEEvents() {
     addSystemMsg(t('sessionStopped'));
   });
 
-  eventSource.addEventListener('session_taken', (e) => {
+  source.addEventListener('session_taken', (e) => {
     // 会话被其他客户端接管，服务端已自动注册本端为 viewer 并推送 session_started(viewing=true)
     // 前端只需显示提示，无需调用 resumeSession（避免 ping-pong 循环）
     const data = JSON.parse(e.data);
@@ -1830,7 +1845,7 @@ function bindSSEEvents() {
     }
   });
 
-  eventSource.addEventListener('user_message', (e) => {
+  source.addEventListener('user_message', (e) => {
     // viewer 收到 owner 发送的用户消息（一问一答中的"问"）
     const data = JSON.parse(e.data);
     if (!isEventForCurrentSession(data)) return;
@@ -1840,7 +1855,7 @@ function bindSSEEvents() {
     }
   });
 
-  eventSource.addEventListener('generation_started', (e) => {
+  source.addEventListener('generation_started', (e) => {
     // 刷新后重连到正在回复的会话，恢复响应状态和 server 端真实耗时。
     // 未收到实际 assistant 输出前不创建空回复气泡，避免历史加载/进程结束竞态造成短暂流式闪烁。
     const data = JSON.parse(e.data || '{}');
@@ -1867,7 +1882,7 @@ function bindSSEEvents() {
     updateUI();
   });
 
-  eventSource.addEventListener('system', (e) => {
+  source.addEventListener('system', (e) => {
     const data = JSON.parse(e.data);
     if (!isEventForCurrentSession(data)) return;
     if (data.subtype === 'init') {
@@ -1880,25 +1895,25 @@ function bindSSEEvents() {
     }
   });
 
-  eventSource.addEventListener('stream_event', (e) => {
+  source.addEventListener('stream_event', (e) => {
     const data = JSON.parse(e.data);
     if (noteBackgroundSessionEvent(data)) return;
     handleStreamEvent(data);
   });
 
-  eventSource.addEventListener('assistant', (e) => {
+  source.addEventListener('assistant', (e) => {
     const data = JSON.parse(e.data);
     if (noteBackgroundSessionEvent(data)) return;
     handleAssistantFinal(data);
   });
 
-  eventSource.addEventListener('context_injected', (e) => {
+  source.addEventListener('context_injected', (e) => {
     const data = JSON.parse(e.data || '{}');
     if (!isEventForCurrentSession(data)) return;
     renderContextTrace(data.trace || data);
   });
 
-  eventSource.addEventListener('memory_consolidation_completed', (e) => {
+  source.addEventListener('memory_consolidation_completed', (e) => {
     const data = JSON.parse(e.data || '{}');
     if (!isEventForCurrentSession(data)) return;
     const job = data.job || data;
@@ -1912,14 +1927,14 @@ function bindSSEEvents() {
     }
   });
 
-  eventSource.addEventListener('memory_consolidation_failed', (e) => {
+  source.addEventListener('memory_consolidation_failed', (e) => {
     const data = JSON.parse(e.data || '{}');
     if (!isEventForCurrentSession(data)) return;
     const job = data.job || data;
     showToast(t('memoryConsolidationFailed', { error: job.error || '' }), 'error');
   });
 
-  eventSource.addEventListener('session_id_captured', (e) => {
+  source.addEventListener('session_id_captured', (e) => {
     const data = JSON.parse(e.data);
     if (data.session_id && currentSessionId && data.session_id !== currentSessionId && data.run_id !== currentRunId) {
       scheduleCompletionHistorySync(data.session_id);
@@ -1943,7 +1958,7 @@ function bindSSEEvents() {
     loadSessions();
   });
 
-  eventSource.addEventListener('cwd_changed', (e) => {
+  source.addEventListener('cwd_changed', (e) => {
     const data = JSON.parse(e.data);
     if (!isEventForCurrentSession(data)) return;
     if (data.cwd) {
@@ -1960,7 +1975,7 @@ function bindSSEEvents() {
     }
   });
 
-  eventSource.addEventListener('model_changed', (e) => {
+  source.addEventListener('model_changed', (e) => {
     const data = JSON.parse(e.data);
     if (!isEventForCurrentSession(data)) return;
     const modelLabel = getDisplayModelName(data.model || '');
@@ -1975,13 +1990,13 @@ function bindSSEEvents() {
     if (modelLabel) addSystemMsg(t('modelChanged', { model: modelLabel }));
   });
 
-  eventSource.addEventListener('result', (e) => {
+  source.addEventListener('result', (e) => {
     const data = JSON.parse(e.data);
     if (noteBackgroundSessionEvent(data)) return;
     handleResult(data);
   });
 
-  eventSource.addEventListener('tool_result', (e) => {
+  source.addEventListener('tool_result', (e) => {
     const data = JSON.parse(e.data);
     if (noteBackgroundSessionEvent(data)) return;
     // 存结果，更新工具卡片
@@ -1995,7 +2010,7 @@ function bindSSEEvents() {
     finishTasks(data.results ? data.results.map(r => r.tool_use_id) : []);
   });
 
-  eventSource.addEventListener('session_lock_changed', (e) => {
+  source.addEventListener('session_lock_changed', (e) => {
     const data = JSON.parse(e.data || '{}');
     if (data.session_id && currentSessionId && data.session_id !== currentSessionId) return;
     const wasResponding = isResponding;
@@ -2008,7 +2023,7 @@ function bindSSEEvents() {
     updateUI();
   });
 
-  eventSource.addEventListener('process_ended', (e) => {
+  source.addEventListener('process_ended', (e) => {
     // ccb 进程结束 —— 确保前端退出 responding 状态；即使锁事件已先到达，也要补齐清理/通知。
     const data = JSON.parse(e.data || '{}');
     if (noteBackgroundSessionEvent(data)) return;
@@ -2026,7 +2041,7 @@ function bindSSEEvents() {
     currentRunId = null;
   });
 
-  eventSource.addEventListener('generation_interrupted', (e) => {
+  source.addEventListener('generation_interrupted', (e) => {
     const data = JSON.parse(e.data || '{}');
     if (!isEventForCurrentSession(data)) return;
     const hadAssistantOutput = currentTurnHasAssistantOutput;
@@ -2046,26 +2061,26 @@ function bindSSEEvents() {
     addSystemMsg(t('interrupted'));
   });
 
-  eventSource.addEventListener('scheduled_task_started', () => {
+  source.addEventListener('scheduled_task_started', () => {
     loadScheduledTasks();
   });
 
-  eventSource.addEventListener('scheduled_task_updated', () => {
+  source.addEventListener('scheduled_task_updated', () => {
     loadScheduledTasks();
   });
 
-  eventSource.addEventListener('scheduled_task_finished', () => {
+  source.addEventListener('scheduled_task_finished', () => {
     loadScheduledTasks();
     loadSessions();
   });
 
-  eventSource.addEventListener('scheduled_task_error', (e) => {
+  source.addEventListener('scheduled_task_error', (e) => {
     const data = JSON.parse(e.data || '{}');
     if (data.message) showToast(data.message, 'error');
     loadScheduledTasks();
   });
 
-  eventSource.addEventListener('error', (e) => {
+  source.addEventListener('error', (e) => {
     if (e.data) {
       const data = JSON.parse(e.data);
       if (noteBackgroundSessionEvent(data)) return;
@@ -2084,13 +2099,13 @@ function bindSSEEvents() {
       updateUI();
       notifyComplete('process');
     }
-    if (eventSource.readyState === EventSource.CLOSED) {
+    if (source.readyState === EventSource.CLOSED) {
       setConnectionStatus(false);
       setTimeout(initSSE, 3000);
     }
   });
 
-  eventSource.onerror = () => {
+  source.onerror = () => {
     setConnectionStatus(false);
     if (isResponding) {
       stopTurnTimer();
@@ -2116,6 +2131,8 @@ function updateConnectionText() {
 // ─── 发送 action ────────────────────────────────────────────
 async function sendAction(action, extra = {}) {
   try {
+    const sse = window.CCBridge?.sse;
+    if (sse?.sendAction) return await sse.sendAction(clientId, action, extra);
     const resp = await fetch('/api/action', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },

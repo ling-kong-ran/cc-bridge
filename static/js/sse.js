@@ -18,9 +18,63 @@
     if (source) source.close();
   }
 
+  function connect(options = {}) {
+    const currentSource = options.getEventSource?.();
+    if (currentSource) closeEventSource(currentSource);
+
+    const clientId = getClientId();
+    sessionStorage.setItem('ccb_client_id', clientId);
+    const source = createEventSource(clientId);
+    options.setClientId?.(clientId);
+    options.setEventSource?.(source);
+    options.bindEvents?.(source);
+    return { clientId, source };
+  }
+
+  function isEventForSession(data = {}, state = {}) {
+    if (data.run_id && state.currentRunId && data.run_id === state.currentRunId) return true;
+    if (data.session_id) {
+      if (state.activeWorkspaceSessionId && data.session_id === state.activeWorkspaceSessionId) return true;
+      if (state.currentSessionId && data.session_id === state.currentSessionId) return true;
+      return false;
+    }
+    return true;
+  }
+
+  function isBackgroundSessionEvent(data = {}, state = {}) {
+    if (!data.session_id) return false;
+    if (state.activeWorkspaceSessionId && data.session_id === state.activeWorkspaceSessionId) return false;
+    if (state.currentSessionId && data.session_id === state.currentSessionId) return false;
+    if (data.run_id && state.currentRunId && data.run_id === state.currentRunId) return false;
+    return true;
+  }
+
+  async function sendAction(clientId, action, extra = {}) {
+    const api = root.api;
+    if (api?.postJson) return api.postJson('/api/action', { client_id: clientId, action, ...extra });
+    if (api?.json) {
+      return api.json('/api/action', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ client_id: clientId, action, ...extra }),
+      });
+    }
+
+    const resp = await fetch('/api/action', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ client_id: clientId, action, ...extra }),
+    });
+    return resp.json();
+  }
+
   root.sse = {
     getClientId,
     createEventSource,
     closeEventSource,
+    connect,
+    isEventForSession,
+    isBackgroundSessionEvent,
+    sendAction,
   };
 })();
