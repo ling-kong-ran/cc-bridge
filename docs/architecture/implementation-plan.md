@@ -211,6 +211,7 @@ cc-bridge/
 - 收敛 `static/app.js` 中本地化 wrapper，移除剩余本地语言切换、语言包加载和本地化文本渲染 fallback 实现，统一委托 `static/js/localization.js`。
 - 收敛 `static/app.js` 中历史加载 wrapper，移除剩余本地会话历史请求、静态历史渲染和历史刷新 fallback 实现，统一委托 `static/js/history-loader.js`。
 - 收敛 `static/app.js` 中 Task 活动 wrapper，移除剩余本地 subagent 运行状态、状态栏和 subagent 气泡 fallback 实现，统一委托 `static/js/task-activity.js`。
+- 收敛 `static/app.js` 中 workspace wrapper，移除剩余本地状态持久化、标签页、面板、预览和拖拽缩放 fallback 实现，统一委托 `static/js/workspace.js`。
 
 ## 后续验收标准
 

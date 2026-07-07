@@ -258,48 +258,28 @@ function initSessionWorkspace() {
   renderWorkspace();
 }
 
+function getWorkspaceModule() {
+  const mod = window.CCBridge?.workspace;
+  if (!mod) console.error('CCBridge workspace module is not loaded');
+  return mod;
+}
+
 function saveWorkspaceState() {
-  const workspace = window.CCBridge?.workspace;
-  if (workspace?.writeState && workspace?.serializeState) {
-    workspace.writeState(workspace.serializeState({
-      mode: workspaceMode,
-      activeSessionId: activeWorkspaceSessionId,
-      sessions: workspaceSessions,
-      widths: workspacePaneWidths,
-    }), WORKSPACE_STORAGE_KEY);
-    return;
-  }
-  const sessions = Array.from(workspaceSessions.values())
-    .filter(s => s.sessionId && !s.sessionId.startsWith('pending-'))
-    .map(s => ({
-      sessionId: s.sessionId,
-      title: s.title || '',
-      cwd: s.cwd || '',
-      model: s.model || '',
-      cli: s.cli || '',
-      remoteTargetId: s.remoteTargetId || '',
-      cost: s.cost || 0,
-      tokens: s.tokens || null,
-      status: s.status === 'running' || s.status === 'tool' ? 'idle' : (s.status || 'idle'),
-      phase: '',
-      runId: s.status === 'running' || s.status === 'tool' ? (s.runId || '') : '',
-    }));
-  try {
-    localStorage.setItem(WORKSPACE_STORAGE_KEY, JSON.stringify({
-      mode: workspaceMode,
-      activeSessionId: activeWorkspaceSessionId && !activeWorkspaceSessionId.startsWith('pending-') ? activeWorkspaceSessionId : '',
-      sessions,
-      widths: Array.from(workspacePaneWidths.entries()),
-    }));
-  } catch (e) { /* ignore */ }
+  const workspace = getWorkspaceModule();
+  return workspace?.writeState?.(workspace.serializeState({
+    mode: workspaceMode,
+    activeSessionId: activeWorkspaceSessionId,
+    sessions: workspaceSessions,
+    widths: workspacePaneWidths,
+  }), WORKSPACE_STORAGE_KEY);
 }
 
 function loadWorkspaceState() {
   try {
-    const workspace = window.CCBridge?.workspace;
-    const state = workspace?.readState ? workspace.readState(WORKSPACE_STORAGE_KEY) : JSON.parse(localStorage.getItem(WORKSPACE_STORAGE_KEY) || 'null');
+    const workspace = getWorkspaceModule();
+    const state = workspace?.readState?.(WORKSPACE_STORAGE_KEY);
     if (!state) return;
-    workspaceMode = workspace?.normalizeStoredMode ? workspace.normalizeStoredMode(state.mode) : (state.mode === 'grid' ? 'grid' : 'focus');
+    workspaceMode = workspace.normalizeStoredMode(state.mode);
     workspaceSessions.clear();
     for (const s of (Array.isArray(state.sessions) ? state.sessions : [])) {
       if (s.sessionId) workspaceSessions.set(s.sessionId, workspaceSessionFromMeta(s.sessionId, s));
@@ -314,28 +294,8 @@ function loadWorkspaceState() {
 }
 
 function workspaceSessionFromMeta(sessionId, meta = {}) {
-  const workspace = window.CCBridge?.workspace;
   const existing = workspaceSessions.get(sessionId) || {};
-  if (workspace?.createSessionRecord) return workspace.createSessionRecord(sessionId, meta, existing, t);
-  const nextStatus = meta.status || existing.status || 'idle';
-  const rawPhase = Object.prototype.hasOwnProperty.call(meta, 'phase') ? meta.phase : existing.phase;
-  return {
-    sessionId,
-    title: meta.title || existing.title || t('newChat'),
-    cwd: meta.cwd || existing.cwd || '',
-    model: meta.model || existing.model || '',
-    cli: meta.cli || existing.cli || '',
-    remoteTargetId: meta.remoteTargetId || existing.remoteTargetId || '',
-    cost: Number.isFinite(meta.cost) ? meta.cost : (existing.cost || 0),
-    tokens: meta.tokens || existing.tokens || null,
-    status: nextStatus,
-    phase: nextStatus === 'running' || nextStatus === 'tool' ? (rawPhase || '') : '',
-    startedAt: meta.startedAt || existing.startedAt || 0,
-    updatedAt: Date.now(),
-    runId: meta.runId || existing.runId || '',
-    released: Boolean(meta.released ?? existing.released),
-    previewText: meta.previewText || existing.previewText || '',
-  };
+  return getWorkspaceModule()?.createSessionRecord?.(sessionId, meta, existing, t);
 }
 
 function ensureWorkspaceSession(sessionId, meta = {}) {
@@ -353,23 +313,13 @@ function captureActiveWorkspaceSnapshot() {
 }
 
 function getWorkspaceSessionPreview(session) {
-  const workspace = window.CCBridge?.workspace;
-  if (workspace?.previewText) return workspace.previewText(session, WORKSPACE_PREVIEW_MAX_CHARS);
-  if (!session) return '';
-  return (session.previewText || '').slice(-WORKSPACE_PREVIEW_MAX_CHARS);
+  return getWorkspaceModule()?.previewText?.(session, WORKSPACE_PREVIEW_MAX_CHARS) || '';
 }
 
 function appendWorkspaceSessionPreview(sessionId, text) {
   if (!sessionId || !text) return;
   const session = workspaceSessions.get(sessionId);
-  const workspace = window.CCBridge?.workspace;
-  const changed = workspace?.appendPreview
-    ? workspace.appendPreview(session, text, WORKSPACE_PREVIEW_MAX_CHARS)
-    : (() => {
-      if (!session) return false;
-      session.previewText = `${session.previewText || ''}${text}`.slice(-WORKSPACE_PREVIEW_MAX_CHARS);
-      return true;
-    })();
+  const changed = getWorkspaceModule()?.appendPreview?.(session, text, WORKSPACE_PREVIEW_MAX_CHARS);
   if (!changed) return;
   scheduleWorkspacePreviewRender();
 }
@@ -377,14 +327,7 @@ function appendWorkspaceSessionPreview(sessionId, text) {
 function setWorkspaceSessionPreview(sessionId, text) {
   if (!sessionId) return;
   const session = workspaceSessions.get(sessionId);
-  const workspace = window.CCBridge?.workspace;
-  const changed = workspace?.setPreview
-    ? workspace.setPreview(session, text, WORKSPACE_PREVIEW_MAX_CHARS)
-    : (() => {
-      if (!session) return false;
-      session.previewText = (text || '').slice(-WORKSPACE_PREVIEW_MAX_CHARS);
-      return true;
-    })();
+  const changed = getWorkspaceModule()?.setPreview?.(session, text, WORKSPACE_PREVIEW_MAX_CHARS);
   if (!changed) return;
   scheduleWorkspacePreviewRender();
 }
@@ -442,14 +385,7 @@ function setWorkspaceMode(mode) {
 }
 
 function getWorkspaceStatusLabel(status) {
-  const workspace = window.CCBridge?.workspace;
-  return t(workspace?.statusKey ? workspace.statusKey(status) : ({
-    idle: 'workspaceIdle',
-    running: 'workspaceRunning',
-    tool: 'workspaceTool',
-    done: 'workspaceDone',
-    error: 'workspaceError',
-  }[status || 'idle'] || 'workspaceIdle'));
+  return t(getWorkspaceModule()?.statusKey?.(status) || 'workspaceIdle');
 }
 
 function updateWorkspaceSessionStatus(sessionId, status, phase = '') {
@@ -540,89 +476,11 @@ function getWorkspaceTabsOptions() {
 }
 
 function ensureWorkspaceTabsEvents() {
-  const workspace = window.CCBridge?.workspace;
-  if (workspace?.ensureWorkspaceTabsEvents) return workspace.ensureWorkspaceTabsEvents(getWorkspaceTabsOptions());
-  if (!workspaceTabsEl || workspaceTabsEl.dataset.eventsBound === '1') return;
-  workspaceTabsEl.dataset.eventsBound = '1';
-  workspaceTabsEl.addEventListener('click', (e) => {
-    if (e.target.closest('.workspace-new-session')) {
-      startNewSession();
-      return;
-    }
-    const closeBtn = e.target.closest('.workspace-close-btn');
-    if (closeBtn) {
-      e.preventDefault();
-      e.stopPropagation();
-      closeWorkspaceSession(getWorkspaceTabSessionId(closeBtn));
-      return;
-    }
-    const renameBtn = e.target.closest('.workspace-rename-btn');
-    if (renameBtn) {
-      e.preventDefault();
-      e.stopPropagation();
-      renameWorkspaceSession(getWorkspaceTabSessionId(renameBtn));
-      return;
-    }
-    const sessionId = getWorkspaceTabSessionId(e.target);
-    if (sessionId) activateWorkspaceSession(sessionId);
-  });
-  workspaceTabsEl.addEventListener('dblclick', (e) => {
-    if (e.target.closest('.workspace-rename-btn, .workspace-close-btn')) return;
-    const sessionId = getWorkspaceTabSessionId(e.target);
-    if (!sessionId) return;
-    e.preventDefault();
-    renameWorkspaceSession(sessionId);
-  });
-  workspaceTabsEl.addEventListener('keydown', (e) => {
-    if (e.key !== 'Enter' && e.key !== ' ') return;
-    const closeBtn = e.target.closest('.workspace-close-btn');
-    if (closeBtn) {
-      e.preventDefault();
-      e.stopPropagation();
-      closeWorkspaceSession(getWorkspaceTabSessionId(closeBtn));
-      return;
-    }
-    const renameBtn = e.target.closest('.workspace-rename-btn');
-    if (renameBtn) {
-      e.preventDefault();
-      e.stopPropagation();
-      renameWorkspaceSession(getWorkspaceTabSessionId(renameBtn));
-      return;
-    }
-    const sessionId = getWorkspaceTabSessionId(e.target);
-    if (!sessionId) return;
-    e.preventDefault();
-    activateWorkspaceSession(sessionId);
-  });
+  return getWorkspaceModule()?.ensureWorkspaceTabsEvents?.(getWorkspaceTabsOptions());
 }
 
 function renderWorkspaceTabs() {
-  const workspace = window.CCBridge?.workspace;
-  if (workspace?.renderWorkspaceTabs) return workspace.renderWorkspaceTabs(getWorkspaceTabsOptions());
-  ensureWorkspaceTabsEvents();
-  const sessions = Array.from(workspaceSessions.values());
-  const newButton = `
-    <button class="workspace-new-session" type="button" title="${esc(t('newSession'))}" aria-label="${esc(t('newSession'))}">+</button>
-  `;
-  if (!sessions.length) {
-    workspaceTabsEl.innerHTML = `<div class="workspace-tabs-empty">${esc(t('workspaceNoTabs'))}</div>${newButton}`;
-    return;
-  }
-  workspaceTabsEl.innerHTML = sessions.map(s => {
-    const active = s.sessionId === activeWorkspaceSessionId;
-    return `
-    <div class="workspace-tab ${active ? 'active' : ''} status-${esc(s.status || 'idle')}" role="tab" tabindex="0" aria-selected="${active ? 'true' : 'false'}" data-session-id="${esc(s.sessionId)}">
-      <span class="workspace-tab-title-row">
-        <span class="workspace-tab-title">${esc(s.title || t('newChat'))}</span>
-        <span class="workspace-tab-actions">
-          <span class="workspace-rename-btn" role="button" tabindex="0" title="${esc(t('rename'))}" aria-label="${esc(t('rename'))}">EDIT</span>
-          <span class="workspace-close-btn" role="button" tabindex="0" title="${esc(t('close'))}" aria-label="${esc(t('close'))}">×</span>
-        </span>
-      </span>
-      <span class="workspace-tab-meta">${esc(getWorkspaceStatusLabel(s.status))}${(s.status === 'running' || s.status === 'tool') && s.phase ? ` · ${esc(s.phase)}` : ''}</span>
-    </div>
-  `;
-  }).join('') + newButton;
+  return getWorkspaceModule()?.renderWorkspaceTabs?.(getWorkspaceTabsOptions());
 }
 
 function getWorkspacePanesOptions() {
@@ -646,79 +504,7 @@ function getWorkspacePanesOptions() {
 }
 
 function renderWorkspacePanes() {
-  const workspace = window.CCBridge?.workspace;
-  if (workspace?.renderWorkspacePanes) return workspace.renderWorkspacePanes(getWorkspacePanesOptions());
-  const activeSession = workspaceSessions.get(activeWorkspaceSessionId);
-  workspaceLivePane.dataset.sessionId = activeWorkspaceSessionId || '';
-  workspaceLivePane.classList.toggle('active', true);
-  workspaceLivePane.className = `workspace-pane active status-${activeSession?.status || 'idle'}`;
-  const titleEl = workspaceLivePane.querySelector('.workspace-pane-title');
-  const statusEl = workspaceLivePane.querySelector('.workspace-pane-status');
-  if (titleEl) {
-    titleEl.innerHTML = `${activeSession?.title ? esc(activeSession.title) : esc(t('chat'))}<span class="workspace-input-target">${esc(t('workspaceInputTarget'))}</span>`;
-  }
-  if (statusEl) statusEl.textContent = getWorkspaceStatusLabel(activeSession?.status || (sessionActive ? 'idle' : 'idle'));
-  applyWorkspacePaneWidth(workspaceLivePane, activeWorkspaceSessionId);
-
-  ensureLivePaneResizer();
-  if (workspaceMode !== 'grid') {
-    workspacePanesEl.querySelectorAll('.workspace-snapshot-pane').forEach(el => el.remove());
-    return;
-  }
-
-  const inactiveSessionIds = new Set(
-    Array.from(workspaceSessions.values())
-      .filter(session => session.sessionId !== activeWorkspaceSessionId)
-      .map(session => session.sessionId)
-  );
-  workspacePanesEl.querySelectorAll('.workspace-snapshot-pane').forEach(el => {
-    if (!inactiveSessionIds.has(el.dataset.sessionId)) el.remove();
-  });
-
-  for (const session of workspaceSessions.values()) {
-    if (session.sessionId === activeWorkspaceSessionId) continue;
-    let pane = Array.from(workspacePanesEl.querySelectorAll('.workspace-snapshot-pane'))
-      .find(el => el.dataset.sessionId === session.sessionId);
-    if (!pane) {
-      pane = document.createElement('section');
-      pane.className = 'workspace-pane workspace-snapshot-pane';
-      pane.dataset.sessionId = session.sessionId;
-      pane.innerHTML = `
-        <div class="workspace-pane-head">
-          <div class="workspace-pane-title"></div>
-          <div class="workspace-pane-status"></div>
-        </div>
-        <div class="messages workspace-snapshot-messages"></div>
-        <div class="workspace-pane-resizer" title="${esc(t('workspaceResize'))}"></div>
-      `;
-      pane.querySelector('.workspace-pane-head')?.addEventListener('click', () => activateWorkspaceSession(session.sessionId));
-      pane.querySelector('.workspace-pane-resizer')?.addEventListener('pointerdown', (e) => startWorkspaceResize(e, session.sessionId, pane));
-    }
-    pane.className = `workspace-pane workspace-snapshot-pane status-${session.status || 'idle'}`;
-    const paneTitle = pane.querySelector('.workspace-pane-title');
-    const paneStatus = pane.querySelector('.workspace-pane-status');
-    const paneMessages = pane.querySelector('.workspace-snapshot-messages');
-    if (paneTitle) paneTitle.textContent = session.title || t('newChat');
-    if (paneStatus) paneStatus.textContent = getWorkspaceStatusLabel(session.status);
-    const previewText = getWorkspaceSessionPreview(session);
-    releaseInactiveWorkspaceSession(session.sessionId);
-    if (paneMessages && paneMessages.dataset.previewText !== previewText) {
-      paneMessages.dataset.previewText = previewText;
-      if (previewText) {
-        let previewEl = paneMessages.querySelector('.workspace-live-preview');
-        if (!previewEl) {
-          paneMessages.innerHTML = '<div class="workspace-live-preview"></div>';
-          previewEl = paneMessages.querySelector('.workspace-live-preview');
-        }
-        previewEl.textContent = previewText;
-      } else {
-        paneMessages.innerHTML = `<div class="workspace-snapshot-empty">${esc(t('workspaceOpenSession'))}</div>`;
-      }
-    }
-    applyWorkspacePaneWidth(pane, session.sessionId);
-    workspacePanesEl.appendChild(pane);
-  }
-  ensureLivePaneResizer();
+  return getWorkspaceModule()?.renderWorkspacePanes?.(getWorkspacePanesOptions());
 }
 
 function getWorkspaceResizeOptions() {
@@ -736,83 +522,27 @@ function getWorkspaceResizeOptions() {
 }
 
 function ensureLivePaneResizer() {
-  const workspace = window.CCBridge?.workspace;
-  if (workspace?.ensureLivePaneResizer) return workspace.ensureLivePaneResizer(getWorkspaceResizeOptions());
-  let resizer = workspaceLivePane.querySelector('.workspace-pane-resizer');
-  if (workspaceMode !== 'grid') {
-    if (resizer) resizer.remove();
-    return;
-  }
-  if (!resizer) {
-    resizer = document.createElement('div');
-    resizer.className = 'workspace-pane-resizer';
-    workspaceLivePane.appendChild(resizer);
-  }
-  resizer.title = t('workspaceResize');
-  resizer.onpointerdown = (e) => startWorkspaceResize(e, activeWorkspaceSessionId, workspaceLivePane);
+  return getWorkspaceModule()?.ensureLivePaneResizer?.(getWorkspaceResizeOptions());
 }
 
 function applyWorkspacePaneWidth(pane, sessionId) {
-  const workspace = window.CCBridge?.workspace;
-  if (workspace?.applyPaneWidth) {
-    workspace.applyPaneWidth(pane, sessionId, {
-      mode: workspaceMode,
-      widths: workspacePaneWidths,
-      sessionCount: workspaceSessions.size,
-    });
-    return;
-  }
-  if (!pane || workspaceMode !== 'grid') {
-    if (pane) {
-      pane.style.flex = '';
-      pane.style.flexBasis = '';
-    }
-    return;
-  }
-  const savedWidth = workspacePaneWidths.get(sessionId);
-  if (savedWidth) {
-    pane.style.flex = `0 0 ${savedWidth}px`;
-    pane.style.flexBasis = `${savedWidth}px`;
-    return;
-  }
-  const sessionCount = Math.max(1, workspaceSessions.size);
-  const gapTotal = Math.max(0, sessionCount - 1) * 8;
-  const width = `calc((100% - ${gapTotal}px) / ${sessionCount})`;
-  pane.style.flex = `1 1 ${width}`;
-  pane.style.flexBasis = width;
+  return getWorkspaceModule()?.applyPaneWidth?.(pane, sessionId, {
+    mode: workspaceMode,
+    widths: workspacePaneWidths,
+    sessionCount: workspaceSessions.size,
+  });
 }
 
 function startWorkspaceResize(event, sessionId, pane) {
-  const workspace = window.CCBridge?.workspace;
-  if (workspace?.startWorkspaceResize) return workspace.startWorkspaceResize(event, sessionId, pane, getWorkspaceResizeOptions());
-  if (!sessionId || !pane) return;
-  event.preventDefault();
-  workspaceResizeState = {
-    sessionId,
-    pane,
-    startX: event.clientX,
-    startWidth: pane.getBoundingClientRect().width,
-  };
-  document.body.classList.add('resizing-workspace-pane');
-  pane.setPointerCapture?.(event.pointerId);
+  return getWorkspaceModule()?.startWorkspaceResize?.(event, sessionId, pane, getWorkspaceResizeOptions());
 }
 
 function handleWorkspaceResizeMove(event) {
-  const workspace = window.CCBridge?.workspace;
-  if (workspace?.handleWorkspaceResizeMove) return workspace.handleWorkspaceResizeMove(event, getWorkspaceResizeOptions());
-  if (!workspaceResizeState) return;
-  const nextWidth = Math.max(260, Math.min(900, workspaceResizeState.startWidth + event.clientX - workspaceResizeState.startX));
-  workspacePaneWidths.set(workspaceResizeState.sessionId, nextWidth);
-  applyWorkspacePaneWidth(workspaceResizeState.pane, workspaceResizeState.sessionId);
+  return getWorkspaceModule()?.handleWorkspaceResizeMove?.(event, getWorkspaceResizeOptions());
 }
 
 function stopWorkspaceResize() {
-  const workspace = window.CCBridge?.workspace;
-  if (workspace?.stopWorkspaceResize) return workspace.stopWorkspaceResize(getWorkspaceResizeOptions());
-  if (!workspaceResizeState) return;
-  workspaceResizeState = null;
-  document.body.classList.remove('resizing-workspace-pane');
-  saveWorkspaceState();
+  return getWorkspaceModule()?.stopWorkspaceResize?.(getWorkspaceResizeOptions());
 }
 
 
@@ -1457,55 +1187,15 @@ function getWorkspaceEventOptions() {
 }
 
 function updateBackgroundWorkspacePreview(data = {}) {
-  const workspace = window.CCBridge?.workspace;
-  if (workspace?.updateBackgroundWorkspacePreview) {
-    workspace.updateBackgroundWorkspacePreview(data, getWorkspaceEventOptions());
-    return;
-  }
-  const sessionId = data.session_id;
-  if (!sessionId || !workspaceSessions.has(sessionId)) return;
-  if (data.event) {
-    appendWorkspacePreviewEvent(sessionId, data.event);
-    return;
-  }
-  const message = data.message;
-  if (message?.content) {
-    const text = extractMessagePreviewText(message);
-    if (text) setWorkspaceSessionPreview(sessionId, text);
-  }
+  return getWorkspaceModule()?.updateBackgroundWorkspacePreview?.(data, getWorkspaceEventOptions());
 }
 
 function appendWorkspacePreviewEvent(sessionId, evt) {
-  const workspace = window.CCBridge?.workspace;
-  if (workspace?.appendWorkspacePreviewEvent) {
-    workspace.appendWorkspacePreviewEvent(sessionId, evt, getWorkspaceEventOptions());
-    return;
-  }
-  if (!evt) return;
-  if (evt.type === 'message_start') {
-    setWorkspaceSessionPreview(sessionId, '');
-    return;
-  }
-  if (evt.type === 'content_block_delta') {
-    const text = evt.delta?.text || evt.delta?.thinking || evt.delta?.partial_json || '';
-    if (text) appendWorkspaceSessionPreview(sessionId, text);
-    return;
-  }
-  if (evt.type === 'content_block_start' && evt.content_block?.type === 'tool_use') {
-    appendWorkspaceSessionPreview(sessionId, `\n> ${evt.content_block.name || t('tool')}\n`);
-  }
+  return getWorkspaceModule()?.appendWorkspacePreviewEvent?.(sessionId, evt, getWorkspaceEventOptions());
 }
 
 function extractMessagePreviewText(message) {
-  const workspace = window.CCBridge?.workspace;
-  if (workspace?.extractMessagePreviewText) return workspace.extractMessagePreviewText(message);
-  let text = '';
-  for (const block of (message.content || [])) {
-    if (block.type === 'text' && block.text) text += block.text;
-    else if (block.type === 'thinking' && block.thinking) text += block.thinking;
-    else if (block.type === 'tool_use' && block.name) text += `\n> ${block.name}\n`;
-  }
-  return text;
+  return getWorkspaceModule()?.extractMessagePreviewText?.(message) || '';
 }
 
 function getSseLifecycleOptions() {
