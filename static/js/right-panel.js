@@ -973,7 +973,6 @@ async function loadFileTree(path) {
     initRightPanel,
     initFilePreviewPanel,
     initDiffPreviewPanel,
-    applyRightPaneWidth,
     refreshRightPaneFiles,
     loadFileTree,
     loadReview,

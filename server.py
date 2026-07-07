@@ -479,11 +479,9 @@ async def broadcast_session_lock(session_id: str, locked: bool, holder_id: str =
         holder_id = session_locks.get(session_id, {}).get("holder_id", holder_id)
         session_locks.pop(session_id, None)
 
-    run_id = session_run_ids.get(session_id, "")
     for target_id in get_session_subscribers(session_id):
         await push_event(target_id, "session_lock_changed", {
             "session_id": session_id,
-            "run_id": run_id,
             "locked": locked,
             "holder_id": holder_id,
             "is_holder": target_id == holder_id,
@@ -510,7 +508,6 @@ async def push_current_session_lock(client_id: str, session_id: str):
         holder_id = lock.get("holder_id", "")
         await push_event(client_id, "session_lock_changed", {
             "session_id": session_id,
-            "run_id": session_run_ids.get(session_id, ""),
             "locked": True,
             "holder_id": holder_id,
             "is_holder": client_id == holder_id,

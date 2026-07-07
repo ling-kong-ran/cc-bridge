@@ -16,7 +16,6 @@
       setCurrentTurnHasAssistantOutput: options.setCurrentTurnHasAssistantOutput || (() => {}),
       setCurrentTurnStartedAt: options.setCurrentTurnStartedAt || (() => {}),
       setCurrentAssistantEl: options.setCurrentAssistantEl || (() => {}),
-      cleanupStaleAssistantStreamingBubbles: options.cleanupStaleAssistantStreamingBubbles || (() => {}),
       createAssistantBubble: options.createAssistantBubble || (() => null),
       startTurnTimer: options.startTurnTimer || (() => {}),
       updateWorkspaceSessionStatus: options.updateWorkspaceSessionStatus || (() => {}),
@@ -77,7 +76,6 @@
     switch (evt.type) {
       case 'message_start':
         if (!ctx.currentAssistantEl) {
-          ctx.cleanupStaleAssistantStreamingBubbles();
           ctx.setCurrentAssistantEl(ctx.createAssistantBubble());
           ctx.setCurrentContent([]);
           ctx.setStreamBlocks({});

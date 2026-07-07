@@ -30,7 +30,6 @@
       currentTurnHasAssistantOutput: state.currentTurnHasAssistantOutput,
       currentTurnStartedAt: state.currentTurnStartedAt,
       currentTurnAttachmentCount: state.currentTurnAttachmentCount,
-      currentAssistantEl: state.currentAssistantEl || null,
     });
   }
 
@@ -49,7 +48,7 @@
         currentTurnHasAssistantOutput: saved.currentTurnHasAssistantOutput,
         currentTurnStartedAt: saved.currentTurnStartedAt,
         currentTurnAttachmentCount: saved.currentTurnAttachmentCount,
-        currentAssistantEl: saved.currentAssistantEl || null,
+        currentAssistantEl: null,
         totalCost: 0,
         totalTokens: ctx.emptyTokenUsage(),
       });
