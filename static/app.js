@@ -3583,32 +3583,14 @@ function getMainUiOptions() {
   };
 }
 
+function getMainUiModule() {
+  const mod = window.CCBridge?.mainUi;
+  if (!mod) console.error('CCBridge mainUi module is not loaded');
+  return mod;
+}
+
 function updateUI() {
-  const mainUi = window.CCBridge?.mainUi;
-  if (mainUi?.updateUI) return mainUi.updateUI(getMainUiOptions());
-  btnSend.disabled = !sessionActive;
-  // viewer 模式下 Stop 按钮可见但禁用，补充发送仍可用。
-  btnStop.classList.toggle('visible', isResponding);
-  btnStop.disabled = isViewer;
-  if (btnNewSession) btnNewSession.innerHTML = `<span class="btn-prefix">&gt;</span> ${sessionActive ? t('restartSession') : t('newSession')}`;
-  document.body.classList.toggle('has-active-session', sessionActive);
-  if (!sessionActive && sidebarCollapsed) sidebarCollapsed = false;
-  setSidebarCollapsed(sidebarCollapsed);
-  // viewer 模式时禁用部分配置修改（CWD 可随时更换）
-  const cliSelect = document.getElementById('cli-select');
-  if (cliSelect) cliSelect.disabled = false;
-  if (modelSelect) modelSelect.disabled = false;
-  const skipPermissions = document.getElementById('skip-permissions');
-  if (skipPermissions) skipPermissions.disabled = sessionActive;
-  // 远程目标和写入开关可随时切换，下一条消息生效
-  if (remoteTargetSelect) remoteTargetSelect.disabled = false;
-  inputEl.disabled = !sessionActive;
-  inputEl.style.opacity = sessionActive ? '1' : '0.5';
-  if (isResponding) {
-    inputEl.placeholder = t('respondingPlaceholder') || 'Waiting for response...';
-  } else {
-    inputEl.placeholder = t('messagePlaceholder') || 'Type a message...';
-  }
+  return getMainUiModule()?.updateUI?.(getMainUiOptions());
 }
 
 function getMessageScrollOptions() {
