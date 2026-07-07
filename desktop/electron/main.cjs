@@ -192,6 +192,11 @@ async function stopBackend() {
   if (backendProcess && !backendProcess.killed) backendProcess.kill()
 }
 
+function normalizeReleaseNotes(notes) {
+  if (Array.isArray(notes)) return notes.map(item => item?.note || item).filter(Boolean).join('\n')
+  return notes || ''
+}
+
 function configureAutoUpdater() {
   if (!app.isPackaged) return
 
@@ -199,6 +204,40 @@ function configureAutoUpdater() {
   autoUpdater.autoInstallOnAppQuit = true
   autoUpdater.on('error', error => console.error('自动更新检查失败', error))
   autoUpdater.checkForUpdatesAndNotify()
+}
+
+async function checkDesktopUpdate() {
+  if (!app.isPackaged) return { ok: false, error: 'not_packaged' }
+  try {
+    const result = await autoUpdater.checkForUpdates()
+    const info = result?.updateInfo || {}
+    return {
+      ok: true,
+      has_update: info.version && info.version !== app.getVersion(),
+      local: app.getVersion(),
+      remote: info.version || '',
+      release_name: info.releaseName || '',
+      commits: normalizeReleaseNotes(info.releaseNotes),
+      error: null,
+    }
+  } catch (error) {
+    console.error('自动更新检查失败', error)
+    return { ok: false, error: error?.message || String(error) }
+  }
+}
+
+async function installDesktopUpdate() {
+  if (!app.isPackaged) return { ok: false, error: 'not_packaged' }
+  try {
+    const result = await autoUpdater.checkForUpdates()
+    const downloadPromise = result?.downloadPromise || autoUpdater.downloadUpdate()
+    await downloadPromise
+    setImmediate(() => autoUpdater.quitAndInstall(false, true))
+    return { ok: true, error: null }
+  } catch (error) {
+    console.error('自动更新下载失败', error)
+    return { ok: false, error: error?.message || String(error) }
+  }
 }
 
 const gotLock = app.requestSingleInstanceLock()
@@ -216,6 +255,8 @@ if (!gotLock) {
     ipcMain.handle('desktop:close-window', () => {
       if (mainWindow && !mainWindow.isDestroyed()) mainWindow.close()
     })
+    ipcMain.handle('desktop:check-update', checkDesktopUpdate)
+    ipcMain.handle('desktop:install-update', installDesktopUpdate)
     createWindow()
     startBackend()
     configureAutoUpdater()

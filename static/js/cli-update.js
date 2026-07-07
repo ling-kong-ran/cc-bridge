@@ -157,19 +157,23 @@
       }
     }
     try {
-      const resp = await fetch('/api/check-update');
-      const data = await resp.json();
+      const data = window.ccBridgeDesktop?.checkUpdate
+        ? await window.ccBridgeDesktop.checkUpdate()
+        : await (async () => {
+          const resp = await fetch('/api/check-update');
+          return resp.json();
+        })();
       ctx.setUpdateInfo(data);
       if (!data.ok) {
         if (manual && checkHint) {
-          checkHint.textContent = ctx.t('updateFailed');
+          checkHint.textContent = data.error ? `${ctx.t('updateFailed')}: ${data.error}` : ctx.t('updateFailed');
           checkHint.className = 'update-check-hint err';
         }
         return;
       }
       const versionEl = document.getElementById('app-version');
       if (versionEl) {
-        const localVersion = data.local_short || '—';
+        const localVersion = data.local_short || data.local || '—';
         versionEl.textContent = data.needs_restart && data.server_start_short
           ? `${data.server_start_short} → ${localVersion}`
           : localVersion;
@@ -225,7 +229,14 @@
     setUpdateStatus(ctx.t('updateChecking'), '');
     try {
       const updateInfo = ctx.getUpdateInfo();
-      if (!updateInfo?.needs_restart || updateInfo?.has_update) {
+      if (window.ccBridgeDesktop?.installUpdate) {
+        const result = await window.ccBridgeDesktop.installUpdate();
+        if (!result.ok) {
+          setUpdateStatus(result.error ? `${ctx.t('updateRestartManual')}: ${result.error}` : ctx.t('updateRestartManual'), 'err');
+          if (runBtn) runBtn.disabled = false;
+          return;
+        }
+      } else if (!updateInfo?.needs_restart || updateInfo?.has_update) {
         const resp = await fetch('/api/update', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
         const result = await resp.json();
         const changelog = document.getElementById('update-changelog');
@@ -237,6 +248,7 @@
         }
       }
       setUpdateStatus(ctx.t('updateSuccess'), 'ok');
+      if (window.ccBridgeDesktop?.installUpdate) return;
       try {
         await fetch('/api/restart', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
       } catch (e) { /* 重启会断开连接，忽略 */ }
