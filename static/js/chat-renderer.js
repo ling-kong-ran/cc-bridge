@@ -196,10 +196,14 @@
   </div>`;
   }
 
+  function findToolCard(toolId) {
+    return Array.from(document.querySelectorAll('.tool-card'))
+      .find(card => card.dataset.toolId === String(toolId || '')) || null;
+  }
+
   function updateToolResult(toolId, content, isError, options = {}) {
     const { toolStartTimes } = getContext(options);
-    const escId = String(toolId || '').replace(/"/g, '\\"');
-    const card = document.querySelector(`.tool-card[data-tool-id="${escId}"]`);
+    const card = findToolCard(toolId);
     if (!card) return;
     card.classList.remove('tool-card-running');
     const startTime = toolStartTimes.get(toolId);

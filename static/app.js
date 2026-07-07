@@ -2489,10 +2489,15 @@ function renderToolCard(block, opts = {}) {
   </div>`;
 }
 
+function findToolCard(toolId) {
+  return Array.from(document.querySelectorAll('.tool-card'))
+    .find(card => card.dataset.toolId === String(toolId || '')) || null;
+}
+
 function updateToolResult(toolId, content, isError) {
   const renderer = window.CCBridge?.chatRenderer;
   if (renderer?.updateToolResult) return renderer.updateToolResult(toolId, content, isError, getChatRendererOptions());
-  const card = document.querySelector(`.tool-card[data-tool-id="${toolId}"]`);
+  const card = findToolCard(toolId);
   if (!card) return;
   card.classList.remove('tool-card-running');
   // 计算耗时
