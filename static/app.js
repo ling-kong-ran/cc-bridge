@@ -4018,12 +4018,23 @@ function updateUI() {
 let _scrollPending = false;
 let followMessageOutput = true;
 
+function getMessageScrollOptions() {
+  return {
+    messagesEl,
+    requestAnimationFrame,
+  };
+}
+
 function isMessagesNearBottom(threshold = 80) {
+  const messageScroll = window.CCBridge?.messageScroll;
+  if (messageScroll?.isMessagesNearBottom) return messageScroll.isMessagesNearBottom(threshold, getMessageScrollOptions());
   if (!messagesEl) return true;
   return messagesEl.scrollHeight - messagesEl.scrollTop - messagesEl.clientHeight <= threshold;
 }
 
 function initMessageAutoScroll() {
+  const messageScroll = window.CCBridge?.messageScroll;
+  if (messageScroll?.initMessageAutoScroll) return messageScroll.initMessageAutoScroll(getMessageScrollOptions());
   if (!messagesEl) return;
   messagesEl.addEventListener('scroll', () => {
     followMessageOutput = isMessagesNearBottom();
@@ -4031,6 +4042,8 @@ function initMessageAutoScroll() {
 }
 
 function scrollToBottom(force = false) {
+  const messageScroll = window.CCBridge?.messageScroll;
+  if (messageScroll?.scrollToBottom) return messageScroll.scrollToBottom(force, getMessageScrollOptions());
   if (!force && !followMessageOutput) return;
   if (_scrollPending) return;
   _scrollPending = true;
