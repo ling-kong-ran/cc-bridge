@@ -967,53 +967,18 @@ function getNotificationOptions() {
   };
 }
 
+function getNotificationsModule() {
+  const mod = window.CCBridge?.notifications;
+  if (!mod) console.error('CCBridge notifications module is not loaded');
+  return mod;
+}
+
 function pageIsUnfocused() {
-  const notifications = window.CCBridge?.notifications;
-  if (notifications?.pageIsUnfocused) return notifications.pageIsUnfocused();
-  return document.visibilityState === 'hidden' || !document.hasFocus();
+  return getNotificationsModule()?.pageIsUnfocused?.() || false;
 }
 
 function notifyComplete(kind, detail = {}) {
-  const notifications = window.CCBridge?.notifications;
-  if (notifications?.notifyComplete) return notifications.notifyComplete(kind, detail, getNotificationOptions());
-  if (!notificationsEnabled || !("Notification" in window) || Notification.permission !== 'granted' || !pageIsUnfocused()) {
-    return;
-  }
-
-  const now = Date.now();
-  if (now - lastNotifyAt < 1500) return;
-  lastNotifyAt = now;
-
-  const project = getProjectName(cwdInput.value.trim()) || t('appSubtitleShort');
-  const model = detail.model || getDisplayModelName(modelSelect.value) || '';
-  const duration = formatDuration(detail.durationMs || 0);
-  const cost = formatUsd(detail.costUsd || 0);
-  const prompt = summarizePrompt(detail.prompt || currentTurnContent || '');
-  const meta = [model, duration, cost].filter(Boolean).join(' · ');
-
-  let title = t('notifyTurnTitle', { project, model: model || t('model') });
-  let body = [
-    prompt ? t('notifyPromptLine', { prompt }) : t('notifyTurnBody', { project }),
-    meta,
-  ].filter(Boolean).join('\n');
-
-  if (kind === 'subagent') {
-    const agent = detail.agent || t('subagent');
-    const task = summarizePrompt(detail.task || '');
-    title = t('notifySubagentTitle', { agent });
-    body = [task ? t('notifyTaskLine', { task }) : t('notifySubagentBody', { agent, task: project }), meta].filter(Boolean).join('\n');
-  } else if (kind === 'process') {
-    body = [t('notifyFallbackBody', { project }), meta].filter(Boolean).join('\n');
-  }
-
-  try {
-    const notification = new Notification(title, { body, tag: `cc-bridge-${kind}`, renotify: true });
-    notification.onclick = () => {
-      try { window.focus(); } catch (e) { /* ignore */ }
-      notification.close();
-    };
-    setTimeout(() => notification.close(), 8000);
-  } catch (e) { console.warn('Notification creation failed:', e); }
+  return getNotificationsModule()?.notifyComplete?.(kind, detail, getNotificationOptions());
 }
 
 function summarizePrompt(text, maxLen = 90) {

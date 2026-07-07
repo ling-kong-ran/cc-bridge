@@ -173,6 +173,7 @@ cc-bridge/
 - 新增 `static/js/completion-sync.js`，把后台 session 完成后的历史延迟同步逻辑从 `static/app.js` 拆出并挂载到 `window.CCBridge.completionSync`。
 - 新增 `static/js/turn-timer.js`，把 assistant 回复耗时 meta 更新和 turn timer 管理逻辑从 `static/app.js` 拆出并挂载到 `window.CCBridge.turnTimer`。
 - 新增 `static/js/notifications.js`，把页面失焦判断和完成通知创建逻辑从 `static/app.js` 拆出并挂载到 `window.CCBridge.notifications`。
+- 收敛 `static/app.js` 中通知 wrapper，移除剩余本地页面失焦判断和完成通知创建 fallback 实现，统一委托 `static/js/notifications.js`。
 - 新增 `static/js/stream-state.js`，把 workspace tab 流式状态保存、恢复和 assistant stream 状态重置逻辑从 `static/app.js` 拆出并挂载到 `window.CCBridge.streamState`。
 - 收敛 `static/app.js` 中 stream-state wrapper，移除剩余本地流式状态保存、恢复和重置 fallback 实现，统一委托 `static/js/stream-state.js`。
 - 新增 `static/js/history-loader.js`，把会话历史加载、刷新和静态历史渲染状态保护逻辑从 `static/app.js` 拆出并挂载到 `window.CCBridge.historyLoader`。
