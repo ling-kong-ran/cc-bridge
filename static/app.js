@@ -28,12 +28,9 @@ let cachedSessions = [];
 let sessionsLoaded = false;
 let chatNavAutoOpening = false;
 const completedSseRuns = new Set();
-const completedSseSessions = new Map();
 const COMPLETED_SSE_RUN_LIMIT = 80;
-const COMPLETED_SSE_SESSION_TTL_MS = 30000;
 
-function rememberCompletedSseRun(runId, sessionId = currentSessionId) {
-  if (sessionId) completedSseSessions.set(sessionId, Date.now());
+function rememberCompletedSseRun(runId) {
   if (!runId) return;
   completedSseRuns.add(runId);
   for (const [sessionId, state] of _tabStreamState.entries()) {
@@ -50,19 +47,11 @@ function getCompletedSseRunId(data = {}) {
 
 function isCompletedSseRun(data = {}) {
   const runId = getCompletedSseRunId(data);
-  if (runId && completedSseRuns.has(runId)) return true;
-  const sessionId = data.session_id || currentSessionId || '';
-  const completedAt = sessionId ? completedSseSessions.get(sessionId) : 0;
-  if (!completedAt) return false;
-  if (Date.now() - completedAt > COMPLETED_SSE_SESSION_TTL_MS) {
-    completedSseSessions.delete(sessionId);
-    return false;
-  }
-  return !(data.running === true || data.locked === true);
+  return !!(runId && completedSseRuns.has(runId));
 }
 
 function markCurrentSessionRunCompleted(data = {}) {
-  rememberCompletedSseRun(getCompletedSseRunId(data), data.session_id || currentSessionId);
+  rememberCompletedSseRun(getCompletedSseRunId(data));
 }
 
 // 每个 workspace tab 独立的 SSE/流式状态，切换标签页时 save/restore
@@ -1370,14 +1359,12 @@ function bindSSEEvents(source = eventSource) {
   source.addEventListener('stream_event', (e) => {
     const data = JSON.parse(e.data);
     if (noteBackgroundSessionEvent(data)) return;
-    if (isCompletedSseRun(data)) return;
     handleStreamEvent(data);
   });
 
   source.addEventListener('assistant', (e) => {
     const data = JSON.parse(e.data);
     if (noteBackgroundSessionEvent(data)) return;
-    if (isCompletedSseRun(data)) return;
     handleAssistantFinal(data);
   });
 
@@ -1621,7 +1608,6 @@ function updateConnectionText() {
 
 // ─── 发送 action ────────────────────────────────────────────
 async function sendAction(action, extra = {}) {
-  if (action === 'send_message') completedSseSessions.delete(extra.session_id || currentSessionId || '');
   try {
     return await window.CCBridge.sse?.sendActionRequest?.(action, extra, getSseOptions());
   } catch (e) {
