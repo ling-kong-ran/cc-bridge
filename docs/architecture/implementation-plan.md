@@ -127,6 +127,7 @@ cc-bridge/
 - 新增 `backend/services/remote_service.py` 与 `backend/routes/remote_routes.py`，把远程目标配置、连接测试、远程文件浏览和缓存 API 接入服务层和路由层。
 - `static/app.js` 开始使用 `window.CCBridge.api` 收敛定时任务、飞书网关、远程目标和远程文件相关 API 调用。
 - 新增 `static/js/remote.js`，把远程目标管理页面逻辑从 `static/app.js` 拆出并挂载到 `window.CCBridge.remote`。
+- 新增 `static/js/scheduled-tasks.js`，把定时任务页面逻辑从 `static/app.js` 拆出并挂载到 `window.CCBridge.scheduledTasks`。
 
 ## 后续验收标准
 
