@@ -85,6 +85,25 @@ function markCurrentSessionRunCompleted(data = {}) {
   rememberCompletedSseRun(getCompletedSseRunId(data));
 }
 
+function cleanupCompletedRunUi(data = {}) {
+  const sessionId = data.session_id || currentSessionId;
+  isResponding = false;
+  stopTurnTimer();
+  cleanupStaleAssistantStreamingBubbles(true);
+  if (currentAssistantEl) finishAssistantStreaming(currentAssistantEl);
+  currentAssistantEl = null;
+  currentAssistantMessageId = null;
+  currentContent = [];
+  streamBlocks = {};
+  currentTurnHasAssistantOutput = false;
+  currentTurnStartedAt = 0;
+  currentTurnAttachmentCount = 0;
+  clearRunningTasks({ keepFinished: true });
+  clearSubagentBubbles();
+  updateWorkspaceSessionStatus(sessionId, data.is_error ? 'error' : 'done');
+  updateUI();
+}
+
 // 每个 workspace tab 独立的 SSE/流式状态，切换标签页时 save/restore
 function runAsyncTask(task, label = 'Async task') {
   try {
@@ -1392,6 +1411,7 @@ function bindSSEEvents(source = eventSource) {
     if (noteBackgroundSessionEvent(data)) return;
     if (isCompletedSseEvent(data)) {
       logSseDebug('drop stream_event after completed run', data);
+      cleanupCompletedRunUi(data);
       return;
     }
     logSseDebug('stream_event before handle', data);
@@ -1404,6 +1424,7 @@ function bindSSEEvents(source = eventSource) {
     if (noteBackgroundSessionEvent(data)) return;
     if (isCompletedSseEvent(data)) {
       logSseDebug('drop assistant after completed run', data);
+      cleanupCompletedRunUi(data);
       return;
     }
     logSseDebug('assistant before handle', data, { preview: extractMessagePreviewText(data.message || '').slice(0, 120) });
@@ -1499,6 +1520,7 @@ function bindSSEEvents(source = eventSource) {
     if (noteBackgroundSessionEvent(data)) return;
     if (isCompletedSseRun(data)) {
       logSseDebug('drop duplicate result', data);
+      cleanupCompletedRunUi(data);
       return;
     }
     logSseDebug('result before handle', data);
@@ -1527,6 +1549,7 @@ function bindSSEEvents(source = eventSource) {
     const data = JSON.parse(e.data || '{}');
     if (isCompletedSseRun(data)) {
       logSseDebug('drop duplicate session_lock_changed', data, { locked: data.locked });
+      cleanupCompletedRunUi(data);
       return;
     }
     if (data.session_id && currentSessionId && data.session_id !== currentSessionId) return;
@@ -1550,6 +1573,7 @@ function bindSSEEvents(source = eventSource) {
     if (noteBackgroundSessionEvent(data)) return;
     if (isCompletedSseRun(data)) {
       logSseDebug('drop duplicate process_ended', data, { exitCode: data.exit_code });
+      cleanupCompletedRunUi(data);
       return;
     }
     logSseDebug('process_ended before finish', data, { exitCode: data.exit_code });
