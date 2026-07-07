@@ -1526,7 +1526,34 @@ async function loadModels() {
 }
 
 // ─── 导航 ────────────────────────────────────────────────────
+function getNavigationOptions() {
+  return {
+    t,
+    sessionActive,
+    topbarSessionButtons: [btnSessionPin, btnSessionCwd, btnSessionRename, btnSessionDelete],
+    renderTopbarMeta,
+    renderTopbarStatusSummary,
+    renderSessionList,
+    getCachedSessions: () => cachedSessions,
+    loadArtifacts,
+    loadSkills,
+    loadIntegrations,
+    loadMemoryFiles,
+    loadScheduledTasks,
+    loadFeishuGateway,
+    hideMentionPopup,
+    openLatestOrNewChatSession,
+    startNewSession,
+    showPage,
+  };
+}
+
 function showPage(page) {
+  const navigation = window.CCBridge?.navigation;
+  if (navigation?.showPage) {
+    navigation.showPage(page, getNavigationOptions());
+    return;
+  }
   document.querySelectorAll('.nav-btn').forEach(b => b.classList.toggle('active', b.dataset.page === page));
   document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
   const target = document.getElementById(`page-${page}`);
@@ -1581,6 +1608,11 @@ async function openLatestOrNewChatSession() {
 }
 
 function initNavigation() {
+  const navigation = window.CCBridge?.navigation;
+  if (navigation?.initNavigation) {
+    navigation.initNavigation(getNavigationOptions());
+    return;
+  }
   document.querySelectorAll('.nav-btn').forEach(btn => {
     btn.addEventListener('click', () => {
       if (btn.dataset.page === 'chat') {
@@ -1640,6 +1672,11 @@ function initTopbarSessionActions() {
 }
 
 function initMobileLayout() {
+  const navigation = window.CCBridge?.navigation;
+  if (navigation?.initMobileLayout) {
+    navigation.initMobileLayout();
+    return;
+  }
   const toggles = document.querySelectorAll('.mobile-menu-toggle');
   const sidebar = document.querySelector('.sidebar');
   const backdrop = document.getElementById('mobile-sidebar-backdrop');
