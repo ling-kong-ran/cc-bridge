@@ -1352,7 +1352,32 @@ let cliInstallCommand = 'npm install -g @anthropic-ai/claude-code';
 let cliInstallPromptShown = false;
 let cliInstalling = false;
 
+function getCliUpdateOptions() {
+  return {
+    t,
+    addSystemMsg,
+    loadClis,
+    renderTopbarMeta,
+    renderWelcomeRuntime,
+    saveGuiSettings,
+    getCliInstallCommand: () => cliInstallCommand,
+    setCliInstallPromptShown: (value) => { cliInstallPromptShown = value; },
+    getCliInstalling: () => cliInstalling,
+    setCliInstalling: (value) => { cliInstalling = value; },
+    getUpdateRunning: () => updateRunning,
+    setUpdateRunning: (value) => { updateRunning = value; },
+    getUpdateInfo: () => updateInfo,
+    setUpdateInfo: (value) => { updateInfo = value; },
+    getSkipUpdateVersion: () => skipUpdateVersion,
+    setSkipUpdateVersion: (value) => { skipUpdateVersion = value; },
+    getAutoUpdateEnabled: () => autoUpdateEnabled,
+    setAutoUpdateEnabled: (value) => { autoUpdateEnabled = value; },
+  };
+}
+
 function openCliInstallModal() {
+  const cliUpdate = window.CCBridge?.cliUpdate;
+  if (cliUpdate?.openCliInstallModal) return cliUpdate.openCliInstallModal(getCliUpdateOptions());
   const overlay = document.getElementById('cli-install-overlay');
   if (!overlay) return;
   const cmdEl = document.getElementById('cli-install-cmd');
@@ -1364,11 +1389,15 @@ function openCliInstallModal() {
 }
 
 function closeCliInstallModal() {
+  const cliUpdate = window.CCBridge?.cliUpdate;
+  if (cliUpdate?.closeCliInstallModal) return cliUpdate.closeCliInstallModal();
   const overlay = document.getElementById('cli-install-overlay');
   if (overlay) overlay.style.display = 'none';
 }
 
 function setCliInstallStatus(text, kind) {
+  const cliUpdate = window.CCBridge?.cliUpdate;
+  if (cliUpdate?.setCliInstallStatus) return cliUpdate.setCliInstallStatus(text, kind);
   const status = document.getElementById('cli-install-status');
   if (!status) return;
   if (!text) { status.style.display = 'none'; status.textContent = ''; return; }
@@ -1378,6 +1407,8 @@ function setCliInstallStatus(text, kind) {
 }
 
 async function copyCliInstallCommand() {
+  const cliUpdate = window.CCBridge?.cliUpdate;
+  if (cliUpdate?.copyCliInstallCommand) return cliUpdate.copyCliInstallCommand(getCliUpdateOptions());
   let copied = false;
   try {
     await navigator.clipboard.writeText(cliInstallCommand);
@@ -1397,6 +1428,8 @@ async function copyCliInstallCommand() {
 }
 
 async function runCliAutoInstall() {
+  const cliUpdate = window.CCBridge?.cliUpdate;
+  if (cliUpdate?.runCliAutoInstall) return cliUpdate.runCliAutoInstall(getCliUpdateOptions());
   if (cliInstalling) return;
   cliInstalling = true;
   const runBtn = document.getElementById('cli-install-run');
@@ -1434,6 +1467,8 @@ async function runCliAutoInstall() {
 }
 
 function initCliInstallModal() {
+  const cliUpdate = window.CCBridge?.cliUpdate;
+  if (cliUpdate?.initCliInstallModal) return cliUpdate.initCliInstallModal(getCliUpdateOptions());
   document.getElementById('btn-cli-install-guide')?.addEventListener('click', openCliInstallModal);
   document.getElementById('cli-install-close')?.addEventListener('click', closeCliInstallModal);
   document.getElementById('cli-install-copy')?.addEventListener('click', copyCliInstallCommand);
@@ -1447,6 +1482,8 @@ function initCliInstallModal() {
 let updateRunning = false;
 
 function setUpdateStatus(text, kind) {
+  const cliUpdate = window.CCBridge?.cliUpdate;
+  if (cliUpdate?.setUpdateStatus) return cliUpdate.setUpdateStatus(text, kind);
   const status = document.getElementById('update-status');
   if (!status) return;
   if (!text) { status.style.display = 'none'; status.textContent = ''; return; }
@@ -1456,16 +1493,22 @@ function setUpdateStatus(text, kind) {
 }
 
 function openUpdateModal() {
+  const cliUpdate = window.CCBridge?.cliUpdate;
+  if (cliUpdate?.openUpdateModal) return cliUpdate.openUpdateModal();
   const overlay = document.getElementById('update-overlay');
   if (overlay) overlay.style.display = '';
 }
 
 function closeUpdateModal() {
+  const cliUpdate = window.CCBridge?.cliUpdate;
+  if (cliUpdate?.closeUpdateModal) return cliUpdate.closeUpdateModal();
   const overlay = document.getElementById('update-overlay');
   if (overlay) overlay.style.display = 'none';
 }
 
 async function checkForUpdate(manual = false) {
+  const cliUpdate = window.CCBridge?.cliUpdate;
+  if (cliUpdate?.checkForUpdate) return cliUpdate.checkForUpdate(manual, getCliUpdateOptions());
   const checkBtn = document.getElementById('btn-check-update');
   const checkHint = document.getElementById('update-check-hint');
   const previousCheckText = checkBtn?.textContent || '';
@@ -1537,6 +1580,8 @@ async function checkForUpdate(manual = false) {
 }
 
 async function runUpdate() {
+  const cliUpdate = window.CCBridge?.cliUpdate;
+  if (cliUpdate?.runUpdate) return cliUpdate.runUpdate(getCliUpdateOptions());
   if (updateRunning) return;
   updateRunning = true;
   const runBtn = document.getElementById('update-run');
@@ -1568,6 +1613,8 @@ async function runUpdate() {
 }
 
 function skipThisVersion() {
+  const cliUpdate = window.CCBridge?.cliUpdate;
+  if (cliUpdate?.skipThisVersion) return cliUpdate.skipThisVersion(getCliUpdateOptions());
   if (updateInfo && updateInfo.remote) {
     skipUpdateVersion = updateInfo.remote;
     saveGuiSettings({ skip_update_version: updateInfo.remote });
@@ -1576,6 +1623,8 @@ function skipThisVersion() {
 }
 
 async function waitForServerAndReload(attempt = 0) {
+  const cliUpdate = window.CCBridge?.cliUpdate;
+  if (cliUpdate?.waitForServerAndReload) return cliUpdate.waitForServerAndReload(attempt, getCliUpdateOptions());
   if (attempt > 40) { setUpdateStatus(t('updateRestartManual'), 'err'); return; }
   try {
     const resp = await fetch('/api/gui-settings', { cache: 'no-store' });
@@ -1585,6 +1634,8 @@ async function waitForServerAndReload(attempt = 0) {
 }
 
 function initUpdateModal() {
+  const cliUpdate = window.CCBridge?.cliUpdate;
+  if (cliUpdate?.initUpdateModal) return cliUpdate.initUpdateModal(getCliUpdateOptions());
   document.getElementById('update-close')?.addEventListener('click', closeUpdateModal);
   document.getElementById('update-skip')?.addEventListener('click', skipThisVersion);
   document.getElementById('update-run')?.addEventListener('click', runUpdate);

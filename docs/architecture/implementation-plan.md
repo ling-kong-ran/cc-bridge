@@ -149,6 +149,7 @@ cc-bridge/
 - 新增 `static/js/tool-cards.js`，把工具卡片折叠、展开和 Shift 批量切换事件委托从 `static/app.js` 拆出并挂载到 `window.CCBridge.toolCards`。
 - 新增 `static/js/config-reload.js`，把窗口聚焦和页面可见时刷新 CLI、模型与配置的逻辑从 `static/app.js` 拆出并挂载到 `window.CCBridge.configReload`。
 - 新增 `static/js/file-picker.js`，把附件和记忆导入文件选择器的来源切换、浏览、搜索、多选和远程缓存逻辑从 `static/app.js` 拆出并挂载到 `window.CCBridge.filePicker`。
+- 新增 `static/js/cli-update.js`，把 CLI 安装引导和应用自动更新弹窗逻辑从 `static/app.js` 拆出并挂载到 `window.CCBridge.cliUpdate`。
 
 ## 后续验收标准
 
