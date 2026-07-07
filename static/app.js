@@ -1169,6 +1169,8 @@ function populateRemoteSelect() {
 }
 
 function updateRuntimeSummary() {
+  const runtime = window.CCBridge?.runtime;
+  if (runtime?.updateRuntimeSummary) return runtime.updateRuntimeSummary(getRuntimeOptions());
   const el = document.querySelector('.runtime-summary-value');
   if (!el) return;
   const cwd = cwdInput?.value?.trim() || '';
@@ -1181,6 +1183,8 @@ function updateRuntimeSummary() {
 }
 
 function renderInputStatus() {
+  const runtime = window.CCBridge?.runtime;
+  if (runtime?.renderInputStatus) return runtime.renderInputStatus(getRuntimeOptions());
   if (inputCliStatus) {
     const cliLabel = getSelectedCliLabel();
     inputCliStatus.textContent = `${t('cliTool')}: ${cliLabel}`;
@@ -1348,6 +1352,7 @@ function getRuntimeOptions() {
     loadSlashCommands,
     getDisplayModelName,
     formatModelName,
+    shortenPlainPath,
     getSavedModelPref: () => savedModelPref,
     setSavedModelPref: (value) => { savedModelPref = value; },
     getCliInstallPromptShown: () => cliInstallPromptShown,
@@ -1361,6 +1366,11 @@ function getRuntimeOptions() {
     costValue,
     tokenDisplay,
     tokenValue,
+    runtimeSummaryValue: document.querySelector('.runtime-summary-value'),
+    cwdInput,
+    remoteTargetSelect,
+    inputCliStatus,
+    inputCwdStatus,
   };
 }
 

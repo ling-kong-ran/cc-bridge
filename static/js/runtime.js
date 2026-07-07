@@ -13,6 +13,8 @@
       renderTopbarStatusSummary: options.renderTopbarStatusSummary || (() => {}),
       getDisplayModelName: options.getDisplayModelName || ((model) => model || ''),
       formatModelName: options.formatModelName || ((model) => model || ''),
+      shortenPlainPath: options.shortenPlainPath || root.formatters?.shortenPlainPath || ((path) => String(path || '')),
+      renderInputStatus: options.renderInputStatus || (() => {}),
       getSavedModelPref: options.getSavedModelPref || (() => ''),
       setSavedModelPref: options.setSavedModelPref || (() => {}),
       getCliInstallPromptShown: options.getCliInstallPromptShown || (() => false),
@@ -28,6 +30,11 @@
       costValue: options.costValue || document.getElementById('cost-value'),
       tokenDisplay: options.tokenDisplay || document.getElementById('token-display'),
       tokenValue: options.tokenValue || document.getElementById('token-value'),
+      runtimeSummaryValue: options.runtimeSummaryValue || document.querySelector('.runtime-summary-value'),
+      cwdInput: options.cwdInput || document.getElementById('cwd'),
+      remoteTargetSelect: options.remoteTargetSelect || document.getElementById('remote-target-select'),
+      inputCliStatus: options.inputCliStatus || document.getElementById('input-cli-status'),
+      inputCwdStatus: options.inputCwdStatus || document.getElementById('input-cwd-status'),
     };
   }
 
@@ -54,6 +61,33 @@
     if (ctx.tokenDisplay) ctx.tokenDisplay.style.display = total > 0 ? 'block' : 'none';
     if (ctx.tokenValue) ctx.tokenValue.textContent = formatters?.formatTokenUsage ? formatters.formatTokenUsage(totalTokens, ctx.t) : '0';
     ctx.renderTopbarStatusSummary();
+  }
+
+  function updateRuntimeSummary(options = {}) {
+    const ctx = getContext(options);
+    const el = ctx.runtimeSummaryValue;
+    if (!el) return;
+    const cwd = ctx.cwdInput?.value?.trim() || '';
+    const cwdName = ctx.shortenPlainPath(cwd, 3) || ctx.t('cwd');
+    const remoteName = ctx.remoteTargetSelect?.selectedOptions?.[0]?.textContent?.trim() || '';
+    const remoteActive = !!(ctx.remoteTargetSelect && ctx.remoteTargetSelect.value);
+    el.textContent = remoteActive ? `${cwdName} / ${remoteName}` : cwdName;
+    el.title = remoteActive ? `${cwd || ''} / ${remoteName}` : (cwd || '');
+    ctx.renderInputStatus();
+  }
+
+  function renderInputStatus(options = {}) {
+    const ctx = getContext(options);
+    if (ctx.inputCliStatus) {
+      const cliLabel = getSelectedCliLabel();
+      ctx.inputCliStatus.textContent = `${ctx.t('cliTool')}: ${cliLabel}`;
+      ctx.inputCliStatus.title = document.getElementById('cli-select')?.value || cliLabel;
+    }
+    if (ctx.inputCwdStatus) {
+      const cwd = ctx.cwdInput?.value?.trim() || '';
+      ctx.inputCwdStatus.textContent = `${ctx.t('cwd')}: ${ctx.shortenPlainPath(cwd, 3) || ctx.t('unsetCwd')}`;
+      ctx.inputCwdStatus.title = cwd || ctx.t('unsetCwd');
+    }
   }
 
   function formatTopbarSessionId(sessionId) {
@@ -203,6 +237,8 @@
     hasModelOption,
     renderCost,
     renderTokens,
+    updateRuntimeSummary,
+    renderInputStatus,
     formatTopbarSessionId,
     getSelectedCliLabel,
     quoteCommandArg,

@@ -165,6 +165,7 @@ cc-bridge/
 - 新增 `static/js/history-loader.js`，把会话历史加载、刷新和静态历史渲染状态保护逻辑从 `static/app.js` 拆出并挂载到 `window.CCBridge.historyLoader`。
 - 新增 `static/js/localization.js`，把语言切换、语言包加载和本地化文本渲染逻辑从 `static/app.js` 拆出并挂载到 `window.CCBridge.localization`。
 - 扩展 `static/js/formatters.js`，继续承接时间、HTML 转义、路径缩短和链接安全处理等文本工具逻辑，减少 `static/app.js` 的通用格式化职责。
+- 扩展 `static/js/runtime.js`，继续承接运行态摘要和输入区 CLI/CWD 状态渲染逻辑，减少 `static/app.js` 的运行态展示职责。
 
 ## 后续验收标准
 
