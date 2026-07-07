@@ -182,10 +182,19 @@
       }
 
       applyFontSize(size, false);
-      await applyLanguage(language, false);
+      try {
+        await applyLanguage(language, false);
+      } catch (e) {
+        console.warn('Apply saved language failed:', e);
+      }
       applyNotificationPreference(Boolean(data.notifications_enabled));
       applyNotifyFeishuPreference(Boolean(data.notify_feishu));
-      await loadContextSettings();
+      try {
+        await loadContextSettings();
+      } catch (e) {
+        console.warn('Load context settings failed:', e);
+        applyMemoryAutoInjectPreference(true);
+      }
       accessContext = { isLocalhost: Boolean(data.is_localhost), defaultCwd: data.default_cwd || '' };
       document.body.classList.toggle('pane-right-collapsed', data.right_panel_collapsed === true);
       applyRightPaneWidth(data.right_panel_width);
@@ -196,7 +205,11 @@
       }
     } catch (e) {
       applyFontSize(100, false);
-      await applyLanguage('en', false);
+      try {
+        await applyLanguage('en', false);
+      } catch (err) {
+        console.warn('Apply fallback language failed:', err);
+      }
       applyNotificationPreference(false);
       applyNotifyFeishuPreference(false);
       applyMemoryAutoInjectPreference(true);
