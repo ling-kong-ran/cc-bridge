@@ -1022,31 +1022,22 @@ function getTurnTimerOptions() {
   };
 }
 
+function getTurnTimerModule() {
+  const mod = window.CCBridge?.turnTimer;
+  if (!mod) console.error('CCBridge turnTimer module is not loaded');
+  return mod;
+}
+
 function updateAssistantMeta(state = 'running', durationMs = Date.now() - currentTurnStartedAt) {
-  const turnTimer = window.CCBridge?.turnTimer;
-  if (turnTimer?.updateAssistantMeta) return turnTimer.updateAssistantMeta(state, durationMs, getTurnTimerOptions());
-  if (!currentAssistantEl) return;
-  const meta = currentAssistantEl.querySelector('.msg-meta');
-  if (!meta) return;
-  const elapsed = Number(durationMs || 0);
-  const duration = state === 'running' ? formatCompactDuration(Math.max(1000, elapsed)) : formatCompactDuration(elapsed);
-  meta.textContent = duration ? t(state === 'done' ? 'responseDuration' : 'responseRunning', { duration }) : '';
+  return getTurnTimerModule()?.updateAssistantMeta?.(state, durationMs, getTurnTimerOptions());
 }
 
 function startTurnTimer() {
-  const turnTimer = window.CCBridge?.turnTimer;
-  if (turnTimer?.startTurnTimer) return turnTimer.startTurnTimer(getTurnTimerOptions());
-  stopTurnTimer();
-  updateAssistantMeta('running');
-  currentTurnTimer = setInterval(() => updateAssistantMeta('running'), 1000);
+  return getTurnTimerModule()?.startTurnTimer?.(getTurnTimerOptions());
 }
 
 function stopTurnTimer() {
-  const turnTimer = window.CCBridge?.turnTimer;
-  if (turnTimer?.stopTurnTimer) return turnTimer.stopTurnTimer(getTurnTimerOptions());
-  if (!currentTurnTimer) return;
-  clearInterval(currentTurnTimer);
-  currentTurnTimer = null;
+  return getTurnTimerModule()?.stopTurnTimer?.(getTurnTimerOptions());
 }
 
 function formatUsd(value) {
