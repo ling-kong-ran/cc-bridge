@@ -5,16 +5,16 @@
  */
 
 // ─── 常量 ────────────────────────────────────────────────────
-var REPULSION = 8000;        // 库仑斥力常数
-var ATTRACTION = 0.005;      // 胡克引力常数
-var DAMPING = 0.95;          // 速度阻尼系数
-var CENTER_GRAVITY = 0.01;   // 向心力系数
-var MAX_ITERATIONS = 300;    // 最大迭代步数
-var VELOCITY_THRESHOLD = 0.5; // 停止阈值（平均速度）
-var NODE_RADIUS_MIN = 6;     // 最小节点半径
-var NODE_RADIUS_MAX = 20;    // 最大节点半径
-var LABEL_FONT_SIZE = 12;    // 标签字号
-var LABEL_OFFSET = 4;        // 标签与节点间距
+var REPULSION = 12000;       // 库仑斥力常数
+var ATTRACTION = 0.008;      // 胡克引力常数
+var DAMPING = 0.94;          // 速度阻尼系数
+var CENTER_GRAVITY = 0.012;  // 向心力系数
+var MAX_ITERATIONS = 420;    // 最大迭代步数
+var VELOCITY_THRESHOLD = 0.35; // 停止阈值（平均速度）
+var NODE_RADIUS_MIN = 8;     // 最小节点半径
+var NODE_RADIUS_MAX = 24;    // 最大节点半径
+var LABEL_FONT_SIZE = 11;    // 标签字号
+var LABEL_OFFSET = 8;        // 标签与节点间距
 
 // ─── 状态 ────────────────────────────────────────────────────
 var wikiGraphNodes = [];       // {id, name, title, size, x, y, vx, vy, radius, degree}
@@ -64,6 +64,10 @@ var wikiGraphCtx = null;
 
 // ─── 初始化 ──────────────────────────────────────────────────
 var _wikiGraphReady = false;
+var wikiGraphDragStartPos = null;
+var wikiGraphDragStartNode = null;
+var wikiGraphDragDidMove = false;
+var wikiGraphFocused = null;
 
 function initWikiGraph() {
   if (_wikiGraphReady) {
@@ -96,6 +100,13 @@ function initWikiGraph() {
   canvas.addEventListener("mouseup", onWikiGraphMouseUp);
   canvas.addEventListener("mouseleave", onWikiGraphMouseUp);
   canvas.addEventListener("wheel", onWikiGraphWheel, { passive: false });
+  canvas.addEventListener("dblclick", onWikiGraphDoubleClick);
+  canvas.setAttribute("tabindex", "0");
+  canvas.setAttribute("role", "img");
+  canvas.setAttribute("aria-label", "Memory knowledge graph. Drag to pan, scroll to zoom, click nodes to open memory files.");
+
+  var resetBtn = document.getElementById("btn-graph-reset");
+  if (resetBtn) resetBtn.addEventListener("click", resetWikiGraphView);
 
   _wikiGraphReady = true;
 
@@ -170,11 +181,22 @@ function renderGraph(data) {
 
   // 用节点 id 哈希生成确定性初始坐标，避免每次渲染形状不同
   function hashString(str) {
-    var h = 0;
+    var value = 0;
     for (var i = 0; i < str.length; i++) {
-      h = ((h << 5) - h + str.charCodeAt(i)) | 0;
+      value = ((value << 5) - value + str.charCodeAt(i)) | 0;
     }
-    return h;
+    return Math.abs(value);
+  }
+
+  function initialNodePosition(node, index, total) {
+    var ring = Math.max(80, Math.min(w, h) * 0.28);
+    var jitter = (hashString("j:" + node.id) % 100) / 100;
+    var angle = ((index / Math.max(1, total)) * Math.PI * 2) + jitter * 0.7;
+    var distance = ring * (0.72 + jitter * 0.42);
+    return {
+      x: Math.cos(angle) * distance,
+      y: Math.sin(angle) * distance
+    };
   }
 
   // 查缓存位置：localStorage > 内存缓存 > 哈希生成
@@ -187,12 +209,13 @@ function renderGraph(data) {
   }
   var hasCache = Object.keys(_lastGraphNodePositions).length > 0;
 
-  wikiGraphNodes = nodes.map(function(n) {
+  wikiGraphNodes = nodes.map(function(n, index) {
     var radius = NODE_RADIUS_MIN;
     if (maxDegree > 0 && n.degree > 0) {
-      radius = NODE_RADIUS_MIN + (n.degree / maxDegree) * (NODE_RADIUS_MAX - NODE_RADIUS_MIN);
+      radius = NODE_RADIUS_MIN + Math.sqrt(n.degree / maxDegree) * (NODE_RADIUS_MAX - NODE_RADIUS_MIN);
     }
     var cached = hasCache ? _lastGraphNodePositions[n.id] : null;
+    var initial = cached || initialNodePosition(n, index, nodes.length);
     return {
       id: n.id,
       name: n.name,
@@ -203,8 +226,8 @@ function renderGraph(data) {
       updated_at: n.updated_at || 0,
       degree: n.degree,
       radius: radius,
-      x: cached ? cached.x : (hashString("x:" + n.id) / 2147483647) * w * 0.45,
-      y: cached ? cached.y : (hashString("y:" + n.id) / 2147483647) * h * 0.45,
+      x: initial.x,
+      y: initial.y,
       vx: 0,
       vy: 0,
       pinned: false,
@@ -227,10 +250,12 @@ function renderGraph(data) {
   // 重置状态
   wikiGraphIteration = 0;
   wikiGraphHovered = null;
+  wikiGraphFocused = null;
   wikiGraphDragged = null;
   wikiGraphOffsetX = w / 2;
   wikiGraphOffsetY = h / 2;
-  wikiGraphScale = 1;
+  wikiGraphScale = Math.max(0.82, Math.min(1.08, Math.min(w, h) / 760));
+  updateWikiGraphZoomLabel();
 
   // 如果所有节点都有缓存位置且节点集合未变，直接跳过模拟
   var allCached = nodes.length > 0 && wikiGraphNodes.every(function(n) {
@@ -368,6 +393,106 @@ function shortenWikiGraphText(text, maxLen) {
   return text.slice(0, keep) + '…' + text.slice(-keep);
 }
 
+function updateWikiGraphZoomLabel() {
+  var el = document.getElementById('graph-zoom-level');
+  if (el) el.textContent = Math.round(wikiGraphScale * 100) + '%';
+}
+
+function getWikiGraphNodePalette(node) {
+  var ratio = node.degree > 0 ? Math.min(node.degree / 6, 1) : 0;
+  if (node.degree >= 4) {
+    return {
+      fill: 'rgba(87, 220, 255, ' + (0.82 + ratio * 0.18) + ')',
+      stroke: 'rgba(192, 246, 255, 0.95)',
+      glow: 'rgba(87, 220, 255, 0.28)',
+      label: '#d6fbff'
+    };
+  }
+  if (node.degree >= 2) {
+    return {
+      fill: 'rgba(126, 238, 178, ' + (0.78 + ratio * 0.18) + ')',
+      stroke: 'rgba(202, 255, 225, 0.92)',
+      glow: 'rgba(126, 238, 178, 0.24)',
+      label: '#d9ffe9'
+    };
+  }
+  return {
+    fill: 'rgba(176, 143, 255, 0.82)',
+    stroke: 'rgba(224, 211, 255, 0.86)',
+    glow: 'rgba(176, 143, 255, 0.20)',
+    label: '#e8ddff'
+  };
+}
+
+function drawWikiGraphGrid(ctx, w, h) {
+  var grid = 40;
+  ctx.save();
+  ctx.strokeStyle = 'rgba(126, 238, 178, 0.045)';
+  ctx.lineWidth = 1;
+  for (var x = (wikiGraphOffsetX % grid); x < w; x += grid) {
+    ctx.beginPath();
+    ctx.moveTo(x, 0);
+    ctx.lineTo(x, h);
+    ctx.stroke();
+  }
+  for (var y = (wikiGraphOffsetY % grid); y < h; y += grid) {
+    ctx.beginPath();
+    ctx.moveTo(0, y);
+    ctx.lineTo(w, y);
+    ctx.stroke();
+  }
+  ctx.restore();
+}
+
+function drawWikiGraphTooltip(ctx, node, screenX, screenY, w, h) {
+  var updatedAt = formatWikiGraphNodeTime(node.updated_at);
+  var lines = [node.title || node.name || 'Memory'];
+  if (node.path) lines.push(shortenWikiGraphText(node.path, 46));
+  if (updatedAt) lines.push((currentLanguage === 'zh' ? '更新 ' : 'Updated ') + updatedAt);
+  lines.push((currentLanguage === 'zh' ? '连接 ' : 'Links ') + node.degree);
+
+  ctx.save();
+  ctx.font = '12px sans-serif';
+  var width = 0;
+  lines.forEach(function(line) { width = Math.max(width, ctx.measureText(line).width); });
+  width += 24;
+  var height = lines.length * 18 + 18;
+  var x = Math.min(w - width - 14, screenX + 18);
+  var y = Math.min(h - height - 14, screenY + 18);
+  if (x < 12) x = 12;
+  if (y < 12) y = 12;
+
+  ctx.shadowColor = 'rgba(0, 0, 0, 0.32)';
+  ctx.shadowBlur = 22;
+  ctx.fillStyle = 'rgba(12, 18, 26, 0.92)';
+  roundRect(ctx, x, y, width, height, 12);
+  ctx.fill();
+  ctx.shadowBlur = 0;
+  ctx.strokeStyle = 'rgba(126, 238, 178, 0.22)';
+  ctx.stroke();
+
+  ctx.fillStyle = '#e8f3ff';
+  ctx.font = '600 12px sans-serif';
+  ctx.fillText(lines[0], x + 12, y + 19);
+  ctx.font = '11px sans-serif';
+  ctx.fillStyle = '#8fa4ba';
+  for (var i = 1; i < lines.length; i++) {
+    ctx.fillText(lines[i], x + 12, y + 19 + i * 18);
+  }
+  ctx.restore();
+}
+
+function roundRect(ctx, x, y, width, height, radius) {
+  radius = Math.min(radius, width / 2, height / 2);
+  ctx.beginPath();
+  ctx.moveTo(x + radius, y);
+  ctx.arcTo(x + width, y, x + width, y + height, radius);
+  ctx.arcTo(x + width, y + height, x, y + height, radius);
+  ctx.arcTo(x, y + height, x, y, radius);
+  ctx.arcTo(x, y, x + width, y, radius);
+  ctx.closePath();
+}
+
 // ─── 绘制 ────────────────────────────────────────────────────
 function drawWikiGraph() {
   var canvas = wikiGraphCanvas;
@@ -378,15 +503,21 @@ function drawWikiGraph() {
   var h = canvas._height || canvas.height;
 
   ctx.clearRect(0, 0, w, h);
+  drawWikiGraphGrid(ctx, w, h);
 
   var nodes = wikiGraphNodes;
   var edges = wikiGraphEdges;
 
   if (!nodes || !nodes.length) {
-    ctx.fillStyle = "#6a7a90";
-    ctx.font = "14px sans-serif";
+    ctx.save();
     ctx.textAlign = "center";
-    ctx.fillText("No connections in current workspace", w / 2, h / 2);
+    ctx.fillStyle = "#8fa4ba";
+    ctx.font = "600 15px sans-serif";
+    ctx.fillText(currentLanguage === 'zh' ? "当前工作区暂无记忆连接" : "No memory connections yet", w / 2, h / 2 - 8);
+    ctx.fillStyle = "#66788c";
+    ctx.font = "12px sans-serif";
+    ctx.fillText(currentLanguage === 'zh' ? "新建或整理记忆后会在这里形成图谱" : "Create or organize memories to build the graph", w / 2, h / 2 + 18);
+    ctx.restore();
     return;
   }
 
@@ -394,77 +525,112 @@ function drawWikiGraph() {
   ctx.translate(wikiGraphOffsetX, wikiGraphOffsetY);
   ctx.scale(wikiGraphScale, wikiGraphScale);
 
-  // 绘制边：提高对比度，避免图谱线条在深色背景下看不清
-  ctx.strokeStyle = "rgba(125, 238, 178, 0.48)";
-  ctx.lineWidth = 1.6;
+  var activeNode = wikiGraphHovered !== null && wikiGraphHovered >= 0 ? wikiGraphHovered : wikiGraphFocused;
+  var activeEdgeMap = {};
+  if (activeNode !== null && activeNode >= 0) {
+    edges.forEach(function(e) {
+      if (e.source === activeNode || e.target === activeNode) {
+        activeEdgeMap[e.source + ':' + e.target] = true;
+      }
+    });
+  }
+
+  // 绘制边：非聚焦边保持安静，聚焦边更亮并带轻微光晕
   edges.forEach(function(e) {
     var a = nodes[e.source];
     var b = nodes[e.target];
     if (!a || !b) return;
+    var isActive = activeEdgeMap[e.source + ':' + e.target];
     ctx.beginPath();
     ctx.moveTo(a.x, a.y);
     ctx.lineTo(b.x, b.y);
+    ctx.strokeStyle = isActive ? "rgba(126, 238, 178, 0.86)" : "rgba(126, 238, 178, 0.20)";
+    ctx.lineWidth = isActive ? 2.4 : 1.15;
+    ctx.shadowColor = isActive ? "rgba(126, 238, 178, 0.32)" : "transparent";
+    ctx.shadowBlur = isActive ? 10 : 0;
     ctx.stroke();
   });
+  ctx.shadowBlur = 0;
 
   // 绘制节点
   nodes.forEach(function(node, i) {
     var isHovered = (wikiGraphHovered === i);
+    var isFocused = (wikiGraphFocused === i);
     var isDragged = (wikiGraphDragged === i);
+    var isActive = isHovered || isFocused || isDragged;
+    var palette = getWikiGraphNodePalette(node);
+    var dimmed = activeNode !== null && activeNode >= 0 && !isActive;
 
-    // 根据度选择颜色：度高的更亮/饱和
-    var degreeRatio = node.degree > 0 ? Math.min(node.degree / 5, 1) : 0;
-    var r = Math.round(61 + degreeRatio * (200 - 61));
-    var g = Math.round(220 + degreeRatio * (255 - 220));
-    var b = Math.round(132 + degreeRatio * (200 - 132));
-
-    // 节点圆形
+    ctx.save();
+    ctx.globalAlpha = dimmed ? 0.38 : 1;
+    ctx.fillStyle = palette.glow;
     ctx.beginPath();
-    ctx.arc(node.x, node.y, node.radius, 0, Math.PI * 2);
-    if (isHovered || isDragged) {
-      ctx.fillStyle = "rgba(61, 220, 132, 0.3)";
-      ctx.beginPath();
-      ctx.arc(node.x, node.y, node.radius + 4, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.beginPath();
-      ctx.arc(node.x, node.y, node.radius, 0, Math.PI * 2);
-    }
-    ctx.fillStyle = "rgb(" + r + "," + g + "," + b + ")";
+    ctx.arc(node.x, node.y, node.radius + (isActive ? 12 : 7), 0, Math.PI * 2);
     ctx.fill();
 
-    // 边框
-    ctx.strokeStyle = isHovered ? "#3ddc84" : "rgba(255,255,255,0.15)";
-    ctx.lineWidth = isHovered ? 2 : 1;
+    var gradient = ctx.createRadialGradient(
+      node.x - node.radius * 0.35,
+      node.y - node.radius * 0.45,
+      Math.max(1, node.radius * 0.12),
+      node.x,
+      node.y,
+      node.radius
+    );
+    gradient.addColorStop(0, 'rgba(255,255,255,0.92)');
+    gradient.addColorStop(0.2, palette.fill);
+    gradient.addColorStop(1, palette.fill.replace('0.82', '0.62').replace('0.78', '0.60'));
+
+    ctx.shadowColor = palette.glow;
+    ctx.shadowBlur = isActive ? 18 : 8;
+    ctx.beginPath();
+    ctx.arc(node.x, node.y, node.radius + (isActive ? 2 : 0), 0, Math.PI * 2);
+    ctx.fillStyle = gradient;
+    ctx.fill();
+    ctx.shadowBlur = 0;
+
+    ctx.strokeStyle = isActive ? palette.stroke : 'rgba(255,255,255,0.22)';
+    ctx.lineWidth = isActive ? 2.2 : 1;
     ctx.stroke();
 
-    // 标签
+    ctx.fillStyle = 'rgba(255,255,255,0.62)';
+    ctx.beginPath();
+    ctx.arc(node.x - node.radius * 0.28, node.y - node.radius * 0.34, Math.max(2, node.radius * 0.18), 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+
     var label = node.title || node.name || "";
-    if (label) {
-      // 截断长标签
-      if (label.length > 20) label = label.substring(0, 18) + "…";
-      ctx.font = LABEL_FONT_SIZE + "px sans-serif";
+    var shouldShowLabel = isActive || node.degree >= 2 || nodes.length <= 18;
+    if (label && shouldShowLabel) {
+      if (label.length > 22) label = label.substring(0, 20) + "…";
+      ctx.save();
+      ctx.font = (isActive ? '600 ' : '') + LABEL_FONT_SIZE + "px sans-serif";
       ctx.textAlign = "center";
       ctx.textBaseline = "top";
-      ctx.fillStyle = isHovered ? "#e4eaf2" : "#8a9bb0";
+      var textWidth = ctx.measureText(label).width;
+      var lx = node.x - textWidth / 2 - 7;
+      var ly = node.y + node.radius + LABEL_OFFSET - 3;
+      ctx.fillStyle = isActive ? 'rgba(12,18,26,0.78)' : 'rgba(12,18,26,0.54)';
+      roundRect(ctx, lx, ly, textWidth + 14, LABEL_FONT_SIZE + 10, 8);
+      ctx.fill();
+      ctx.fillStyle = isActive ? palette.label : 'rgba(190, 205, 220, 0.78)';
       ctx.fillText(label, node.x, node.y + node.radius + LABEL_OFFSET);
-    }
-
-    if (isHovered) {
-      var metaLines = [];
-      var updatedAt = formatWikiGraphNodeTime(node.updated_at);
-      if (updatedAt) metaLines.push((currentLanguage === 'zh' ? '更新' : 'Updated') + ': ' + updatedAt);
-      if (node.path) metaLines.push(shortenWikiGraphText(node.path, 42));
-      if (metaLines.length) {
-        ctx.font = "10px sans-serif";
-        ctx.fillStyle = "#6f859d";
-        metaLines.forEach(function(line, lineIndex) {
-          ctx.fillText(line, node.x, node.y + node.radius + LABEL_OFFSET + LABEL_FONT_SIZE + 4 + lineIndex * 12);
-        });
-      }
+      ctx.restore();
     }
   });
 
   ctx.restore();
+
+  if (activeNode !== null && activeNode >= 0 && nodes[activeNode]) {
+    var active = nodes[activeNode];
+    drawWikiGraphTooltip(
+      ctx,
+      active,
+      wikiGraphOffsetX + active.x * wikiGraphScale,
+      wikiGraphOffsetY + active.y * wikiGraphScale,
+      w,
+      h
+    );
+  }
 }
 
 // ─── 坐标转换 ────────────────────────────────────────────────
@@ -580,6 +746,8 @@ function onWikiGraphMouseUp(e) {
       var idx = wikiGraphFindNodeAt(pos.x, pos.y);
       if (idx >= 0 && wikiGraphNodes[idx]) {
         var node = wikiGraphNodes[idx];
+        wikiGraphFocused = idx;
+        drawWikiGraph();
         if (typeof viewMemoryFile === "function") {
           viewMemoryFile(node.name || node.id);
         }
@@ -616,6 +784,34 @@ function onWikiGraphWheel(e) {
   wikiGraphOffsetX += (worldAfter.x - worldBefore.x) * wikiGraphScale;
   wikiGraphOffsetY += (worldAfter.y - worldBefore.y) * wikiGraphScale;
 
+  updateWikiGraphZoomLabel();
+  drawWikiGraph();
+}
+
+function onWikiGraphDoubleClick(e) {
+  var pos = wikiGraphGetCanvasPos(e);
+  var idx = wikiGraphFindNodeAt(pos.x, pos.y);
+  if (idx >= 0) {
+    wikiGraphFocused = idx;
+    var node = wikiGraphNodes[idx];
+    wikiGraphOffsetX = pos.x - node.x * wikiGraphScale;
+    wikiGraphOffsetY = pos.y - node.y * wikiGraphScale;
+    drawWikiGraph();
+  } else {
+    resetWikiGraphView();
+  }
+}
+
+function resetWikiGraphView() {
+  if (!wikiGraphCanvas) return;
+  var w = wikiGraphCanvas._width || wikiGraphCanvas.width;
+  var h = wikiGraphCanvas._height || wikiGraphCanvas.height;
+  wikiGraphOffsetX = w / 2;
+  wikiGraphOffsetY = h / 2;
+  wikiGraphScale = Math.max(0.82, Math.min(1.08, Math.min(w, h) / 760));
+  wikiGraphHovered = null;
+  wikiGraphFocused = null;
+  updateWikiGraphZoomLabel();
   drawWikiGraph();
 }
 
