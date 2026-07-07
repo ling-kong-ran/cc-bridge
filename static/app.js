@@ -3752,7 +3752,71 @@ function initMessageContextMenu() {
   });
 }
 
+function getMessageSendOptions() {
+  return {
+    t,
+    addSystemMsg,
+    addUserMessage,
+    updateUI,
+    updateWorkspaceSessionStatus,
+    createAssistantBubble,
+    startTurnTimer,
+    stopTurnTimer,
+    renderCurrentState,
+    scrollToBottom,
+    sendAction,
+    removePendingAssistantBubble,
+    captureActiveWorkspaceSnapshot,
+    quotePayloadForBackend,
+    quoteBackendPayload,
+    getQuotedMessagesForSend,
+    clearQuotedMessagesForSend,
+    quoteDisplayText,
+    getAttachedFiles,
+    consumeAttachedFiles,
+    getState: () => ({
+      sessionActive,
+      isResponding,
+      isViewer,
+      currentSessionId,
+      currentRunId,
+      currentAssistantEl,
+      currentAssistantMessageId,
+      currentContent,
+      streamBlocks,
+      currentTurnContent,
+      currentTurnHasAssistantOutput,
+      currentTurnStartedAt,
+      currentTurnAttachmentCount,
+    }),
+    setState: (state = {}) => {
+      if ('sessionActive' in state) sessionActive = state.sessionActive;
+      if ('isResponding' in state) isResponding = state.isResponding;
+      if ('isViewer' in state) isViewer = state.isViewer;
+      if ('currentSessionId' in state) currentSessionId = state.currentSessionId;
+      if ('currentRunId' in state) currentRunId = state.currentRunId;
+      if ('currentAssistantEl' in state) currentAssistantEl = state.currentAssistantEl;
+      if ('currentAssistantMessageId' in state) currentAssistantMessageId = state.currentAssistantMessageId;
+      if ('currentContent' in state) currentContent = state.currentContent;
+      if ('streamBlocks' in state) streamBlocks = state.streamBlocks;
+      if ('currentTurnContent' in state) currentTurnContent = state.currentTurnContent;
+      if ('currentTurnHasAssistantOutput' in state) currentTurnHasAssistantOutput = state.currentTurnHasAssistantOutput;
+      if ('currentTurnStartedAt' in state) currentTurnStartedAt = state.currentTurnStartedAt;
+      if ('currentTurnAttachmentCount' in state) currentTurnAttachmentCount = state.currentTurnAttachmentCount;
+    },
+    inputEl,
+    modelSelect,
+    cliSelect: document.getElementById('cli-select'),
+    remoteTargetSelect,
+    remoteAllowMutate,
+    memoryAutoInject,
+    notifyFeishu,
+  };
+}
+
 function interruptCurrentRun() {
+  const messageSend = window.CCBridge?.messageSend;
+  if (messageSend?.interruptCurrentRun) return messageSend.interruptCurrentRun(getMessageSendOptions());
   if (!isResponding || !currentSessionId) return Promise.resolve(null);
   return sendAction('interrupt', { session_id: currentSessionId, run_id: currentRunId });
 }
@@ -3823,6 +3887,8 @@ function clearQuotedMessagesForSend() {
 }
 
 async function sendMessage() {
+  const messageSend = window.CCBridge?.messageSend;
+  if (messageSend?.sendMessage) return messageSend.sendMessage(getMessageSendOptions());
   let content = inputEl.value.trim();
   const quotesForThisTurn = quotePayloadForBackend(getQuotedMessagesForSend());
   const isLiveFollowup = isResponding;
@@ -3913,10 +3979,14 @@ async function sendMessage() {
 }
 
 function isSlashCommand(content) {
+  const messageSend = window.CCBridge?.messageSend;
+  if (messageSend?.isSlashCommand) return messageSend.isSlashCommand(content);
   return /^\/[^\s]+/.test((content || '').trim());
 }
 
 function getSlashCommandName(content) {
+  const messageSend = window.CCBridge?.messageSend;
+  if (messageSend?.getSlashCommandName) return messageSend.getSlashCommandName(content);
   const match = (content || '').trim().match(/^\/[^\s]+/);
   return match ? match[0] : '';
 }
