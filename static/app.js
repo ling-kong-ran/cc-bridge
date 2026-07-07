@@ -1155,49 +1155,22 @@ function getLocalizationOptions() {
   };
 }
 
+function getLocalizationModule() {
+  const mod = window.CCBridge?.localization;
+  if (!mod) console.error('CCBridge localization module is not loaded');
+  return mod;
+}
+
 async function applyLanguage(language, persist = true) {
-  const localization = window.CCBridge?.localization;
-  if (localization?.applyLanguage) return localization.applyLanguage(language, persist, getLocalizationOptions());
-  currentLanguage = language === 'zh' ? 'zh' : 'en';
-  if (languageSelect) languageSelect.value = currentLanguage;
-  document.documentElement.lang = currentLanguage === 'zh' ? 'zh-CN' : 'en';
-  await loadLanguageMap(currentLanguage);
-  document.title = t('pageTitle');
-  renderLocalizedText();
-  updateThemeToggle();
-  updateConnectionText();
-  updateUI();
-  setSidebarCollapsed(sidebarCollapsed);
-  updateFilePickerCount();
-  if (persist) saveGuiSettings({ language: currentLanguage });
+  return getLocalizationModule()?.applyLanguage?.(language, persist, getLocalizationOptions());
 }
 
 async function loadLanguageMap(language) {
-  const localization = window.CCBridge?.localization;
-  if (localization?.loadLanguageMap) return localization.loadLanguageMap(language, getLocalizationOptions());
-  try {
-    await window.CCBridge.i18n.load(language);
-  } catch (e) {
-    if (language !== 'en') {
-      currentLanguage = 'en';
-      await loadLanguageMap('en');
-    }
-  }
+  return getLocalizationModule()?.loadLanguageMap?.(language, getLocalizationOptions());
 }
 
 function renderLocalizedText() {
-  const localization = window.CCBridge?.localization;
-  if (localization?.renderLocalizedText) return localization.renderLocalizedText(getLocalizationOptions());
-  document.querySelectorAll('[data-i18n]').forEach(el => {
-    if (el.id === 'topbar-model' && sessionActive) return;
-    el.textContent = t(el.dataset.i18n);
-  });
-  document.querySelectorAll('[data-i18n-placeholder]').forEach(el => {
-    el.placeholder = t(el.dataset.i18nPlaceholder);
-  });
-  document.querySelectorAll('[data-i18n-title]').forEach(el => {
-    el.title = t(el.dataset.i18nTitle);
-  });
+  return getLocalizationModule()?.renderLocalizedText?.(getLocalizationOptions());
 }
 
 function t(key, vars = {}) {
