@@ -2539,25 +2539,18 @@ function getCompletionSyncOptions() {
   };
 }
 
+function getCompletionSyncModule() {
+  const mod = window.CCBridge?.completionSync;
+  if (!mod) console.error('CCBridge completionSync module is not loaded');
+  return mod;
+}
+
 function clearCompletionHistorySync() {
-  const completionSync = window.CCBridge?.completionSync;
-  if (completionSync?.clearCompletionHistorySync) return completionSync.clearCompletionHistorySync(getCompletionSyncOptions());
-  if (!completionHistorySyncTimer) return;
-  clearTimeout(completionHistorySyncTimer);
-  completionHistorySyncTimer = null;
+  return getCompletionSyncModule()?.clearCompletionHistorySync?.(getCompletionSyncOptions());
 }
 
 function scheduleCompletionHistorySync(sessionId) {
-  const completionSync = window.CCBridge?.completionSync;
-  if (completionSync?.scheduleCompletionHistorySync) return completionSync.scheduleCompletionHistorySync(sessionId, getCompletionSyncOptions());
-  if (!sessionId) return;
-  clearCompletionHistorySync();
-  completionHistorySyncTimer = setTimeout(() => {
-    completionHistorySyncTimer = null;
-    if (sessionId === currentSessionId && !isResponding) {
-      reloadSessionHistory(sessionId, cwdInput.value.trim() || '');
-    }
-  }, 600);
+  return getCompletionSyncModule()?.scheduleCompletionHistorySync?.(sessionId, getCompletionSyncOptions());
 }
 
 function getResultHandlerOptions() {
