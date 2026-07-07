@@ -605,6 +605,13 @@ class FeishuGateway:
             ws_log("Client 已创建，调用 start()...")
             client.start()
             ws_log("client.start() 返回（连接已关闭）")
+        except RuntimeError as exc:
+            if self._ws_stop_requested and "Event loop stopped before Future completed" in str(exc):
+                ws_log("WS event loop 已停止，连接正常关闭")
+            else:
+                ws_log(f"连接异常: {exc}")
+                import traceback
+                ws_log(traceback.format_exc())
         except Exception as exc:
             ws_log(f"连接异常: {exc}")
             import traceback

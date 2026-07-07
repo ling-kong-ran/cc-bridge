@@ -1,7 +1,7 @@
 {
   "name": "cc-bridge-desktop",
   "productName": "CC Bridge",
-  "version": "0.1.0",
+  "version": "0.1.2",
   "description": "CC Bridge 桌面应用壳。",
   "private": true,
   "main": "desktop/electron/main.cjs",
@@ -10,6 +10,8 @@
     "desktop:pack": "electron-builder --dir",
     "desktop:dist": "electron-builder",
     "desktop:dist:win": "electron-builder --win nsis",
+    "desktop:dist:mac": "electron-builder --mac dmg zip",
+    "desktop:dist:linux": "electron-builder --linux AppImage deb",
     "package:desktop": "powershell -ExecutionPolicy Bypass -File scripts/package-desktop.ps1",
     "package:desktop:pack": "powershell -ExecutionPolicy Bypass -File scripts/package-desktop.ps1 -Target pack",
     "package:desktop:release": "powershell -ExecutionPolicy Bypass -File scripts/package-desktop.ps1 -Release"
@@ -57,6 +59,20 @@
         "nsis"
       ],
       "signAndEditExecutable": false
+    },
+    "mac": {
+      "target": [
+        "dmg",
+        "zip"
+      ],
+      "category": "public.app-category.developer-tools"
+    },
+    "linux": {
+      "target": [
+        "AppImage",
+        "deb"
+      ],
+      "category": "Development"
     },
     "nsis": {
       "oneClick": false,

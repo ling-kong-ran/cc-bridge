@@ -52,7 +52,8 @@ if ($Release) {
         throw 'Release requires installer target.'
     }
 
-    $Package = Get-Content package.json -Raw | ConvertFrom-Json
+    $PackageJson = [System.IO.File]::ReadAllText((Join-Path $RepoRoot 'package.json'), [System.Text.Encoding]::UTF8)
+    $Package = $PackageJson | ConvertFrom-Json
     if (-not $Version) {
         $Parts = $Package.version.Split('.')
         $Patch = [int]$Parts[2] + 1
@@ -89,8 +90,16 @@ if ($Release) {
     }
 
     Invoke-Step "Create or update GitHub release $Tag" {
-        gh release view $Tag *> $null
-        if ($LASTEXITCODE -eq 0) {
+        $PreviousErrorActionPreference = $ErrorActionPreference
+        try {
+            $ErrorActionPreference = 'Continue'
+            gh release view $Tag *> $null
+            $ReleaseExists = $LASTEXITCODE -eq 0
+        } finally {
+            $ErrorActionPreference = $PreviousErrorActionPreference
+        }
+
+        if ($ReleaseExists) {
             gh release upload $Tag @Assets --clobber
         } else {
             gh release create $Tag @Assets --title "CC Bridge $Version" --notes "CC Bridge desktop release $Version"
