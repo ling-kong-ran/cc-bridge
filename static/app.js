@@ -3617,51 +3617,14 @@ function getWelcomeRuntimeOptions() {
   };
 }
 
+function getWelcomeRuntimeModule() {
+  const mod = window.CCBridge?.welcomeRuntime;
+  if (!mod) console.error('CCBridge welcomeRuntime module is not loaded');
+  return mod;
+}
+
 function renderWelcomeRuntime() {
-  const welcomeRuntime = window.CCBridge?.welcomeRuntime;
-  if (welcomeRuntime?.renderWelcomeRuntime) return welcomeRuntime.renderWelcomeRuntime(getWelcomeRuntimeOptions());
-  const el = document.getElementById('welcome-runtime');
-  if (!el) return;
-  const cwd = cwdInput?.value?.trim() || '';
-  const modelOptions = Array.from(modelSelect?.options || [])
-    .map(opt => `<option value="${esc(opt.value)}" ${opt.selected ? 'selected' : ''}>${esc(opt.textContent || opt.value)}</option>`)
-    .join('');
-  const cliSelect = document.getElementById('cli-select');
-  const cliOptions = Array.from(cliSelect?.options || [])
-    .map(opt => `<option value="${esc(opt.value)}" ${opt.selected ? 'selected' : ''}>${esc(opt.textContent || opt.value)}</option>`)
-    .join('');
-  const remoteOptions = Array.from(remoteTargetSelect?.options || [])
-    .map(opt => `<option value="${esc(opt.value)}" ${opt.selected ? 'selected' : ''}>${esc(opt.textContent || opt.value)}</option>`)
-    .join('');
-  el.innerHTML = `
-    <button type="button" class="welcome-runtime-row welcome-runtime-action" data-action="browse-cwd">
-      <span>${esc(t('cwd'))}</span><strong title="${esc(cwd || t('unsetCwd'))}">${esc(shortenPlainPath(cwd, 4) || t('unsetCwd'))}</strong>
-    </button>
-    <label class="welcome-runtime-row welcome-runtime-field">
-      <span>${esc(t('cliTool'))}</span><select class="welcome-runtime-select" data-runtime="cli">${cliOptions}</select>
-    </label>
-    <label class="welcome-runtime-row welcome-runtime-field">
-      <span>${esc(t('model'))}</span><select class="welcome-runtime-select" data-runtime="model">${modelOptions}</select>
-    </label>
-    <label class="welcome-runtime-row welcome-runtime-field">
-      <span>${esc(t('remote'))}</span><select class="welcome-runtime-select" data-runtime="remote">${remoteOptions}</select>
-    </label>`;
-  el.querySelector('[data-action="browse-cwd"]')?.addEventListener('click', () => openPicker());
-  el.querySelector('[data-runtime="cli"]')?.addEventListener('change', (e) => {
-    if (!cliSelect) return;
-    cliSelect.value = e.target.value;
-    cliSelect.dispatchEvent(new Event('change'));
-  });
-  el.querySelector('[data-runtime="model"]')?.addEventListener('change', (e) => {
-    if (!modelSelect) return;
-    modelSelect.value = e.target.value;
-    modelSelect.dispatchEvent(new Event('change'));
-  });
-  el.querySelector('[data-runtime="remote"]')?.addEventListener('change', (e) => {
-    if (!remoteTargetSelect) return;
-    remoteTargetSelect.value = e.target.value;
-    remoteTargetSelect.dispatchEvent(new Event('change'));
-  });
+  return getWelcomeRuntimeModule()?.renderWelcomeRuntime?.(getWelcomeRuntimeOptions());
 }
 
 function renderWelcomeSessionItem(s, isActive) {
