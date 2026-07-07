@@ -152,6 +152,7 @@ cc-bridge/
 - 收敛 `static/app.js` 中文件选择器 wrapper，移除剩余本地 picker 状态和 fallback 实现，统一委托 `static/js/file-picker.js`。
 - 收敛 `static/app.js` 中目录选择器 wrapper，移除剩余本地目录 picker 状态和 fallback 实现，统一委托 `static/js/directory-picker.js`。
 - 新增 `static/js/cli-update.js`，把 CLI 安装引导和应用自动更新弹窗逻辑从 `static/app.js` 拆出并挂载到 `window.CCBridge.cliUpdate`。
+- 收敛 `static/app.js` 中 CLI 安装引导与自动更新 wrapper，移除剩余本地弹窗、复制、安装、检查和重启轮询 fallback 实现，统一委托 `static/js/cli-update.js`。
 - 新增 `static/js/runtime.js`，把 CLI/模型选择、顶部运行态、费用和 token 展示逻辑从 `static/app.js` 拆出并挂载到 `window.CCBridge.runtime`。
 - 新增 `static/js/message-extras.js`，把聊天导出、消息引用和引用 payload 归一化逻辑从 `static/app.js` 拆出并挂载到 `window.CCBridge.messageExtras`。
 - 扩展 `static/js/sse.js`，继续承接连接状态展示与 `/api/action` 发送 wrapper，减少 `static/app.js` 的 SSE 基础设施逻辑。

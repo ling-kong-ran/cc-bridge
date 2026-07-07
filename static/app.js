@@ -1598,277 +1598,62 @@ function getCliUpdateOptions() {
 }
 
 function openCliInstallModal() {
-  const cliUpdate = window.CCBridge?.cliUpdate;
-  if (cliUpdate?.openCliInstallModal) return cliUpdate.openCliInstallModal(getCliUpdateOptions());
-  const overlay = document.getElementById('cli-install-overlay');
-  if (!overlay) return;
-  const cmdEl = document.getElementById('cli-install-cmd');
-  if (cmdEl) cmdEl.textContent = cliInstallCommand;
-  setCliInstallStatus('', '');
-  const output = document.getElementById('cli-install-output');
-  if (output) { output.style.display = 'none'; output.textContent = ''; }
-  overlay.style.display = '';
+  return window.CCBridge.cliUpdate?.openCliInstallModal?.(getCliUpdateOptions());
 }
 
 function closeCliInstallModal() {
-  const cliUpdate = window.CCBridge?.cliUpdate;
-  if (cliUpdate?.closeCliInstallModal) return cliUpdate.closeCliInstallModal();
-  const overlay = document.getElementById('cli-install-overlay');
-  if (overlay) overlay.style.display = 'none';
+  return window.CCBridge.cliUpdate?.closeCliInstallModal?.();
 }
 
 function setCliInstallStatus(text, kind) {
-  const cliUpdate = window.CCBridge?.cliUpdate;
-  if (cliUpdate?.setCliInstallStatus) return cliUpdate.setCliInstallStatus(text, kind);
-  const status = document.getElementById('cli-install-status');
-  if (!status) return;
-  if (!text) { status.style.display = 'none'; status.textContent = ''; return; }
-  status.style.display = '';
-  status.textContent = text;
-  status.className = `cli-install-status${kind ? ' ' + kind : ''}`;
+  return window.CCBridge.cliUpdate?.setCliInstallStatus?.(text, kind);
 }
 
 async function copyCliInstallCommand() {
-  const cliUpdate = window.CCBridge?.cliUpdate;
-  if (cliUpdate?.copyCliInstallCommand) return cliUpdate.copyCliInstallCommand(getCliUpdateOptions());
-  let copied = false;
-  try {
-    await navigator.clipboard.writeText(cliInstallCommand);
-    copied = true;
-  } catch (e) {
-    // http 环境下 clipboard API 可能不可用，回退到 execCommand
-    const ta = document.createElement('textarea');
-    ta.value = cliInstallCommand;
-    ta.style.position = 'fixed';
-    ta.style.opacity = '0';
-    document.body.appendChild(ta);
-    ta.select();
-    try { copied = document.execCommand('copy'); } catch (e2) { /* ignore */ }
-    ta.remove();
-  }
-  setCliInstallStatus(copied ? t('cmdCopied') : t('cmdCopyFailed'), copied ? 'ok' : 'err');
+  return window.CCBridge.cliUpdate?.copyCliInstallCommand?.(getCliUpdateOptions());
 }
 
 async function runCliAutoInstall() {
-  const cliUpdate = window.CCBridge?.cliUpdate;
-  if (cliUpdate?.runCliAutoInstall) return cliUpdate.runCliAutoInstall(getCliUpdateOptions());
-  if (cliInstalling) return;
-  cliInstalling = true;
-  const runBtn = document.getElementById('cli-install-run');
-  const output = document.getElementById('cli-install-output');
-  if (runBtn) runBtn.disabled = true;
-  setCliInstallStatus(t('cliInstalling'), '');
-  try {
-    const resp = await fetch('/api/install-cli', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
-    const result = await resp.json();
-    if (output && result.output) {
-      output.style.display = '';
-      output.textContent = result.output;
-      output.scrollTop = output.scrollHeight;
-    }
-    if (result.ok) {
-      setCliInstallStatus(t('cliInstallSuccess'), 'ok');
-      await loadClis();
-      addSystemMsg(t('cliInstallSuccess'));
-      setTimeout(closeCliInstallModal, 1200);
-    } else {
-      const reasons = {
-        npm_not_found: t('cliInstallNpmMissing'),
-        install_in_progress: t('cliInstallInProgress'),
-        install_timeout: t('cliInstallTimeout'),
-        cli_not_detected_after_install: t('cliInstallNotDetected'),
-      };
-      setCliInstallStatus(reasons[result.error] || t('cliInstallFailed'), 'err');
-    }
-  } catch (e) {
-    setCliInstallStatus(t('cliInstallFailed'), 'err');
-  } finally {
-    cliInstalling = false;
-    if (runBtn) runBtn.disabled = false;
-  }
+  return window.CCBridge.cliUpdate?.runCliAutoInstall?.(getCliUpdateOptions());
 }
 
 function initCliInstallModal() {
-  const cliUpdate = window.CCBridge?.cliUpdate;
-  if (cliUpdate?.initCliInstallModal) return cliUpdate.initCliInstallModal(getCliUpdateOptions());
-  document.getElementById('btn-cli-install-guide')?.addEventListener('click', openCliInstallModal);
-  document.getElementById('cli-install-close')?.addEventListener('click', closeCliInstallModal);
-  document.getElementById('cli-install-copy')?.addEventListener('click', copyCliInstallCommand);
-  document.getElementById('cli-install-run')?.addEventListener('click', runCliAutoInstall);
-  document.getElementById('cli-install-overlay')?.addEventListener('click', (e) => {
-    if (e.target === e.currentTarget) closeCliInstallModal();
-  });
+  return window.CCBridge.cliUpdate?.initCliInstallModal?.(getCliUpdateOptions());
 }
 
 // ─── 自动更新 ────────────────────────────────────────────────
 let updateRunning = false;
 
 function setUpdateStatus(text, kind) {
-  const cliUpdate = window.CCBridge?.cliUpdate;
-  if (cliUpdate?.setUpdateStatus) return cliUpdate.setUpdateStatus(text, kind);
-  const status = document.getElementById('update-status');
-  if (!status) return;
-  if (!text) { status.style.display = 'none'; status.textContent = ''; return; }
-  status.style.display = '';
-  status.textContent = text;
-  status.className = `cli-install-status${kind ? ' ' + kind : ''}`;
+  return window.CCBridge.cliUpdate?.setUpdateStatus?.(text, kind);
 }
 
 function openUpdateModal() {
-  const cliUpdate = window.CCBridge?.cliUpdate;
-  if (cliUpdate?.openUpdateModal) return cliUpdate.openUpdateModal();
-  const overlay = document.getElementById('update-overlay');
-  if (overlay) overlay.style.display = '';
+  return window.CCBridge.cliUpdate?.openUpdateModal?.();
 }
 
 function closeUpdateModal() {
-  const cliUpdate = window.CCBridge?.cliUpdate;
-  if (cliUpdate?.closeUpdateModal) return cliUpdate.closeUpdateModal();
-  const overlay = document.getElementById('update-overlay');
-  if (overlay) overlay.style.display = 'none';
+  return window.CCBridge.cliUpdate?.closeUpdateModal?.();
 }
 
 async function checkForUpdate(manual = false) {
-  const cliUpdate = window.CCBridge?.cliUpdate;
-  if (cliUpdate?.checkForUpdate) return cliUpdate.checkForUpdate(manual, getCliUpdateOptions());
-  const checkBtn = document.getElementById('btn-check-update');
-  const checkHint = document.getElementById('update-check-hint');
-  const previousCheckText = checkBtn?.textContent || '';
-  if (manual) {
-    if (checkBtn) checkBtn.disabled = true;
-    if (checkHint) {
-      checkHint.textContent = t('updateCheckRunning');
-      checkHint.className = 'update-check-hint';
-    }
-  }
-  try {
-    const resp = await fetch('/api/check-update');
-    const data = await resp.json();
-    updateInfo = data;
-    if (!data.ok) {
-      if (manual && checkHint) {
-        checkHint.textContent = t('updateFailed');
-        checkHint.className = 'update-check-hint err';
-      }
-      return;
-    }
-    const versionEl = document.getElementById('app-version');
-    if (versionEl) {
-      const localVersion = data.local_short || '—';
-      versionEl.textContent = data.needs_restart && data.server_start_short
-        ? `${data.server_start_short} → ${localVersion}`
-        : localVersion;
-    }
-
-    if (data.has_update && (manual || data.remote !== skipUpdateVersion)) {
-      const changelog = document.getElementById('update-changelog');
-      if (changelog) {
-        if (data.commits) { changelog.style.display = ''; changelog.textContent = data.commits; }
-        else { changelog.style.display = 'none'; changelog.textContent = ''; }
-      }
-      if (manual && checkHint) checkHint.textContent = '';
-      setUpdateStatus('', '');
-      const runBtn = document.getElementById('update-run');
-      if (runBtn) runBtn.disabled = false;
-      openUpdateModal();
-    } else if (data.needs_restart) {
-      const changelog = document.getElementById('update-changelog');
-      if (changelog) {
-        changelog.style.display = '';
-        changelog.textContent = data.commits || `${data.server_start_short || ''} → ${data.local_short || ''}`;
-      }
-      if (manual) {
-        if (checkHint) checkHint.textContent = '';
-        setUpdateStatus(t('updateRestartNeeded'), '');
-        const runBtn = document.getElementById('update-run');
-        if (runBtn) runBtn.disabled = false;
-        openUpdateModal();
-      }
-    } else if (manual && checkHint) {
-      checkHint.textContent = t('updateUpToDate');
-      checkHint.className = 'update-check-hint ok';
-    }
-  } catch (e) {
-    if (manual && checkHint) {
-      checkHint.textContent = t('updateFailed');
-      checkHint.className = 'update-check-hint err';
-    }
-  } finally {
-    if (manual && checkBtn) {
-      checkBtn.disabled = false;
-      checkBtn.textContent = previousCheckText || t('checkUpdate');
-    }
-  }
+  return window.CCBridge.cliUpdate?.checkForUpdate?.(manual, getCliUpdateOptions());
 }
 
 async function runUpdate() {
-  const cliUpdate = window.CCBridge?.cliUpdate;
-  if (cliUpdate?.runUpdate) return cliUpdate.runUpdate(getCliUpdateOptions());
-  if (updateRunning) return;
-  updateRunning = true;
-  const runBtn = document.getElementById('update-run');
-  if (runBtn) runBtn.disabled = true;
-  setUpdateStatus(t('updateChecking'), '');
-  try {
-    if (!updateInfo?.needs_restart || updateInfo?.has_update) {
-      const resp = await fetch('/api/update', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
-      const result = await resp.json();
-      const changelog = document.getElementById('update-changelog');
-      if (changelog && result.output) { changelog.style.display = ''; changelog.textContent = result.output; }
-      if (!result.ok) {
-        setUpdateStatus(t('updateRestartManual'), 'err');
-        if (runBtn) runBtn.disabled = false;
-        return;
-      }
-    }
-    setUpdateStatus(t('updateSuccess'), 'ok');
-    try {
-      await fetch('/api/restart', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
-    } catch (e) { /* 重启会断开连接，忽略 */ }
-    waitForServerAndReload();
-  } catch (e) {
-    setUpdateStatus(t('updateFailed'), 'err');
-    if (runBtn) runBtn.disabled = false;
-  } finally {
-    updateRunning = false;
-  }
+  return window.CCBridge.cliUpdate?.runUpdate?.(getCliUpdateOptions());
 }
 
 function skipThisVersion() {
-  const cliUpdate = window.CCBridge?.cliUpdate;
-  if (cliUpdate?.skipThisVersion) return cliUpdate.skipThisVersion(getCliUpdateOptions());
-  if (updateInfo && updateInfo.remote) {
-    skipUpdateVersion = updateInfo.remote;
-    saveGuiSettings({ skip_update_version: updateInfo.remote });
-  }
-  closeUpdateModal();
+  return window.CCBridge.cliUpdate?.skipThisVersion?.(getCliUpdateOptions());
 }
 
 async function waitForServerAndReload(attempt = 0) {
-  const cliUpdate = window.CCBridge?.cliUpdate;
-  if (cliUpdate?.waitForServerAndReload) return cliUpdate.waitForServerAndReload(attempt, getCliUpdateOptions());
-  if (attempt > 40) { setUpdateStatus(t('updateRestartManual'), 'err'); return; }
-  try {
-    const resp = await fetch('/api/gui-settings', { cache: 'no-store' });
-    if (resp.ok) { location.reload(); return; }
-  } catch (e) { /* 服务重启中，继续等待 */ }
-  setTimeout(() => waitForServerAndReload(attempt + 1), 1500);
+  return window.CCBridge.cliUpdate?.waitForServerAndReload?.(attempt, getCliUpdateOptions());
 }
 
 function initUpdateModal() {
-  const cliUpdate = window.CCBridge?.cliUpdate;
-  if (cliUpdate?.initUpdateModal) return cliUpdate.initUpdateModal(getCliUpdateOptions());
-  document.getElementById('update-close')?.addEventListener('click', closeUpdateModal);
-  document.getElementById('update-skip')?.addEventListener('click', skipThisVersion);
-  document.getElementById('update-run')?.addEventListener('click', runUpdate);
-  document.getElementById('btn-check-update')?.addEventListener('click', () => checkForUpdate(true));
-  document.getElementById('update-overlay')?.addEventListener('click', (e) => {
-    if (e.target === e.currentTarget) closeUpdateModal();
-  });
-  document.getElementById('auto-update-toggle')?.addEventListener('change', (e) => {
-    autoUpdateEnabled = e.target.checked;
-    saveGuiSettings({ auto_update_enabled: autoUpdateEnabled });
-  });
+  return window.CCBridge.cliUpdate?.initUpdateModal?.(getCliUpdateOptions());
 }
 
 async function loadModels() {
