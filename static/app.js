@@ -3294,8 +3294,20 @@ function handleResult(data) {
   }
 }
 
+function getMessageUiOptions() {
+  return {
+    t,
+    esc,
+    quoteDisplayText,
+    scrollToBottom,
+    messagesEl,
+  };
+}
+
 // ─── UI 组件 ─────────────────────────────────────────────────
 function createAssistantBubble(streaming = true) {
+  const messageUi = window.CCBridge?.messageUi;
+  if (messageUi?.createAssistantBubble) return messageUi.createAssistantBubble(streaming, getMessageUiOptions());
   const el = document.createElement('div');
   el.className = streaming ? 'message assistant streaming' : 'message assistant';
   el.innerHTML = `
@@ -3312,10 +3324,14 @@ function createAssistantBubble(streaming = true) {
 }
 
 function finishAssistantStreaming(el = currentAssistantEl) {
+  const messageUi = window.CCBridge?.messageUi;
+  if (messageUi?.finishAssistantStreaming) return messageUi.finishAssistantStreaming(el);
   if (el) el.classList.remove('streaming');
 }
 
 function removePendingAssistantBubble(keepBubble) {
+  const messageUi = window.CCBridge?.messageUi;
+  if (messageUi?.removePendingAssistantBubble) return messageUi.removePendingAssistantBubble(currentAssistantEl, keepBubble);
   finishAssistantStreaming();
   if (!keepBubble && currentAssistantEl && !currentAssistantEl.querySelector('.msg-content')?.textContent.trim()) {
     currentAssistantEl.remove();
@@ -3323,6 +3339,8 @@ function removePendingAssistantBubble(keepBubble) {
 }
 
 function addUserMessage(text, quotes = []) {
+  const messageUi = window.CCBridge?.messageUi;
+  if (messageUi?.addUserMessage) return messageUi.addUserMessage(text, quotes, getMessageUiOptions());
   const el = document.createElement('div');
   el.className = 'message user';
   const quoteHtml = quotes.length ? `
@@ -3342,6 +3360,8 @@ function addUserMessage(text, quotes = []) {
 }
 
 function addSystemMsg(text, isError) {
+  const messageUi = window.CCBridge?.messageUi;
+  if (messageUi?.addSystemMsg) return messageUi.addSystemMsg(text, isError, getMessageUiOptions());
   const el = document.createElement('div');
   el.className = `system-msg${isError ? ' error' : ''}`;
   el.textContent = text;
@@ -3350,6 +3370,8 @@ function addSystemMsg(text, isError) {
 }
 
 function renderContextTrace(trace = {}) {
+  const messageUi = window.CCBridge?.messageUi;
+  if (messageUi?.renderContextTrace) return messageUi.renderContextTrace(trace, getMessageUiOptions());
   const injected = Array.isArray(trace.injected) ? trace.injected : [];
   if (!injected.length) return;
   const el = document.createElement('div');

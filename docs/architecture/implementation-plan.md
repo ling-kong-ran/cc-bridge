@@ -157,6 +157,7 @@ cc-bridge/
 - 扩展 `static/js/workspace.js`，继续承接后台 session 事件预览文本提取和 workspace 预览更新逻辑。
 - 新增 `static/js/task-activity.js`，把 Task subagent 运行状态、状态栏和 subagent 气泡渲染逻辑从 `static/app.js` 拆出并挂载到 `window.CCBridge.taskActivity`。
 - 新增 `static/js/stream-events.js`，把 assistant stream event 对当前回复块、workspace 预览和 Task 注册的状态推进逻辑从 `static/app.js` 拆出并挂载到 `window.CCBridge.streamEvents`。
+- 新增 `static/js/message-ui.js`，把 assistant/user/system 消息 DOM 创建和上下文注入追踪渲染逻辑从 `static/app.js` 拆出并挂载到 `window.CCBridge.messageUi`。
 
 ## 后续验收标准
 
