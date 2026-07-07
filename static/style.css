@@ -1259,6 +1259,36 @@ html.light-theme .select {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+.welcome-runtime-value {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.welcome-runtime-value strong {
+  flex: 1;
+}
+.welcome-runtime-mobile.is-muted strong {
+  color: var(--text-ghost);
+  font-weight: 500;
+}
+.welcome-runtime-copy {
+  flex-shrink: 0;
+  padding: 3px 7px;
+  border: 1px solid var(--border-dim);
+  border-radius: var(--radius-xs);
+  background: var(--bg-raised);
+  color: var(--green);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  cursor: pointer;
+}
+.welcome-runtime-copy:hover,
+.welcome-runtime-copy:focus-visible {
+  border-color: rgba(var(--accent-rgb), 0.4);
+  background: rgba(var(--accent-rgb), 0.08);
+  outline: none;
+}
 .welcome-runtime-select {
   min-width: 0;
   width: 100%;

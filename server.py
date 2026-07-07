@@ -126,6 +126,7 @@ APP_ROOT = Path(__file__).parent.resolve()
 SERVER_FILE = Path(__file__).resolve()
 APP_PORT_SCAN_LIMIT = 50
 APP_HTTP_MARKERS = ("CC Bridge", "Claude Code Bridge", "/static/style.css", "ccb-theme")
+CURRENT_PORT: int | None = None
 
 
 def _get_listening_pids(port: int) -> set[int]:
@@ -2719,6 +2720,16 @@ async def handle_api_get(path: str, writer: asyncio.StreamWriter, query: dict = 
         data = get_settings()
     elif path == "/api/gui-settings":
         _, data = handle_settings_get(path, get_access_context(writer), DEFAULT_CWD)
+    elif path == "/api/mobile-access":
+        port = CURRENT_PORT or DEFAULT_PORT
+        urls = [f"http://{ip}:{port}" for ip in get_lan_ips()]
+        data = {
+            "urls": urls,
+            "url": urls[0] if urls else "",
+            "port": port,
+            "lan_access_enabled": lan_access_enabled(),
+            "is_localhost": get_access_context(writer)["is_localhost"],
+        }
     elif path == "/api/env":
         data = get_env_config()
     elif path == "/api/check-update":
@@ -3150,7 +3161,7 @@ async def handle_static(path: str, writer: asyncio.StreamWriter):
 
 
 async def main(start_port: int | None = None, desktop: bool = False, host: str | None = None):
-    global scheduled_runner, HOST, DESKTOP_MODE, DESKTOP_SHUTDOWN_TOKEN
+    global scheduled_runner, HOST, DESKTOP_MODE, DESKTOP_SHUTDOWN_TOKEN, CURRENT_PORT
     DESKTOP_MODE = desktop or DESKTOP_MODE
     if DESKTOP_MODE:
         HOST = host or "127.0.0.1"
@@ -3179,6 +3190,7 @@ async def main(start_port: int | None = None, desktop: bool = False, host: str |
         raise RuntimeError(f"Unable to bind port {bind_start_port}-65535: {last_error}")
 
     local_url = f"http://{BROWSER_HOST}:{port}"
+    CURRENT_PORT = port
     lan_urls = [f"http://{ip}:{port}" for ip in get_lan_ips()]
 
     if port != DEFAULT_PORT:

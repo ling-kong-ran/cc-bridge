@@ -2596,6 +2596,7 @@ function getWelcomeRuntimeOptions() {
     esc,
     shortenPlainPath,
     openPicker,
+    addSystemMsg,
     cwdInput,
     modelSelect,
     cliSelect: document.getElementById('cli-select'),
