@@ -118,6 +118,7 @@ cc-bridge/
 - 新增 `backend/routes/settings_routes.py` 与 `backend/routes/context_routes.py`，把 GUI 设置和自动上下文 API 接入路由层。
 - 新增 `backend/responses.py`，开始承接 HTTP 响应写出基础设施。
 - 新增 `backend/services/sessions_service.py`，开始承接会话列表运行态标记与分页逻辑。
+- 新增 `docs/architecture/sse-events.md`、`docs/architecture/session-persistence.md` 与 `docs/architecture/bootstrap-boundary.md`，补齐核心协议、会话持久化和 bootstrap 边界文档。
 
 ## 后续验收标准
 
