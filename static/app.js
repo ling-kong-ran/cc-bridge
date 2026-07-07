@@ -2094,11 +2094,13 @@ function removePendingAssistantBubble(keepBubble) {
 
 function cleanupStaleAssistantStreamingBubbles(markDone = false) {
   const durationMs = currentTurnStartedAt ? Date.now() - currentTurnStartedAt : 0;
-  messagesEl?.querySelectorAll?.('.message.assistant.streaming')?.forEach(el => {
-    if (el === currentAssistantEl) return;
+  messagesEl?.querySelectorAll?.('.message.assistant').forEach(el => {
+    const meta = el.querySelector('.msg-meta');
+    const isRunningMeta = (meta?.textContent || '').trim().startsWith(t('responseRunning', { duration: '' }).trim());
+    if (!el.classList.contains('streaming') && !(markDone && isRunningMeta)) return;
+    if (el === currentAssistantEl && !markDone) return;
     if (markDone) {
       finishAssistantStreaming(el);
-      const meta = el.querySelector('.msg-meta');
       if (meta) meta.textContent = durationMs ? t('responseDuration', { duration: formatCompactDuration(durationMs) }) : '';
       return;
     }
