@@ -5117,31 +5117,20 @@ function sanitizeLinkHref(href) {
 }
 
 // ─── 目录选择器 ──────────────────────────────────────────────
-const pickerOverlay = document.getElementById('dir-picker-overlay');
-const pickerList = document.getElementById('picker-list');
-const pickerCurrentPath = document.getElementById('picker-current-path');
-const pickerUp = document.getElementById('picker-up');
-const pickerClose = document.getElementById('picker-close');
-const pickerSelect = document.getElementById('picker-select');
-const pickerNewdir = document.getElementById('picker-newdir');
-const btnBrowse = document.getElementById('btn-browse');
-let pickerCurrentDir = '/';
-let pickerCallback = null;  // 选择后回调，用于 CWD 更新等场景
-
 function getDirectoryPickerOptions() {
   return {
     t,
     esc,
     getParentPath,
     cwdInput,
-    pickerOverlay,
-    pickerList,
-    pickerCurrentPath,
-    pickerUp,
-    pickerClose,
-    pickerSelect,
-    pickerNewdir,
-    btnBrowse,
+    pickerOverlay: document.getElementById('dir-picker-overlay'),
+    pickerList: document.getElementById('picker-list'),
+    pickerCurrentPath: document.getElementById('picker-current-path'),
+    pickerUp: document.getElementById('picker-up'),
+    pickerClose: document.getElementById('picker-close'),
+    pickerSelect: document.getElementById('picker-select'),
+    pickerNewdir: document.getElementById('picker-newdir'),
+    btnBrowse: document.getElementById('btn-browse'),
     isSessionActive: () => sessionActive,
     getCurrentSessionId: () => currentSessionId,
     promptCwdForSession,
@@ -5153,148 +5142,23 @@ function getDirectoryPickerOptions() {
 }
 
 function initDirectoryPicker() {
-  const directoryPicker = window.CCBridge?.directoryPicker;
-  if (directoryPicker?.initDirectoryPicker) {
-    directoryPicker.initDirectoryPicker(getDirectoryPickerOptions());
-    return;
-  }
-  btnBrowse.addEventListener('click', async () => {
-    if (sessionActive && currentSessionId) {
-      const newCwd = await promptCwdForSession(cwdInput.value.trim());
-      if (newCwd) {
-        await updateSessionCwd(currentSessionId, newCwd);
-        // SSE cwd_changed 事件会更新 UI（cwdInput.value、loadSessions、addSystemMsg）
-      }
-      return;
-    }
-    openPicker();
-  });
-  pickerClose.addEventListener('click', closePicker);
-  pickerOverlay.addEventListener('click', (e) => {
-    if (e.target === pickerOverlay) closePicker();
-  });
-  pickerUp.addEventListener('click', () => {
-    navigatePicker(pickerCurrentDir === '/' ? '/' : getParentPath(pickerCurrentDir));
-  });
-  pickerSelect.addEventListener('click', () => {
-    if (pickerCallback) {
-      const cb = pickerCallback;
-      pickerCallback = null;
-      cb(pickerCurrentDir);
-      closePicker();
-      return;
-    }
-    cwdInput.value = pickerCurrentDir;
-    updateRuntimeSummary();
-    closeSlashCommandPanel();
-    loadSessions();
-    closePicker();
-  });
-
-  pickerNewdir.addEventListener('click', async () => {
-    const parent = pickerCurrentDir;
-    if (!parent || parent === '/') {
-      alert(t('newFolderNeedDir'));
-      return;
-    }
-    const name = prompt(t('newFolderPrompt'));
-    if (name === null) return;
-    if (!name.trim()) return;
-    try {
-      const resp = await fetch('/api/mkdir', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ parent, name: name.trim() }),
-      });
-      const data = await resp.json();
-      if (!data.ok) {
-        alert(data.error || t('requestFailed', { message: '' }));
-        return;
-      }
-      await navigatePicker(parent);
-    } catch (e) {
-      alert(t('requestFailed', { message: e.message }));
-    }
-  });
+  return window.CCBridge.directoryPicker?.initDirectoryPicker?.(getDirectoryPickerOptions());
 }
 
 function openPicker(initialPath, callback) {
-  const directoryPicker = window.CCBridge?.directoryPicker;
-  if (directoryPicker?.openPicker) return directoryPicker.openPicker(initialPath, callback, getDirectoryPickerOptions());
-  pickerOverlay.style.display = 'flex';
-  if (callback) {
-    pickerCallback = callback;
-  }
-  navigatePicker(initialPath || cwdInput.value || '/');
+  return window.CCBridge.directoryPicker?.openPicker?.(initialPath, callback, getDirectoryPickerOptions());
 }
 
 function closePicker() {
-  const directoryPicker = window.CCBridge?.directoryPicker;
-  if (directoryPicker?.closePicker) return directoryPicker.closePicker(getDirectoryPickerOptions());
-  const cb = pickerCallback;
-  pickerOverlay.style.display = 'none';
-  pickerCallback = null;
-  if (cb) cb(null);  // 未选择就关闭，通知调用方
+  return window.CCBridge.directoryPicker?.closePicker?.(getDirectoryPickerOptions());
 }
 
 async function navigatePicker(path) {
-  const directoryPicker = window.CCBridge?.directoryPicker;
-  if (directoryPicker?.navigatePicker) return directoryPicker.navigatePicker(path, getDirectoryPickerOptions());
-  pickerCurrentDir = path;
-  pickerCurrentPath.textContent = path || '/';
-  pickerList.innerHTML = `<div class="picker-empty">${esc(t('pickerLoading'))}</div>`;
-
-  try {
-    const resp = await fetch('/api/browse', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ path }),
-    });
-    const data = await resp.json();
-
-    if (data.error) {
-      pickerList.innerHTML = `<div class="picker-empty">${esc(data.error)}</div>`;
-      return;
-    }
-
-    pickerCurrentDir = data.current || path;
-    pickerCurrentPath.textContent = pickerCurrentDir;
-
-    if (!data.items || data.items.length === 0) {
-      pickerList.innerHTML = `<div class="picker-empty">${esc(t('emptyDirFolders'))}</div>`;
-      return;
-    }
-
-    pickerList.innerHTML = data.items.map(item => `
-      <div class="picker-item ${item.type === 'drive' ? 'drive' : ''}" data-path="${esc(item.path)}">
-        <span class="picker-item-icon">${item.type === 'drive' ? '&#128423;' : '&#128193;'}</span>
-        <span class="picker-item-name">${esc(item.name)}</span>
-      </div>
-    `).join('');
-
-    pickerList.querySelectorAll('.picker-item').forEach(el => {
-      el.addEventListener('dblclick', () => navigatePicker(el.dataset.path));
-      el.addEventListener('click', () => {
-        pickerList.querySelectorAll('.picker-item').forEach(i => i.classList.remove('selected'));
-        el.classList.add('selected');
-        pickerCurrentDir = el.dataset.path;
-        pickerCurrentPath.textContent = pickerCurrentDir;
-      });
-    });
-  } catch (e) {
-    pickerList.innerHTML = `<div class="picker-empty">${esc(t('requestFailed', { message: e.message }))}</div>`;
-  }
+  return window.CCBridge.directoryPicker?.navigatePicker?.(path, getDirectoryPickerOptions());
 }
 
 function getParentPath(p) {
-  const directoryPicker = window.CCBridge?.directoryPicker;
-  if (directoryPicker?.getParentPath) return directoryPicker.getParentPath(p);
-  if (!p || p === '/') return '/';
-  const parts = p.replace(/\\/g, '/').split('/').filter(Boolean);
-  if (parts.length <= 1) return '/';
-  parts.pop();
-  if (parts.length === 1 && parts[0].endsWith(':')) return parts[0] + '/';
-  return parts.join('/');
+  return window.CCBridge.directoryPicker?.getParentPath?.(p) || '/';
 }
 
 // ─── 文件选择器 ──────────────────────────────────────────────

@@ -150,6 +150,7 @@ cc-bridge/
 - 新增 `static/js/config-reload.js`，把窗口聚焦和页面可见时刷新 CLI、模型与配置的逻辑从 `static/app.js` 拆出并挂载到 `window.CCBridge.configReload`。
 - 新增 `static/js/file-picker.js`，把附件和记忆导入文件选择器的来源切换、浏览、搜索、多选和远程缓存逻辑从 `static/app.js` 拆出并挂载到 `window.CCBridge.filePicker`。
 - 收敛 `static/app.js` 中文件选择器 wrapper，移除剩余本地 picker 状态和 fallback 实现，统一委托 `static/js/file-picker.js`。
+- 收敛 `static/app.js` 中目录选择器 wrapper，移除剩余本地目录 picker 状态和 fallback 实现，统一委托 `static/js/directory-picker.js`。
 - 新增 `static/js/cli-update.js`，把 CLI 安装引导和应用自动更新弹窗逻辑从 `static/app.js` 拆出并挂载到 `window.CCBridge.cliUpdate`。
 - 新增 `static/js/runtime.js`，把 CLI/模型选择、顶部运行态、费用和 token 展示逻辑从 `static/app.js` 拆出并挂载到 `window.CCBridge.runtime`。
 - 新增 `static/js/message-extras.js`，把聊天导出、消息引用和引用 payload 归一化逻辑从 `static/app.js` 拆出并挂载到 `window.CCBridge.messageExtras`。
