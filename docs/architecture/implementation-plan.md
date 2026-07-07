@@ -161,6 +161,7 @@ cc-bridge/
 - 新增 `static/js/completion-sync.js`，把后台 session 完成后的历史延迟同步逻辑从 `static/app.js` 拆出并挂载到 `window.CCBridge.completionSync`。
 - 新增 `static/js/turn-timer.js`，把 assistant 回复耗时 meta 更新和 turn timer 管理逻辑从 `static/app.js` 拆出并挂载到 `window.CCBridge.turnTimer`。
 - 新增 `static/js/notifications.js`，把页面失焦判断和完成通知创建逻辑从 `static/app.js` 拆出并挂载到 `window.CCBridge.notifications`。
+- 新增 `static/js/stream-state.js`，把 workspace tab 流式状态保存、恢复和 assistant stream 状态重置逻辑从 `static/app.js` 拆出并挂载到 `window.CCBridge.streamState`。
 
 ## 后续验收标准
 

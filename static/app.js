@@ -32,7 +32,44 @@ let lastFocusConfigReloadAt = 0;
 // 每个 workspace tab 独立的 SSE/流式状态，切换标签页时 save/restore
 const _tabStreamState = new Map();
 
+function getStreamStateOptions() {
+  return {
+    tabStreamState: _tabStreamState,
+    emptyTokenUsage,
+    updateStopButton,
+    getState: () => ({
+      isResponding,
+      currentRunId,
+      currentSessionId,
+      currentContent,
+      streamBlocks,
+      currentAssistantMessageId,
+      currentTurnContent,
+      currentTurnHasAssistantOutput,
+      currentTurnStartedAt,
+      currentTurnAttachmentCount,
+    }),
+    setState: (state = {}) => {
+      if ('isResponding' in state) isResponding = state.isResponding;
+      if ('currentRunId' in state) currentRunId = state.currentRunId;
+      if ('currentSessionId' in state) currentSessionId = state.currentSessionId;
+      if ('currentContent' in state) currentContent = state.currentContent;
+      if ('streamBlocks' in state) streamBlocks = state.streamBlocks;
+      if ('currentAssistantMessageId' in state) currentAssistantMessageId = state.currentAssistantMessageId;
+      if ('currentTurnContent' in state) currentTurnContent = state.currentTurnContent;
+      if ('currentTurnHasAssistantOutput' in state) currentTurnHasAssistantOutput = state.currentTurnHasAssistantOutput;
+      if ('currentTurnStartedAt' in state) currentTurnStartedAt = state.currentTurnStartedAt;
+      if ('currentTurnAttachmentCount' in state) currentTurnAttachmentCount = state.currentTurnAttachmentCount;
+      if ('currentAssistantEl' in state) currentAssistantEl = state.currentAssistantEl;
+      if ('totalCost' in state) totalCost = state.totalCost;
+      if ('totalTokens' in state) totalTokens = state.totalTokens;
+    },
+  };
+}
+
 function _saveStreamState(sessionId) {
+  const streamState = window.CCBridge?.streamState;
+  if (streamState?.saveStreamState) return streamState.saveStreamState(sessionId, getStreamStateOptions());
   if (!sessionId) return;
   _tabStreamState.set(sessionId, {
     isResponding,
@@ -49,6 +86,8 @@ function _saveStreamState(sessionId) {
 }
 
 function _restoreStreamState(sessionId) {
+  const streamState = window.CCBridge?.streamState;
+  if (streamState?.restoreStreamState) return streamState.restoreStreamState(sessionId, getStreamStateOptions());
   const saved = _tabStreamState.get(sessionId);
   if (saved) {
     isResponding = saved.isResponding;
@@ -4480,6 +4519,8 @@ async function resumeSession(sessionId, cwd, model, savedCost = 0, remoteTargetI
 }
 
 function resetAssistantStreamState() {
+  const streamState = window.CCBridge?.streamState;
+  if (streamState?.resetAssistantStreamState) return streamState.resetAssistantStreamState(getStreamStateOptions());
   currentAssistantEl = null;
   currentAssistantMessageId = null;
   currentContent = [];
