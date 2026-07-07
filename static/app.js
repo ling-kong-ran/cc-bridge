@@ -701,7 +701,29 @@ function renderWorkspaceTabs() {
   }).join('') + newButton;
 }
 
+function getWorkspacePanesOptions() {
+  return {
+    t,
+    esc,
+    getMode: () => workspaceMode,
+    getSessions: () => Array.from(workspaceSessions.values()),
+    getActiveSessionId: () => activeWorkspaceSessionId,
+    getSessionActive: () => sessionActive,
+    getLivePane: () => workspaceLivePane,
+    getPanesEl: () => workspacePanesEl,
+    getStatusLabel: getWorkspaceStatusLabel,
+    getSessionPreview: getWorkspaceSessionPreview,
+    applyPaneWidth: applyWorkspacePaneWidth,
+    ensureLivePaneResizer,
+    startWorkspaceResize,
+    activateWorkspaceSession,
+    releaseInactiveWorkspaceSession,
+  };
+}
+
 function renderWorkspacePanes() {
+  const workspace = window.CCBridge?.workspace;
+  if (workspace?.renderWorkspacePanes) return workspace.renderWorkspacePanes(getWorkspacePanesOptions());
   const activeSession = workspaceSessions.get(activeWorkspaceSessionId);
   workspaceLivePane.dataset.sessionId = activeWorkspaceSessionId || '';
   workspaceLivePane.classList.toggle('active', true);
