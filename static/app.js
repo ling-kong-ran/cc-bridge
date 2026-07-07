@@ -28,9 +28,12 @@ let cachedSessions = [];
 let sessionsLoaded = false;
 let chatNavAutoOpening = false;
 const completedSseRuns = new Set();
+const completedSseSessions = new Map();
 const COMPLETED_SSE_RUN_LIMIT = 80;
+const COMPLETED_SSE_SESSION_TTL_MS = 30000;
 
-function rememberCompletedSseRun(runId) {
+function rememberCompletedSseRun(runId, sessionId = currentSessionId) {
+  if (sessionId) completedSseSessions.set(sessionId, Date.now());
   if (!runId) return;
   completedSseRuns.add(runId);
   for (const [sessionId, state] of _tabStreamState.entries()) {
@@ -47,7 +50,19 @@ function getCompletedSseRunId(data = {}) {
 
 function isCompletedSseRun(data = {}) {
   const runId = getCompletedSseRunId(data);
-  return !!(runId && completedSseRuns.has(runId));
+  if (runId && completedSseRuns.has(runId)) return true;
+  const sessionId = data.session_id || currentSessionId || '';
+  const completedAt = sessionId ? completedSseSessions.get(sessionId) : 0;
+  if (!completedAt) return false;
+  if (Date.now() - completedAt > COMPLETED_SSE_SESSION_TTL_MS) {
+    completedSseSessions.delete(sessionId);
+    return false;
+  }
+  return !(data.running === true || data.locked === true);
+}
+
+function markCurrentSessionRunCompleted(data = {}) {
+  rememberCompletedSseRun(getCompletedSseRunId(data), data.session_id || currentSessionId);
 }
 
 // 每个 workspace tab 独立的 SSE/流式状态，切换标签页时 save/restore
@@ -1454,8 +1469,8 @@ function bindSSEEvents(source = eventSource) {
     if (noteBackgroundSessionEvent(data)) return;
     if (isCompletedSseRun(data)) return;
     handleResult(data);
-    cleanupStaleAssistantStreamingBubbles();
-    rememberCompletedSseRun(getCompletedSseRunId(data));
+    cleanupStaleAssistantStreamingBubbles(true);
+    markCurrentSessionRunCompleted(data);
   });
 
   source.addEventListener('tool_result', (e) => {
@@ -1480,8 +1495,8 @@ function bindSSEEvents(source = eventSource) {
     isResponding = !!data.locked;
     if (!isResponding && wasResponding) {
       finishCurrentTurnFromProcess();
-      cleanupStaleAssistantStreamingBubbles();
-      rememberCompletedSseRun(getCompletedSseRunId(data));
+      cleanupStaleAssistantStreamingBubbles(true);
+      markCurrentSessionRunCompleted(data);
       updateWorkspaceSessionStatus(data.session_id || currentSessionId, 'done');
       scheduleCompletionHistorySync(data.session_id || currentSessionId);
     }
@@ -1494,8 +1509,8 @@ function bindSSEEvents(source = eventSource) {
     if (noteBackgroundSessionEvent(data)) return;
     if (isCompletedSseRun(data)) return;
     const finishedTurn = finishCurrentTurnFromProcess();
-    cleanupStaleAssistantStreamingBubbles();
-    rememberCompletedSseRun(getCompletedSseRunId(data));
+    cleanupStaleAssistantStreamingBubbles(true);
+    markCurrentSessionRunCompleted(data);
     updateWorkspaceSessionStatus(data.session_id || currentSessionId, Number(data.exit_code || 0) === 0 ? 'done' : 'error');
     if (isSlashCommand(finishedTurn.prompt) && !finishedTurn.hadAssistantOutput) {
       const command = getSlashCommandName(finishedTurn.prompt);
@@ -1606,6 +1621,7 @@ function updateConnectionText() {
 
 // ─── 发送 action ────────────────────────────────────────────
 async function sendAction(action, extra = {}) {
+  if (action === 'send_message') completedSseSessions.delete(extra.session_id || currentSessionId || '');
   try {
     return await window.CCBridge.sse?.sendActionRequest?.(action, extra, getSseOptions());
   } catch (e) {
@@ -2076,9 +2092,17 @@ function removePendingAssistantBubble(keepBubble) {
   return window.CCBridge.messageUi?.removePendingAssistantBubble?.(currentAssistantEl, keepBubble);
 }
 
-function cleanupStaleAssistantStreamingBubbles() {
+function cleanupStaleAssistantStreamingBubbles(markDone = false) {
+  const durationMs = currentTurnStartedAt ? Date.now() - currentTurnStartedAt : 0;
   messagesEl?.querySelectorAll?.('.message.assistant.streaming')?.forEach(el => {
-    if (el !== currentAssistantEl) el.remove();
+    if (el === currentAssistantEl) return;
+    if (markDone) {
+      finishAssistantStreaming(el);
+      const meta = el.querySelector('.msg-meta');
+      if (meta) meta.textContent = durationMs ? t('responseDuration', { duration: formatCompactDuration(durationMs) }) : '';
+      return;
+    }
+    el.remove();
   });
 }
 
