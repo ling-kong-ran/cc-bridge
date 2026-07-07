@@ -842,35 +842,22 @@ function getShortcutsOptions() {
   };
 }
 
+function getShortcutsModule() {
+  const mod = window.CCBridge?.shortcuts;
+  if (!mod) console.error('CCBridge shortcuts module is not loaded');
+  return mod;
+}
+
 function initShortcutsHelp() {
-  const shortcuts = window.CCBridge?.shortcuts;
-  if (shortcuts?.initShortcutsHelp) {
-    shortcuts.initShortcutsHelp(getShortcutsOptions());
-    return;
-  }
-  btnShortcuts?.addEventListener('click', openShortcutsHelp);
-  shortcutsClose?.addEventListener('click', closeShortcutsHelp);
-  shortcutsOverlay?.addEventListener('click', (e) => {
-    if (e.target === shortcutsOverlay) closeShortcutsHelp();
-  });
+  return getShortcutsModule()?.initShortcutsHelp?.(getShortcutsOptions());
 }
 
 function openShortcutsHelp() {
-  const shortcuts = window.CCBridge?.shortcuts;
-  if (shortcuts?.openShortcutsHelp) {
-    shortcuts.openShortcutsHelp(getShortcutsOptions());
-    return;
-  }
-  setVisible(shortcutsOverlay, true, 'flex');
+  return getShortcutsModule()?.openShortcutsHelp?.(getShortcutsOptions());
 }
 
 function closeShortcutsHelp() {
-  const shortcuts = window.CCBridge?.shortcuts;
-  if (shortcuts?.closeShortcutsHelp) {
-    shortcuts.closeShortcutsHelp(getShortcutsOptions());
-    return;
-  }
-  setVisible(shortcutsOverlay, false);
+  return getShortcutsModule()?.closeShortcutsHelp?.(getShortcutsOptions());
 }
 
 function getStatusbarOptions() {
@@ -2978,38 +2965,7 @@ function interruptCurrentRun() {
 }
 
 function handleGlobalShortcuts(e) {
-  const shortcuts = window.CCBridge?.shortcuts;
-  if (shortcuts?.handleGlobalShortcuts) {
-    shortcuts.handleGlobalShortcuts(e, getShortcutsOptions());
-    return;
-  }
-  if (e.key === 'Escape' && isVisible(shortcutsOverlay)) {
-    e.preventDefault();
-    closeShortcutsHelp();
-    return;
-  }
-  if (!(e.ctrlKey || e.metaKey) || e.shiftKey || e.altKey) return;
-  const key = e.key.toLowerCase();
-  if (key === '/') {
-    e.preventDefault();
-    openShortcutsHelp();
-  } else if (key === 'k') {
-    e.preventDefault();
-    sessionSearchInput?.focus();
-    sessionSearchInput?.select();
-  } else if (key === 'n') {
-    e.preventDefault();
-    startNewSession();
-  } else if (key === 'enter') {
-    e.preventDefault();
-    sendMessage();
-  } else if (key === '.') {
-    e.preventDefault();
-    interruptCurrentRun();
-  } else if (key === 'e') {
-    e.preventDefault();
-    copyConversationMarkdown();
-  }
+  return getShortcutsModule()?.handleGlobalShortcuts?.(e, getShortcutsOptions());
 }
 
 function quotePayloadForBackend(quotes) {

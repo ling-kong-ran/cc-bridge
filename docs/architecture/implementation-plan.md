@@ -143,6 +143,7 @@ cc-bridge/
 - 收敛 `static/app.js` 中通用 UI helper wrapper，移除剩余本地可见性和停止按钮 fallback 实现，统一委托 `static/js/ui.js`。
 - 新增 `static/js/formatters.js`，把提示摘要、时长、费用、token、模型名和安全 JSON 解析等格式化基础逻辑从 `static/app.js` 拆出并挂载到 `window.CCBridge.formatters`。
 - 新增 `static/js/shortcuts.js`，把快捷键帮助弹窗和全局快捷键分发逻辑从 `static/app.js` 拆出并挂载到 `window.CCBridge.shortcuts`。
+- 收敛 `static/app.js` 中快捷键 wrapper，移除剩余本地快捷键弹窗和全局快捷键分发 fallback 实现，统一委托 `static/js/shortcuts.js`。
 - 新增 `static/js/statusbar.js`，把侧栏折叠状态和顶部状态摘要渲染逻辑从 `static/app.js` 拆出并挂载到 `window.CCBridge.statusbar`。
 - 新增 `static/js/desktop-window.js`，把桌面壳窗口关闭按钮初始化逻辑从 `static/app.js` 拆出并挂载到 `window.CCBridge.desktopWindow`。
 - 收敛 `static/app.js` 中桌面壳窗口 wrapper，移除剩余本地关闭按钮初始化 fallback 实现，统一委托 `static/js/desktop-window.js`。
