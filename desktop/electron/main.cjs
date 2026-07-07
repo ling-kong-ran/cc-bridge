@@ -45,6 +45,9 @@ function createWindow() {
     minHeight: 640,
     show: false,
     frame: false,
+    transparent: true,
+    backgroundColor: '#00000000',
+    hasShadow: true,
     titleBarStyle: 'hidden',
     icon: iconPath(),
     autoHideMenuBar: true,
@@ -146,7 +149,6 @@ function startBackend() {
       backendReady = { ...event, token }
       if (mainWindow && !mainWindow.isDestroyed()) {
         mainWindow.loadURL(event.url)
-          .then(() => mainWindow.webContents.insertCSS('html { --desktop-window-frame: 1; }'))
       }
     })
     .catch(error => {
