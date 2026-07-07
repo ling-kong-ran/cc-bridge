@@ -3259,11 +3259,14 @@ function getMessageSendOptions() {
   };
 }
 
+function getMessageSendModule() {
+  const mod = window.CCBridge?.messageSend;
+  if (!mod) console.error('CCBridge messageSend module is not loaded');
+  return mod;
+}
+
 function interruptCurrentRun() {
-  const messageSend = window.CCBridge?.messageSend;
-  if (messageSend?.interruptCurrentRun) return messageSend.interruptCurrentRun(getMessageSendOptions());
-  if (!isResponding || !currentSessionId) return Promise.resolve(null);
-  return sendAction('interrupt', { session_id: currentSessionId, run_id: currentRunId });
+  return getMessageSendModule()?.interruptCurrentRun?.(getMessageSendOptions()) || Promise.resolve(null);
 }
 
 function handleGlobalShortcuts(e) {
@@ -3332,108 +3335,15 @@ function clearQuotedMessagesForSend() {
 }
 
 async function sendMessage() {
-  const messageSend = window.CCBridge?.messageSend;
-  if (messageSend?.sendMessage) return messageSend.sendMessage(getMessageSendOptions());
-  let content = inputEl.value.trim();
-  const quotesForThisTurn = quotePayloadForBackend(getQuotedMessagesForSend());
-  const isLiveFollowup = isResponding;
-  const attachedFiles = getAttachedFiles();
-  if ((!content && attachedFiles.length === 0 && quotesForThisTurn.length === 0) || !sessionActive) return;
-  if (isViewer && !isLiveFollowup) {
-    isViewer = false;
-    updateUI();
-  }
-  const originalContent = content;
-  const attachmentCount = attachedFiles.length;
-
-  if (quotesForThisTurn.length > 0) {
-    const inlineQuotes = quotesForThisTurn.filter(q => q.type !== 'file_lines' || !q.path || !q.lines.length);
-    if (inlineQuotes.length) {
-      const quotedText = inlineQuotes
-        .map(q => quoteDisplayText(q).split('\n').map(line => `> ${line}`).join('\n'))
-        .join('\n\n');
-      content = content ? `${quotedText}\n\n${content}` : quotedText;
-    }
-    clearQuotedMessagesForSend();
-  }
-
-  // 注入文件路径。上传缓存文件会保留在工作目录中，供历史会话和资产页继续打开。
-  if (attachedFiles.length > 0) {
-    const filesForThisTurn = consumeAttachedFiles();
-    const filePaths = filesForThisTurn.map(f => `- ${f.path}`).join('\n');
-    const prefix = `${t('attachmentIntro')}\n${filePaths}\n\n`;
-    content = prefix + content;
-  }
-
-  addUserMessage(originalContent, quotesForThisTurn);
-  captureActiveWorkspaceSnapshot();
-  inputEl.value = '';
-
-  if (!isLiveFollowup) {
-    currentTurnContent = originalContent || (attachmentCount ? t('notifyAttachmentPrompt', { count: attachmentCount }) : (quotesForThisTurn.length ? t('quotedMessage') : ''));
-    currentTurnAttachmentCount = attachmentCount;
-    currentTurnStartedAt = Date.now();
-    currentTurnHasAssistantOutput = false;
-    isResponding = true;
-    updateWorkspaceSessionStatus(currentSessionId, 'running', t('streamingReply'));
-    currentAssistantEl = createAssistantBubble();
-    currentAssistantMessageId = null;
-    currentContent = [];
-    streamBlocks = {};
-    startTurnTimer();
-    renderCurrentState();
-    if (isSlashCommand(originalContent)) {
-      addSystemMsg(t('commandRunning', { command: getSlashCommandName(originalContent) }));
-    }
-  }
-
-  scrollToBottom(true);
-  updateUI();
-
-  const result = await sendAction('send_message', {
-    content,
-    quotes: quoteBackendPayload(quotesForThisTurn),
-    model: modelSelect.value,
-    cli: document.getElementById('cli-select')?.value || '',
-    remote_target_id: remoteTargetSelect?.value || '',
-    allow_remote_mutate: !!remoteAllowMutate?.checked,
-    skip_memory_inject: memoryAutoInject?.checked === false,
-    notify_platforms: notifyFeishu?.checked ? ['feishu'] : [],
-  });
-
-  if (!result?.ok) {
-    if (!isLiveFollowup) {
-      stopTurnTimer();
-      removePendingAssistantBubble(false);
-      isResponding = false;
-      currentAssistantEl = null;
-      currentContent = [];
-      streamBlocks = {};
-      currentTurnContent = '';
-      currentTurnHasAssistantOutput = false;
-      currentTurnStartedAt = 0;
-      currentTurnAttachmentCount = 0;
-      updateUI();
-    }
-    addSystemMsg(result?.error || t('requestFailed', { message: 'send_message' }), true);
-    return;
-  }
-
-  if (result.run_id) currentRunId = result.run_id;
-  captureActiveWorkspaceSnapshot();
+  return getMessageSendModule()?.sendMessage?.(getMessageSendOptions());
 }
 
 function isSlashCommand(content) {
-  const messageSend = window.CCBridge?.messageSend;
-  if (messageSend?.isSlashCommand) return messageSend.isSlashCommand(content);
-  return /^\/[^\s]+/.test((content || '').trim());
+  return getMessageSendModule()?.isSlashCommand?.(content) || false;
 }
 
 function getSlashCommandName(content) {
-  const messageSend = window.CCBridge?.messageSend;
-  if (messageSend?.getSlashCommandName) return messageSend.getSlashCommandName(content);
-  const match = (content || '').trim().match(/^\/[^\s]+/);
-  return match ? match[0] : '';
+  return getMessageSendModule()?.getSlashCommandName?.(content) || '';
 }
 
 function getSessionControlOptions() {
