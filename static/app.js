@@ -3487,80 +3487,26 @@ function getSessionControlOptions() {
   };
 }
 
+function getSessionControlModule() {
+  const mod = window.CCBridge?.sessionControl;
+  if (!mod) console.error('CCBridge sessionControl module is not loaded');
+  return mod;
+}
+
 function resetSessionViewState() {
-  const sessionControl = window.CCBridge?.sessionControl;
-  if (sessionControl?.resetSessionViewState) return sessionControl.resetSessionViewState(getSessionControlOptions());
-  stopTurnTimer();
-  clearQuotedMessagesForSend();
-  messagesEl.innerHTML = '';
-  currentAssistantEl = null;
-  currentAssistantMessageId = null;
-  currentContent = [];
-  streamBlocks = {};
-  totalCost = 0;
-  totalTokens = emptyTokenUsage();
-  currentSessionId = null;
-  currentRunId = null;
-  renderTopbarMeta();
-  renderCost();
-  renderTokens();
+  return getSessionControlModule()?.resetSessionViewState?.(getSessionControlOptions());
 }
 
 function startNewSession() {
-  const sessionControl = window.CCBridge?.sessionControl;
-  if (sessionControl?.startNewSession) return sessionControl.startNewSession(getSessionControlOptions());
-  if (!clientId) {
-    addSystemMsg(t('notConnected'), true);
-    return;
-  }
-
-  showPage('chat');
-  createNewSession(cwdInput.value.trim());
+  return getSessionControlModule()?.startNewSession?.(getSessionControlOptions());
 }
 
 function createNewSession(cwd) {
-  const sessionControl = window.CCBridge?.sessionControl;
-  if (sessionControl?.createNewSession) return sessionControl.createNewSession(cwd, getSessionControlOptions());
-  resetSessionViewState();
-  const pendingSessionId = `pending-${Date.now()}`;
-  activeWorkspaceSessionId = pendingSessionId;
-  ensureWorkspaceSession(pendingSessionId, {
-    title: t('newChat'),
-    cwd: cwd || cwdInput.value.trim() || '',
-    model: modelSelect.value || '',
-    cli: document.getElementById('cli-select')?.value || '',
-    status: 'idle',
-  });
-
-  if (cwd) {
-    cwdInput.value = cwd;
-    updateRuntimeSummary();
-  }
-  refreshRightPaneFiles();
-  sendAction('new_session', {
-    model: modelSelect.value,
-    cli: document.getElementById('cli-select')?.value || '',
-    cwd: cwdInput.value.trim() || null,
-    skip_permissions: document.getElementById('skip-permissions').checked,
-    remote_target_id: remoteTargetSelect?.value || '',
-    allow_remote_mutate: !!remoteAllowMutate?.checked,
-    skip_memory_inject: memoryAutoInject?.checked === false,
-    notify_platforms: notifyFeishu?.checked ? ['feishu'] : [],
-  });
-  loadSessions();
+  return getSessionControlModule()?.createNewSession?.(cwd, getSessionControlOptions());
 }
 
 async function startNewSessionFromCwd(cwd) {
-  const sessionControl = window.CCBridge?.sessionControl;
-  if (sessionControl?.startNewSessionFromCwd) return sessionControl.startNewSessionFromCwd(cwd, getSessionControlOptions());
-  const nextCwd = (cwd || '').trim();
-  if (!nextCwd || !clientId) {
-    if (!clientId) addSystemMsg(t('notConnected'), true);
-    return;
-  }
-
-  showPage('chat');
-  createNewSession(nextCwd);
+  return getSessionControlModule()?.startNewSessionFromCwd?.(cwd, getSessionControlOptions());
 }
 
 function getMainUiOptions() {
