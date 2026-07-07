@@ -182,6 +182,7 @@ cc-bridge/
 - 收敛 `static/app.js` 中会话控制 wrapper，移除剩余本地新会话启动和视图重置 fallback 实现，统一委托 `static/js/session-control.js`。
 - 新增 `static/js/message-send.js`，把消息发送、发送失败回滚、slash command 识别和当前运行中断逻辑从 `static/app.js` 拆出并挂载到 `window.CCBridge.messageSend`。
 - 收敛 `static/app.js` 中消息发送 wrapper，移除剩余本地发送、回滚、slash command 和 interrupt fallback 实现，统一委托 `static/js/message-send.js`。
+- 收敛 `static/app.js` 中结果处理 wrapper，移除剩余本地 assistant turn 收尾、费用/token 累计和 slash command 完成提示 fallback 实现，统一委托 `static/js/result-handler.js`。
 - 新增 `static/js/result-handler.js`，把 assistant turn 完成后的结果收尾、费用/token 累计、完成通知和 slash command 完成提示逻辑从 `static/app.js` 拆出并挂载到 `window.CCBridge.resultHandler`。
 - 新增 `static/js/welcome-runtime.js`，把欢迎页运行时选择器渲染和选择同步逻辑从 `static/app.js` 拆出并挂载到 `window.CCBridge.welcomeRuntime`。
 - 新增 `static/js/session-resume.js`，把会话恢复、历史预加载和 cwd 失效重试逻辑从 `static/app.js` 拆出并挂载到 `window.CCBridge.sessionResume`。

@@ -2898,75 +2898,14 @@ function getResultHandlerOptions() {
   };
 }
 
+function getResultHandlerModule() {
+  const mod = window.CCBridge?.resultHandler;
+  if (!mod) console.error('CCBridge resultHandler module is not loaded');
+  return mod;
+}
+
 function handleResult(data) {
-  const resultHandler = window.CCBridge?.resultHandler;
-  if (resultHandler?.handleResult) return resultHandler.handleResult(data, getResultHandlerOptions());
-  clearCompletionHistorySync();
-  const finishedTurn = currentTurnContent;
-  const hadAssistantOutput = currentTurnHasAssistantOutput;
-  const durationMs = Date.now() - currentTurnStartedAt;
-  const turnCost = Number(data.total_cost_usd || 0);
-  const persistedCost = Number(data.session_total_cost_usd || 0);
-  const turnTokens = normalizeTokenUsage(data.turn_tokens || data.usage || data);
-  const persistedTokens = normalizeTokenUsage(data.session_total_tokens);
-  stopTurnTimer();
-  if (currentAssistantEl) finalizeCurrentAssistantMarkdown();
-  updateAssistantMeta('done', durationMs);
-  removePendingAssistantBubble(hadAssistantOutput);
-  const assistantEl = currentAssistantEl;
-  isResponding = false;
-  currentAssistantEl = null;
-  currentAssistantMessageId = null;
-  currentContent = [];
-  streamBlocks = {};
-  clearRunningTasks();
-  clearSubagentBubbles();
-  notifyComplete('turn', {
-    prompt: finishedTurn,
-    durationMs,
-    costUsd: turnCost,
-    model: getDisplayModelName(data.model || modelSelect.value),
-  });
-  if (assistantEl && hadAssistantOutput) checkMemoryHits(assistantEl, finishedTurn);
-  currentTurnContent = '';
-  currentTurnHasAssistantOutput = false;
-  currentTurnStartedAt = 0;
-  currentTurnAttachmentCount = 0;
-  updateUI();
-
-  if (Number.isFinite(persistedCost) && persistedCost > 0) {
-    totalCost = persistedCost;
-    renderCost();
-  } else if (Number.isFinite(turnCost) && turnCost > 0) {
-    totalCost += turnCost;
-    renderCost();
-  }
-
-  if (hasTokenUsage(persistedTokens)) {
-    totalTokens = persistedTokens;
-    renderTokens();
-  } else if (hasTokenUsage(turnTokens)) {
-    totalTokens = addTokenUsage(totalTokens, turnTokens);
-    renderTokens();
-  }
-
-  if (currentSessionId) {
-    const session = ensureWorkspaceSession(currentSessionId, {
-      cost: totalCost,
-      tokens: totalTokens,
-      status: data.is_error ? 'error' : 'done',
-    });
-    if (session) {
-      session.cost = totalCost;
-      session.tokens = totalTokens;
-    }
-  }
-
-  if (data.is_error && data.errors) {
-    data.errors.forEach(e => addSystemMsg(e, true));
-  } else if (isSlashCommand(finishedTurn) && !hadAssistantOutput) {
-    addSystemMsg(t('commandCompleted', { command: getSlashCommandName(finishedTurn) }));
-  }
+  return getResultHandlerModule()?.handleResult?.(data, getResultHandlerOptions());
 }
 
 function getMessageUiOptions() {
