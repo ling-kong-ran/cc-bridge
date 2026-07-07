@@ -3565,48 +3565,65 @@ function hideAgentAddPopover() {
   setVisible(popover, false);
 }
 
+window.CCBridge.appContext = {
+  saveGuiSettings,
+  shortenPlainPath,
+  quoteIntoInput,
+  renderAgentAddPopover,
+  hideAgentAddPopover,
+  addSessionAgent,
+  loadSessionAgents,
+  getSessionAgents,
+};
+
+function getRightPanelModule() {
+  const mod = window.CCBridge?.rightPanel;
+  if (!mod) console.error('CCBridge rightPanel module is not loaded');
+  return mod;
+}
+
 function refreshRightPaneFiles() {
-  return window.CCBridge.rightPanel?.refreshRightPaneFiles?.();
+  return getRightPanelModule()?.refreshRightPaneFiles?.();
 }
 
 function initRightPanel() {
-  window.CCBridge.rightPanel?.initRightPanel?.();
+  getRightPanelModule()?.initRightPanel?.();
 }
 
 function initFilePreviewPanel() {
-  window.CCBridge.rightPanel?.initFilePreviewPanel?.();
+  getRightPanelModule()?.initFilePreviewPanel?.();
 }
 
 function initDiffPreviewPanel() {
-  window.CCBridge.rightPanel?.initDiffPreviewPanel?.();
+  getRightPanelModule()?.initDiffPreviewPanel?.();
 }
 
 function closeDiffPreview() {
-  return window.CCBridge.rightPanel?.closeDiffPreview?.();
+  return getRightPanelModule()?.closeDiffPreview?.();
 }
 
 function openFilePreview(filePath) {
-  return window.CCBridge.rightPanel?.openFilePreview?.(filePath);
+  return getRightPanelModule()?.openFilePreview?.(filePath);
 }
 
 function loadFileTree(path) {
-  return window.CCBridge.rightPanel?.loadFileTree?.(path);
+  return getRightPanelModule()?.loadFileTree?.(path);
 }
 
 function loadReview(cwd) {
-  return window.CCBridge.rightPanel?.loadReview?.(cwd);
+  return getRightPanelModule()?.loadReview?.(cwd);
 }
 
 function loadReviewDiff(file, staged) {
-  return window.CCBridge.rightPanel?.loadReviewDiff?.(file, staged);
+  return getRightPanelModule()?.loadReviewDiff?.(file, staged);
 }
 
 function switchToSidebarTab(tab) {
-  return window.CCBridge.rightPanel?.switchToSidebarTab?.(tab);
+  return getRightPanelModule()?.switchToSidebarTab?.(tab);
 }
 
 function updateWorkspaceHeader(tab) {
-  return window.CCBridge.rightPanel?.updateWorkspaceHeader?.(tab);
+  return getRightPanelModule()?.updateWorkspaceHeader?.(tab);
 }
 
 // ─── @提及自动补全 ────────────────────────────────────────────────

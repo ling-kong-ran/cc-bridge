@@ -1,6 +1,65 @@
 (function () {
   const root = window.CCBridge = window.CCBridge || {};
 
+  function getAppContext() {
+    return root.appContext || {};
+  }
+
+  function t(key, vars = {}) {
+    return root.i18n?.t ? root.i18n.t(key, vars) : key;
+  }
+
+  function esc(s) {
+    return String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  }
+
+  function setVisible(el, visible, display = '') {
+    if (!el) return;
+    el.style.display = visible ? display : 'none';
+  }
+
+  function isDisplay(el, display) {
+    return !!el && el.style.display === display;
+  }
+
+  function saveGuiSettings(settings) {
+    return getAppContext().saveGuiSettings?.(settings);
+  }
+
+  function shortenPlainPath(path, maxSegments = 3) {
+    return getAppContext().shortenPlainPath?.(path, maxSegments) || String(path || '');
+  }
+
+  function quoteIntoInput(text, meta = null) {
+    return getAppContext().quoteIntoInput?.(text, meta);
+  }
+
+  function renderAgentAddPopover() {
+    return getAppContext().renderAgentAddPopover?.();
+  }
+
+  function hideAgentAddPopover() {
+    return getAppContext().hideAgentAddPopover?.();
+  }
+
+  function addSessionAgent(name) {
+    return getAppContext().addSessionAgent?.(name);
+  }
+
+  function loadSessionAgents() {
+    return getAppContext().loadSessionAgents?.();
+  }
+
+  function getSessionAgents() {
+    return getAppContext().getSessionAgents?.() || [];
+  }
+
+  const cwdInput = {
+    get value() {
+      return document.getElementById('cwd-input')?.value || '';
+    },
+  };
+
   const previewPanel = document.getElementById('file-preview-panel');
   const previewNameEl = document.getElementById('file-preview-name');
   const previewMetaEl = document.getElementById('file-preview-meta');
@@ -259,6 +318,7 @@ function getWorkspaceSubtitle(tab) {
     return [branch, count].filter(Boolean).join(' · ') || ((cwdInput?.value || '').trim() ? t('reviewLoading') : '-');
   }
   if (tab === 'members') {
+    const sessionAgents = getSessionAgents();
     return sessionAgents.length ? t('itemCount', { count: sessionAgents.length }) : t('workspaceMembersHint');
   }
   return '';
@@ -479,6 +539,7 @@ function initDiffPreviewPanel() {
 }
 
 function positionFilePreviewAtMessagesCenter() {
+  const messagesEl = document.getElementById('messages');
   if (!previewPanel || !messagesEl) return;
   const parent = previewPanel.offsetParent || previewPanel.parentElement;
   if (!parent) return;
@@ -600,6 +661,7 @@ function stopFilePreviewDrag() {
 // ─── Diff preview 浮动面板 ─────────────────────────────────
 
 function positionDiffPreviewAtCenter() {
+  const messagesEl = document.getElementById('messages');
   if (!diffPreviewPanel || !messagesEl) return;
   const parent = diffPreviewPanel.offsetParent || diffPreviewPanel.parentElement;
   if (!parent) return;
