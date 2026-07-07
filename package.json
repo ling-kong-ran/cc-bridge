@@ -51,6 +51,7 @@
         "to": "cc-bridge",
         "filter": [
           "*.py",
+          "backend/**",
           "bootstrap/**",
           "static/**",
           "requirements.txt"
