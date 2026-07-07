@@ -1158,32 +1158,11 @@ function populateRemoteSelect() {
 }
 
 function updateRuntimeSummary() {
-  const runtime = window.CCBridge?.runtime;
-  if (runtime?.updateRuntimeSummary) return runtime.updateRuntimeSummary(getRuntimeOptions());
-  const el = document.querySelector('.runtime-summary-value');
-  if (!el) return;
-  const cwd = cwdInput?.value?.trim() || '';
-  const cwdName = shortenPlainPath(cwd, 3) || t('cwd');
-  const remoteName = remoteTargetSelect?.selectedOptions?.[0]?.textContent?.trim() || '';
-  const remoteActive = !!(remoteTargetSelect && remoteTargetSelect.value);
-  el.textContent = remoteActive ? `${cwdName} / ${remoteName}` : cwdName;
-  el.title = remoteActive ? `${cwd || ''} / ${remoteName}` : (cwd || '');
-  renderInputStatus();
+  return getRuntimeModule()?.updateRuntimeSummary?.(getRuntimeOptions());
 }
 
 function renderInputStatus() {
-  const runtime = window.CCBridge?.runtime;
-  if (runtime?.renderInputStatus) return runtime.renderInputStatus(getRuntimeOptions());
-  if (inputCliStatus) {
-    const cliLabel = getSelectedCliLabel();
-    inputCliStatus.textContent = `${t('cliTool')}: ${cliLabel}`;
-    inputCliStatus.title = document.getElementById('cli-select')?.value || cliLabel;
-  }
-  if (inputCwdStatus) {
-    const cwd = cwdInput?.value?.trim() || '';
-    inputCwdStatus.textContent = `${t('cwd')}: ${shortenPlainPath(cwd, 3) || t('unsetCwd')}`;
-    inputCwdStatus.title = cwd || t('unsetCwd');
-  }
+  return getRuntimeModule()?.renderInputStatus?.(getRuntimeOptions());
 }
 
 function getConfigReloadOptions() {
@@ -1348,59 +1327,27 @@ function getRuntimeOptions() {
 }
 
 function formatTopbarSessionId(sessionId) {
-  const runtime = window.CCBridge?.runtime;
-  if (runtime?.formatTopbarSessionId) return runtime.formatTopbarSessionId(sessionId);
-  if (!sessionId) return '-';
-  return sessionId.length > 13 ? `${sessionId.slice(0, 8)}…${sessionId.slice(-4)}` : sessionId;
+  return getRuntimeModule()?.formatTopbarSessionId?.(sessionId) || '-';
 }
 
 function getSelectedCliLabel() {
-  const runtime = window.CCBridge?.runtime;
-  if (runtime?.getSelectedCliLabel) return runtime.getSelectedCliLabel();
-  const cliSelect = document.getElementById('cli-select');
-  const opt = cliSelect?.selectedOptions?.[0];
-  return opt?.textContent?.trim() || opt?.value || '-';
+  return getRuntimeModule()?.getSelectedCliLabel?.() || '-';
 }
 
 function quoteCommandArg(value) {
-  const runtime = window.CCBridge?.runtime;
-  if (runtime?.quoteCommandArg) return runtime.quoteCommandArg(value);
-  const text = String(value || '');
-  if (!text) return '';
-  return /\s/.test(text) ? `"${text.replace(/"/g, '\\"')}"` : text;
+  return getRuntimeModule()?.quoteCommandArg?.(value) || '';
 }
 
 function getResumeCommandText() {
-  const runtime = window.CCBridge?.runtime;
-  if (runtime?.getResumeCommandText) return runtime.getResumeCommandText(getRuntimeOptions());
-  if (!currentSessionId) return '';
-  const cliSelect = document.getElementById('cli-select');
-  const cli = cliSelect?.value || getSelectedCliLabel();
-  return `${quoteCommandArg(cli)} --resume ${quoteCommandArg(currentSessionId)}`;
+  return getRuntimeModule()?.getResumeCommandText?.(getRuntimeOptions()) || '';
 }
 
 async function copyResumeCommand() {
-  const runtime = window.CCBridge?.runtime;
-  if (runtime?.copyResumeCommand) return runtime.copyResumeCommand(getRuntimeOptions());
-  const text = getResumeCommandText();
-  if (!text) {
-    addSystemMsg(t('noSession'), true);
-    return;
-  }
-  try {
-    await navigator.clipboard.writeText(text);
-    addSystemMsg(t('resumeCommandCopied'));
-  } catch (e) {
-    addSystemMsg(t('copyFailed'), true);
-  }
+  return getRuntimeModule()?.copyResumeCommand?.(getRuntimeOptions());
 }
 
 function renderTopbarMeta(modelOverride = '') {
-  const runtime = window.CCBridge?.runtime;
-  if (runtime?.renderTopbarMeta) return runtime.renderTopbarMeta(modelOverride, getRuntimeOptions());
-  const modelLabel = getDisplayModelName(modelOverride || modelSelect?.value || '') || t('noSession');
-  if (topbarModel) topbarModel.textContent = modelLabel;
-  renderTopbarSessionActions();
+  return getRuntimeModule()?.renderTopbarMeta?.(modelOverride, getRuntimeOptions());
 }
 
 function getCurrentSessionRecord() {
@@ -1412,70 +1359,12 @@ function renderTopbarSessionActions() {
 }
 
 async function loadClis() {
-  const runtime = window.CCBridge?.runtime;
-  if (runtime?.loadClis) return runtime.loadClis(getRuntimeOptions());
-  const cliSelect = document.getElementById('cli-select');
-  const guideBtn = document.getElementById('btn-cli-install-guide');
-  try {
-    const resp = await fetch('/api/clis');
-    const data = await resp.json();
-    const available = data.available || [];
-    const current = data.current || '';
-    if (data.install_command) cliInstallCommand = data.install_command;
-    cliSelect.innerHTML = '';
-    if (available.length === 0) {
-      cliSelect.innerHTML = `<option value="">${esc(t('noCli'))}</option>`;
-      if (guideBtn) guideBtn.style.display = '';
-      // 首次检测不到 CLI 时自动弹出安装引导
-      if (!cliInstallPromptShown) {
-        cliInstallPromptShown = true;
-        openCliInstallModal();
-      }
-      renderTopbarMeta();
-      renderInputStatus();
-      return;
-    }
-    if (guideBtn) guideBtn.style.display = 'none';
-    for (const cli of available) {
-      const opt = document.createElement('option');
-      opt.value = cli.path;
-      opt.textContent = `${cli.name}`;
-      opt.title = cli.path;
-      if (cli.path === current) opt.selected = true;
-      cliSelect.appendChild(opt);
-    }
-    cliSelect.onchange = async () => {
-      await fetch('/api/clis', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ path: cliSelect.value }),
-      });
-      renderTopbarMeta();
-      renderWelcomeRuntime();
-      addSystemMsg(t('cliSwitched', { path: cliSelect.value }));
-      loadSlashCommands();
-    };
-    renderTopbarMeta();
-  } catch (e) { /* ignore */ }
+  return getRuntimeModule()?.loadClis?.(getRuntimeOptions());
 }
 
 // 选中指定 CLI（若可用），并同步到服务端全局当前 CLI
 function selectCli(path) {
-  const runtime = window.CCBridge?.runtime;
-  if (runtime?.selectCli) return runtime.selectCli(path, getRuntimeOptions());
-  const cliSelect = document.getElementById('cli-select');
-  if (!cliSelect || !path) return false;
-  const has = Array.from(cliSelect.options).some(o => o.value === path);
-  if (!has || cliSelect.value === path) return has && cliSelect.value === path;
-  cliSelect.value = path;
-  fetch('/api/clis', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ path }),
-  }).catch(() => {});
-  renderTopbarMeta();
-  renderWelcomeRuntime();
-  return true;
+  return getRuntimeModule()?.selectCli?.(path, getRuntimeOptions()) || false;
 }
 
 // ─── CLI 安装引导 ────────────────────────────────────────────
@@ -1566,36 +1455,7 @@ function initUpdateModal() {
 }
 
 async function loadModels() {
-  const runtime = window.CCBridge?.runtime;
-  if (runtime?.loadModels) return runtime.loadModels(getRuntimeOptions());
-  // 首次加载 select 为空，回退到 gui_settings 里上次使用的模型，使刷新后保持选择
-  const previousModel = modelSelect.value || savedModelPref;
-  try {
-    const resp = await fetch('/api/models');
-    const raw = await resp.json();
-    // 兼容旧格式（字符串数组）和新格式（{value, label, profile} 数组）
-    const items = Array.isArray(raw) ? raw : [];
-    const availableModels = items.map(item => typeof item === 'string' ? { value: item, label: formatModelName(item), profile: '' } : item);
-    if (!availableModels.length) {
-      modelSelect.innerHTML = '<option value="claude-sonnet-4-6">Sonnet 4.6</option>';
-      renderModelPill();
-      renderWelcomeRuntime();
-      return;
-    }
-    const modelValues = availableModels.map(m => m.value);
-    modelSelect.innerHTML = availableModels.map((m, idx) => (
-      `<option value="${esc(m.value)}" ${(previousModel ? m.value === previousModel : idx === 0) ? 'selected' : ''}>${esc(m.label)}</option>`
-    )).join('');
-    if (previousModel && !modelValues.includes(previousModel)) {
-      modelSelect.value = availableModels[0]?.value || '';
-    }
-    renderModelPill();
-    renderWelcomeRuntime();
-  } catch (e) {
-    modelSelect.innerHTML = '<option value="claude-sonnet-4-6">Sonnet 4.6</option>';
-    renderModelPill();
-    renderWelcomeRuntime();
-  }
+  return getRuntimeModule()?.loadModels?.(getRuntimeOptions());
 }
 
 // ─── 导航 ────────────────────────────────────────────────────
@@ -3990,22 +3850,18 @@ async function cacheRemoteAttachment(filePath, meta) {
 }
 
 
+function getRuntimeModule() {
+  const mod = window.CCBridge?.runtime;
+  if (!mod) console.error('CCBridge runtime module is not loaded');
+  return mod;
+}
+
 function hasModelOption(model) {
-  const runtime = window.CCBridge?.runtime;
-  if (runtime?.hasModelOption) return runtime.hasModelOption(model, getRuntimeOptions());
-  if (!model) return false;
-  for (const opt of modelSelect.options) {
-    if (opt.value === model) return true;
-  }
-  return false;
+  return getRuntimeModule()?.hasModelOption?.(model, getRuntimeOptions()) || false;
 }
 
 function renderCost() {
-  const runtime = window.CCBridge?.runtime;
-  if (runtime?.renderCost) return runtime.renderCost(totalCost, getRuntimeOptions());
-  costDisplay.style.display = totalCost > 0 ? 'block' : 'none';
-  costValue.textContent = totalCost.toFixed(4);
-  renderTopbarStatusSummary();
+  return getRuntimeModule()?.renderCost?.(totalCost, getRuntimeOptions());
 }
 
 function emptyTokenUsage() {
@@ -4063,12 +3919,7 @@ function tokenUsageTotal(usage) {
 }
 
 function renderTokens() {
-  const runtime = window.CCBridge?.runtime;
-  if (runtime?.renderTokens) return runtime.renderTokens(totalTokens, getRuntimeOptions());
-  const total = tokenUsageTotal(totalTokens);
-  tokenDisplay.style.display = total > 0 ? 'block' : 'none';
-  tokenValue.textContent = formatTokenUsage(totalTokens);
-  renderTopbarStatusSummary();
+  return getRuntimeModule()?.renderTokens?.(totalTokens, getRuntimeOptions());
 }
 
 function formatTokenUsage(usage) {
