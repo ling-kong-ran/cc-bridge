@@ -30,7 +30,15 @@ jobs:
 
       - name: Set package version
         if: ${{ inputs.version != '' }}
-        run: npm version "${{ inputs.version }}" --no-git-tag-version
+        shell: bash
+        run: |
+          CURRENT_VERSION="$(node -p "require('./package.json').version")"
+          TARGET_VERSION="${{ inputs.version }}"
+          if [[ "$CURRENT_VERSION" == "$TARGET_VERSION" ]]; then
+            echo "package.json already at $TARGET_VERSION"
+          else
+            npm version "$TARGET_VERSION" --no-git-tag-version
+          fi
 
       - name: Resolve version
         id: version
