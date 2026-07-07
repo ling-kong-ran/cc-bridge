@@ -122,6 +122,9 @@
     el.innerHTML = html;
 
     el.querySelectorAll('.welcome-session-item').forEach(item => {
+      item.addEventListener('contextmenu', (e) => {
+        showCwdContextMenu(e, item.dataset.cwd || '');
+      });
       item.addEventListener('click', () => {
         const tokens = safeJsonParse(item.dataset.tokens, null);
         const sid = item.dataset.sid;
@@ -173,6 +176,9 @@
     el.innerHTML = filtered.map(s => renderSessionItem(s)).join('');
 
     el.querySelectorAll('.session-item').forEach(item => {
+      item.addEventListener('contextmenu', (e) => {
+        showCwdContextMenu(e, item.dataset.cwd || '');
+      });
       item.addEventListener('click', () => {
         const tokens = safeJsonParse(item.dataset.tokens, null);
         const sid = item.dataset.sid;
