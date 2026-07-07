@@ -50,6 +50,37 @@ function isCompletedSseRun(data = {}) {
   return !!(runId && completedSseRuns.has(runId));
 }
 
+function isCompletedSseEvent(data = {}) {
+  return !!(data.run_id && completedSseRuns.has(data.run_id));
+}
+
+function getSseDebugState(extra = {}) {
+  const assistantEls = Array.from(messagesEl?.querySelectorAll?.('.message.assistant') || []);
+  return {
+    ...extra,
+    sessionId: currentSessionId || '',
+    currentRunId: currentRunId || '',
+    isResponding,
+    hasCurrentAssistant: !!currentAssistantEl,
+    currentAssistantMessageId: currentAssistantMessageId || '',
+    currentContentBlocks: currentContent.length,
+    streamBlockCount: Object.keys(streamBlocks || {}).length,
+    assistantCount: assistantEls.length,
+    streamingAssistantCount: assistantEls.filter(el => el.classList.contains('streaming')).length,
+  };
+}
+
+function logSseDebug(label, data = {}, extra = {}) {
+  console.debug(`[ccb:sse] ${label}`, getSseDebugState({
+    eventSessionId: data.session_id || '',
+    eventRunId: data.run_id || '',
+    eventType: data.event?.type || data.type || '',
+    messageId: data.message?.id || data.uuid || '',
+    parentToolUseId: data.parent_tool_use_id || '',
+    ...extra,
+  }));
+}
+
 function markCurrentSessionRunCompleted(data = {}) {
   rememberCompletedSseRun(getCompletedSseRunId(data));
 }
@@ -1359,13 +1390,25 @@ function bindSSEEvents(source = eventSource) {
   source.addEventListener('stream_event', (e) => {
     const data = JSON.parse(e.data);
     if (noteBackgroundSessionEvent(data)) return;
+    if (isCompletedSseEvent(data)) {
+      logSseDebug('drop stream_event after completed run', data);
+      return;
+    }
+    logSseDebug('stream_event before handle', data);
     handleStreamEvent(data);
+    logSseDebug('stream_event after handle', data);
   });
 
   source.addEventListener('assistant', (e) => {
     const data = JSON.parse(e.data);
     if (noteBackgroundSessionEvent(data)) return;
+    if (isCompletedSseEvent(data)) {
+      logSseDebug('drop assistant after completed run', data);
+      return;
+    }
+    logSseDebug('assistant before handle', data, { preview: extractMessagePreviewText(data.message || '').slice(0, 120) });
     handleAssistantFinal(data);
+    logSseDebug('assistant after handle', data);
   });
 
   source.addEventListener('context_injected', (e) => {
@@ -1454,10 +1497,16 @@ function bindSSEEvents(source = eventSource) {
   source.addEventListener('result', (e) => {
     const data = JSON.parse(e.data);
     if (noteBackgroundSessionEvent(data)) return;
-    if (isCompletedSseRun(data)) return;
+    if (isCompletedSseRun(data)) {
+      logSseDebug('drop duplicate result', data);
+      return;
+    }
+    logSseDebug('result before handle', data);
     handleResult(data);
+    logSseDebug('result after handleResult before stale cleanup', data);
     cleanupStaleAssistantStreamingBubbles(true);
     markCurrentSessionRunCompleted(data);
+    logSseDebug('result completed', data);
   });
 
   source.addEventListener('tool_result', (e) => {
@@ -1476,12 +1525,17 @@ function bindSSEEvents(source = eventSource) {
 
   source.addEventListener('session_lock_changed', (e) => {
     const data = JSON.parse(e.data || '{}');
-    if (isCompletedSseRun(data)) return;
+    if (isCompletedSseRun(data)) {
+      logSseDebug('drop duplicate session_lock_changed', data, { locked: data.locked });
+      return;
+    }
     if (data.session_id && currentSessionId && data.session_id !== currentSessionId) return;
     const wasResponding = isResponding;
+    logSseDebug('session_lock_changed before handle', data, { locked: data.locked, wasResponding });
     isResponding = !!data.locked;
     if (!isResponding && wasResponding) {
       finishCurrentTurnFromProcess();
+      logSseDebug('session_lock_changed after finishCurrentTurn', data);
       cleanupStaleAssistantStreamingBubbles(true);
       markCurrentSessionRunCompleted(data);
       updateWorkspaceSessionStatus(data.session_id || currentSessionId, 'done');
@@ -1494,8 +1548,13 @@ function bindSSEEvents(source = eventSource) {
     // ccb 进程结束 —— 确保前端退出 responding 状态；即使锁事件已先到达，也要补齐清理/通知。
     const data = JSON.parse(e.data || '{}');
     if (noteBackgroundSessionEvent(data)) return;
-    if (isCompletedSseRun(data)) return;
+    if (isCompletedSseRun(data)) {
+      logSseDebug('drop duplicate process_ended', data, { exitCode: data.exit_code });
+      return;
+    }
+    logSseDebug('process_ended before finish', data, { exitCode: data.exit_code });
     const finishedTurn = finishCurrentTurnFromProcess();
+    logSseDebug('process_ended after finishCurrentTurn', data, { hadAssistantOutput: finishedTurn.hadAssistantOutput });
     cleanupStaleAssistantStreamingBubbles(true);
     markCurrentSessionRunCompleted(data);
     updateWorkspaceSessionStatus(data.session_id || currentSessionId, Number(data.exit_code || 0) === 0 ? 'done' : 'error');
@@ -1777,12 +1836,43 @@ function renderBlock(block) {
   return window.CCBridge.chatRenderer?.renderBlock?.(block, getChatRendererOptions());
 }
 
+function normalizeAssistantFinalText(text) {
+  return String(text || '').replace(/\s+/g, ' ').trim();
+}
+
+function isDuplicateAssistantFinalText(text) {
+  const normalized = normalizeAssistantFinalText(text);
+  if (normalized.length < 12) return false;
+  const assistantEls = Array.from(messagesEl?.querySelectorAll?.('.message.assistant') || []);
+  const lastAssistantEl = assistantEls[assistantEls.length - 1];
+  const lastText = normalizeAssistantFinalText(lastAssistantEl?.querySelector?.('.msg-content')?.textContent || '');
+  return !!(lastText && (lastText === normalized || lastText.includes(normalized)));
+}
+
 function handleAssistantFinal(data) {
   // subagent 的 assistant 消息带 parent_tool_use_id
   if (data.parent_tool_use_id) {
+    logSseDebug('assistant subagent render', data);
     updateTaskActivity(data.parent_tool_use_id, data.message);
     renderSubagentBubble(data.parent_tool_use_id, data.message);
     return;
+  }
+
+  const message = data.message;
+  if (!message || !message.content) {
+    logSseDebug('assistant ignored empty message', data);
+    return;
+  }
+  const previewText = extractMessagePreviewText(message);
+  if (!currentAssistantEl) {
+    if (isDuplicateAssistantFinalText(previewText)) {
+      logSseDebug('assistant ignored duplicate final text', data, { preview: previewText.slice(0, 120) });
+      return;
+    }
+    if (!isResponding) {
+      logSseDebug('assistant ignored without active turn', data, { preview: previewText.slice(0, 120) });
+      return;
+    }
   }
 
   // ccb 的 assistant 事件在工具调用回合里可能按 block 拆成多条同 message.id 事件。
@@ -1790,9 +1880,6 @@ function handleAssistantFinal(data) {
   currentTurnHasAssistantOutput = true;
   updateUI();
 
-  const message = data.message;
-  if (!message || !message.content) return;
-  const previewText = extractMessagePreviewText(message);
   if (previewText) setWorkspaceSessionPreview(currentSessionId, previewText);
 
   const messageId = message.id || data.uuid || '';
@@ -1936,6 +2023,7 @@ function finalizeCurrentAssistantMarkdown() {
 }
 
 function finishCurrentTurnFromProcess() {
+  logSseDebug('finishCurrentTurnFromProcess start', {}, { hadAssistantOutput: currentTurnHasAssistantOutput });
   const finishedTurn = currentTurnContent;
   const hadAssistantOutput = currentTurnHasAssistantOutput;
   const durationMs = currentTurnStartedAt ? Date.now() - currentTurnStartedAt : 0;
@@ -1967,6 +2055,7 @@ function finishCurrentTurnFromProcess() {
   }
   if (assistantEl && hadAssistantOutput) checkMemoryHits(assistantEl, finishedTurn);
   updateUI();
+  logSseDebug('finishCurrentTurnFromProcess end', {}, { hadAssistantOutput });
   return { prompt: finishedTurn, hadAssistantOutput, durationMs };
 }
 
@@ -2086,10 +2175,12 @@ function cleanupStaleAssistantStreamingBubbles(markDone = false) {
     if (!el.classList.contains('streaming') && !(markDone && isRunningMeta)) return;
     if (el === currentAssistantEl && !markDone) return;
     if (markDone) {
+      logSseDebug('cleanup stale assistant mark done', {}, { text: (el.querySelector('.msg-content')?.textContent || '').slice(0, 120) });
       finishAssistantStreaming(el);
       if (meta) meta.textContent = durationMs ? t('responseDuration', { duration: formatCompactDuration(durationMs) }) : '';
       return;
     }
+    logSseDebug('cleanup stale assistant remove', {}, { text: (el.querySelector('.msg-content')?.textContent || '').slice(0, 120) });
     el.remove();
   });
 }
