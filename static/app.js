@@ -27,6 +27,25 @@ let completionHistorySyncTimer = null;
 let cachedSessions = [];
 let sessionsLoaded = false;
 let chatNavAutoOpening = false;
+const completedSseRuns = new Set();
+const COMPLETED_SSE_RUN_LIMIT = 80;
+
+function rememberCompletedSseRun(runId) {
+  if (!runId) return;
+  completedSseRuns.add(runId);
+  if (completedSseRuns.size <= COMPLETED_SSE_RUN_LIMIT) return;
+  const oldest = completedSseRuns.values().next().value;
+  completedSseRuns.delete(oldest);
+}
+
+function getCompletedSseRunId(data = {}) {
+  return data.run_id || currentRunId || '';
+}
+
+function isCompletedSseRun(data = {}) {
+  const runId = getCompletedSseRunId(data);
+  return !!(runId && completedSseRuns.has(runId));
+}
 
 // 每个 workspace tab 独立的 SSE/流式状态，切换标签页时 save/restore
 function runAsyncTask(task, label = 'Async task') {
@@ -1426,7 +1445,9 @@ function bindSSEEvents(source = eventSource) {
   source.addEventListener('result', (e) => {
     const data = JSON.parse(e.data);
     if (noteBackgroundSessionEvent(data)) return;
+    if (isCompletedSseRun(data)) return;
     handleResult(data);
+    rememberCompletedSseRun(getCompletedSseRunId(data));
   });
 
   source.addEventListener('tool_result', (e) => {
@@ -1445,11 +1466,13 @@ function bindSSEEvents(source = eventSource) {
 
   source.addEventListener('session_lock_changed', (e) => {
     const data = JSON.parse(e.data || '{}');
+    if (isCompletedSseRun(data)) return;
     if (data.session_id && currentSessionId && data.session_id !== currentSessionId) return;
     const wasResponding = isResponding;
     isResponding = !!data.locked;
     if (!isResponding && wasResponding) {
       finishCurrentTurnFromProcess();
+      rememberCompletedSseRun(getCompletedSseRunId(data));
       updateWorkspaceSessionStatus(data.session_id || currentSessionId, 'done');
       scheduleCompletionHistorySync(data.session_id || currentSessionId);
     }
@@ -1460,7 +1483,9 @@ function bindSSEEvents(source = eventSource) {
     // ccb 进程结束 —— 确保前端退出 responding 状态；即使锁事件已先到达，也要补齐清理/通知。
     const data = JSON.parse(e.data || '{}');
     if (noteBackgroundSessionEvent(data)) return;
+    if (isCompletedSseRun(data)) return;
     const finishedTurn = finishCurrentTurnFromProcess();
+    rememberCompletedSseRun(getCompletedSseRunId(data));
     updateWorkspaceSessionStatus(data.session_id || currentSessionId, Number(data.exit_code || 0) === 0 ? 'done' : 'error');
     if (isSlashCommand(finishedTurn.prompt) && !finishedTurn.hadAssistantOutput) {
       const command = getSlashCommandName(finishedTurn.prompt);
