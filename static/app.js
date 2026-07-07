@@ -4562,7 +4562,23 @@ function renderWelcomeSessions(sessions) {
   return window.CCBridge.sessions?.renderWelcomeSessions?.(sessions);
 }
 
+function getWelcomeRuntimeOptions() {
+  return {
+    t,
+    esc,
+    shortenPlainPath,
+    openPicker,
+    cwdInput,
+    modelSelect,
+    cliSelect: document.getElementById('cli-select'),
+    remoteTargetSelect,
+    welcomeRuntimeEl: document.getElementById('welcome-runtime'),
+  };
+}
+
 function renderWelcomeRuntime() {
+  const welcomeRuntime = window.CCBridge?.welcomeRuntime;
+  if (welcomeRuntime?.renderWelcomeRuntime) return welcomeRuntime.renderWelcomeRuntime(getWelcomeRuntimeOptions());
   const el = document.getElementById('welcome-runtime');
   if (!el) return;
   const cwd = cwdInput?.value?.trim() || '';
