@@ -168,6 +168,7 @@ cc-bridge/
 - 扩展 `static/js/runtime.js`，继续承接运行态摘要和输入区 CLI/CWD 状态渲染逻辑，减少 `static/app.js` 的运行态展示职责。
 - 新增 `static/js/session-agents.js`，把会话 Agent 成员加载、增删、成员面板渲染和添加弹窗逻辑从 `static/app.js` 拆出并挂载到 `window.CCBridge.sessionAgents`。
 - 新增 `static/js/message-scroll.js`，把消息区跟随输出、底部距离判断和滚动调度逻辑从 `static/app.js` 拆出并挂载到 `window.CCBridge.messageScroll`。
+- 新增 `static/js/main-ui.js`，把主界面发送/停止按钮、会话激活态、输入框占位和基础控件禁用状态刷新逻辑从 `static/app.js` 拆出并挂载到 `window.CCBridge.mainUi`。
 
 ## 后续验收标准
 

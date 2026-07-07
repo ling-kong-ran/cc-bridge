@@ -3989,7 +3989,29 @@ async function startNewSessionFromCwd(cwd) {
   createNewSession(nextCwd);
 }
 
+function getMainUiOptions() {
+  return {
+    t,
+    setSidebarCollapsed,
+    getState: () => ({ sessionActive, isResponding, isViewer, sidebarCollapsed }),
+    setState: (state = {}) => {
+      if ('sidebarCollapsed' in state) sidebarCollapsed = state.sidebarCollapsed;
+    },
+    btnSend,
+    btnStop,
+    btnNewSession,
+    modelSelect,
+    remoteTargetSelect,
+    inputEl,
+    skipPermissions: document.getElementById('skip-permissions'),
+    body: document.body,
+    cliSelect: document.getElementById('cli-select'),
+  };
+}
+
 function updateUI() {
+  const mainUi = window.CCBridge?.mainUi;
+  if (mainUi?.updateUI) return mainUi.updateUI(getMainUiOptions());
   btnSend.disabled = !sessionActive;
   // viewer 模式下 Stop 按钮可见但禁用，补充发送仍可用。
   btnStop.classList.toggle('visible', isResponding);
