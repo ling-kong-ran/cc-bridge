@@ -2527,7 +2527,19 @@ function scheduleRender() {
 }
 
 function getChatRendererOptions() {
-  return { esc, t, renderMd, runningTasks, toolResults, toolStartTimes };
+  return {
+    esc,
+    t,
+    renderMd,
+    sanitizeLinkHref,
+    runningTasks,
+    toolResults,
+    toolStartTimes,
+    addUserMessage,
+    renderContextTrace,
+    createAssistantBubble,
+    scrollToBottom,
+  };
 }
 
 function getChatRendererState(final = false) {
@@ -4369,6 +4381,8 @@ async function reloadSessionHistory(sessionId, cwd) {
 }
 
 function renderHistory(history) {
+  const renderer = window.CCBridge?.chatRenderer;
+  if (renderer?.renderHistory) return renderer.renderHistory(history, getChatRendererOptions());
   for (const msg of history) {
     if (msg.role === 'user') {
       addUserMessage(msg.text);
@@ -4393,6 +4407,8 @@ function renderHistory(history) {
 }
 
 function renderHistoryToolCard(block) {
+  const renderer = window.CCBridge?.chatRenderer;
+  if (renderer?.renderHistoryToolCard) return renderer.renderHistoryToolCard(block, getChatRendererOptions());
   if (block.id && block.result) {
     toolResults.set(block.id, {
       tool_use_id: block.id,
@@ -4420,6 +4436,8 @@ function formatTime(isoStr) {
 
 // ─── Markdown 渲染 ──────────────────────────────────────────
 function renderMd(text) {
+  const renderer = window.CCBridge?.chatRenderer;
+  if (renderer?.renderMd) return renderer.renderMd(text, getChatRendererOptions());
   if (!text) return '';
 
   const codeBlocks = [];

@@ -28,6 +28,61 @@
     return { esc, t, renderMd, runningTasks, toolResults, toolStartTimes };
   }
 
+  function sanitizeLinkHref(href, options = {}) {
+    const { esc } = getContext(options);
+    const value = String(href || '').trim().replace(/&amp;/g, '&');
+    if (/^(https?:|mailto:)/i.test(value)) return esc(value);
+    return '#';
+  }
+
+  function renderMd(text, options = {}) {
+    const { esc } = getContext(options);
+    if (!text) return '';
+
+    const codeBlocks = [];
+    let html = String(text).replace(/```(\w*)\n([\s\S]*?)```/g, (_, lang, code) => {
+      const token = `\u0000CODE_BLOCK_${codeBlocks.length}\u0000`;
+      codeBlocks.push(`<pre><code class="lang-${esc(lang)}">${esc(code)}</code></pre>`);
+      return token;
+    });
+
+    html = esc(html);
+
+    html = html.replace(/`([^`]+)`/g, '<code>$1</code>');
+    html = html.replace(/^#### (.+)$/gm, '<h4>$1</h4>');
+    html = html.replace(/^### (.+)$/gm, '<h3>$1</h3>');
+    html = html.replace(/^## (.+)$/gm, '<h2>$1</h2>');
+    html = html.replace(/^# (.+)$/gm, '<h1>$1</h1>');
+    html = html.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+    html = html.replace(/\*(.+?)\*/g, '<em>$1</em>');
+    html = html.replace(/\[([^\]]+)\]\(([^)]+)\)/g, (_, label, href) => {
+      const safeHref = options.sanitizeLinkHref ? options.sanitizeLinkHref(href) : sanitizeLinkHref(href, options);
+      return `<a href="${safeHref}" target="_blank" rel="noopener noreferrer">${label}</a>`;
+    });
+    html = html.replace(/^- (.+)$/gm, '<li>$1</li>');
+    html = html.replace(/(<li>.*<\/li>\n?)+/g, '<ul>$&</ul>');
+    html = html.replace(/^\d+\. (.+)$/gm, '<li>$1</li>');
+    html = html.replace(/^&gt; (.+)$/gm, '<blockquote>$1</blockquote>');
+    html = html.replace(/^---$/gm, '<hr>');
+    html = html.replace(/\n\n/g, '</p><p>');
+    html = `<p>${html}</p>`;
+    html = html.replace(/\n/g, '<br>');
+    html = html.replace(/<p><\/p>/g, '');
+    html = html.replace(/<p>(<h[1-4]>)/g, '$1');
+    html = html.replace(/(<\/h[1-4]>)<\/p>/g, '$1');
+    html = html.replace(/<p>(<pre>)/g, '$1');
+    html = html.replace(/(<\/pre>)<\/p>/g, '$1');
+    html = html.replace(/<p>(<ul>)/g, '$1');
+    html = html.replace(/(<\/ul>)<\/p>/g, '$1');
+    html = html.replace(/<p>(<blockquote>)/g, '$1');
+    html = html.replace(/(<\/blockquote>)<\/p>/g, '$1');
+    html = html.replace(/<p>(<hr>)<\/p>/g, '$1');
+    codeBlocks.forEach((block, index) => {
+      html = html.replace(`\u0000CODE_BLOCK_${index}\u0000`, block);
+    });
+    return html;
+  }
+
   function formatToolSummary(block) {
     const input = parseToolInput(block);
     const name = block.name || '';
@@ -267,6 +322,52 @@
     return '';
   }
 
+  function renderHistoryToolCard(block, options = {}) {
+    const { toolResults } = getContext(options);
+    if (block.id && block.result) {
+      toolResults.set(block.id, {
+        tool_use_id: block.id,
+        content: block.result.content || '',
+        is_error: !!block.result.is_error,
+      });
+    }
+    return renderToolCard(block, { history: true }, options);
+  }
+
+  function renderHistory(history, options = {}) {
+    const ctx = {
+      renderMd: (text) => renderMd(text, options),
+      renderBlock: (block) => renderBlock(block, options),
+      renderHistoryToolCard: (block) => renderHistoryToolCard(block, options),
+      addUserMessage: options.addUserMessage || (() => {}),
+      renderContextTrace: options.renderContextTrace || (() => {}),
+      createAssistantBubble: options.createAssistantBubble || (() => null),
+      scrollToBottom: options.scrollToBottom || (() => {}),
+    };
+    for (const msg of history || []) {
+      if (msg.role === 'user') {
+        ctx.addUserMessage(msg.text);
+        if (msg.context_trace) ctx.renderContextTrace(msg.context_trace);
+      } else if (msg.role === 'assistant') {
+        const el = ctx.createAssistantBubble(false);
+        const contentEl = el?.querySelector?.('.msg-content');
+        if (!contentEl) continue;
+        let html = '';
+        for (const block of (msg.blocks || [])) {
+          if (block.type === 'text') {
+            html += `<div class="text-block">${ctx.renderMd(block.text)}</div>`;
+          } else if (block.type === 'thinking') {
+            html += ctx.renderBlock(block);
+          } else if (block.type === 'tool_use') {
+            html += ctx.renderHistoryToolCard(block);
+          }
+        }
+        contentEl.innerHTML = html;
+      }
+    }
+    ctx.scrollToBottom(true);
+  }
+
   function renderCurrentState(state = {}, options = {}) {
     const { currentAssistantEl, currentContent = [], streamBlocks = {}, isResponding = false, final = false } = state;
     if (!currentAssistantEl) return;
@@ -301,12 +402,16 @@
   }
 
   root.chatRenderer = {
+    sanitizeLinkHref,
+    renderMd,
     formatToolSummary,
     formatToolBody,
     renderToolCard,
     updateToolResult,
     renderStreamingText,
     renderBlock,
+    renderHistoryToolCard,
+    renderHistory,
     renderCurrentState,
   };
 })();
