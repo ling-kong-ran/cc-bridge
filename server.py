@@ -48,7 +48,6 @@ from config_manager import (
     get_agents_for_cli,
 )
 from session_store import list_sessions, save_session, add_session_usage, delete_session, load_session_history, rename_session, update_session_cwd, toggle_pin
-from artifact_store import list_artifacts as list_artifact_records
 from memory_index import list_memory_files, search_memory, get_memory_file, delete_memory_file, save_memory_file, index_memory, get_memory_tree, get_memory_graph, import_memory_files, organize_memory_links
 import wiki_store
 import context_orchestrator
@@ -56,6 +55,7 @@ import memory_consolidator
 from backend.routes.settings_routes import handle_settings_get, handle_settings_post
 from backend.routes.context_routes import handle_context_get, handle_context_post
 from backend.routes.scheduled_tasks_routes import handle_scheduled_tasks_get, handle_scheduled_tasks_post
+from backend.routes.artifacts_routes import handle_artifacts_get
 from backend.responses import send_response
 from backend.services.sessions_service import list_gui_sessions
 # 飞书模块延迟加载 — 避免 lark_oapi SDK 拖慢 server 启动
@@ -2983,11 +2983,7 @@ async def handle_api_get(path: str, writer: asyncio.StreamWriter, query: dict = 
             query=query,
         )
     elif path == "/api/artifacts":
-        try:
-            limit_sessions = int((query or {}).get("limit_sessions", ["30"])[0])
-        except (ValueError, IndexError):
-            limit_sessions = 30
-        data = list_artifact_records(limit_sessions, href_for_value=artifact_href)
+        _, data = handle_artifacts_get(query=query, path=path, href_for_value=artifact_href)
     elif path == "/api/file":
         # 提供上传文件（图片预览）
         file_path = (query or {}).get("path", [""])[0]
