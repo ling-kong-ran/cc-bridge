@@ -3688,36 +3688,22 @@ function getSessionCwdOptions() {
   };
 }
 
+function getSessionCwdModule() {
+  const mod = window.CCBridge?.sessionCwd;
+  if (!mod) console.error('CCBridge sessionCwd module is not loaded');
+  return mod;
+}
+
 function isCwdError(errorMsg) {
-  const sessionCwd = window.CCBridge?.sessionCwd;
-  if (sessionCwd?.isCwdError) return sessionCwd.isCwdError(errorMsg);
-  if (!errorMsg) return false;
-  return /\u5de5\u4f5c\u76ee\u5f55\u4e0d\u53ef\u7528|director|not exist|find the (file|path)/i.test(errorMsg);
+  return getSessionCwdModule()?.isCwdError?.(errorMsg) || false;
 }
 
 function promptCwdForSession(oldCwd) {
-  const sessionCwd = window.CCBridge?.sessionCwd;
-  if (sessionCwd?.promptCwdForSession) return sessionCwd.promptCwdForSession(oldCwd, getSessionCwdOptions());
-  return new Promise((resolve) => {
-    openPicker(oldCwd || cwdInput.value.trim() || '/', (selectedPath) => {
-      resolve(selectedPath || null);
-    });
-  });
+  return getSessionCwdModule()?.promptCwdForSession?.(oldCwd, getSessionCwdOptions()) || Promise.resolve(null);
 }
 
 async function updateSessionCwd(sessionId, newCwd) {
-  const sessionCwd = window.CCBridge?.sessionCwd;
-  if (sessionCwd?.updateSessionCwd) return sessionCwd.updateSessionCwd(sessionId, newCwd);
-  try {
-    const resp = await fetch('/api/sessions/update-cwd', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ session_id: sessionId, cwd: newCwd }),
-    });
-    return await resp.json();
-  } catch (e) {
-    return { ok: false, error: e.message };
-  }
+  return getSessionCwdModule()?.updateSessionCwd?.(sessionId, newCwd) || { ok: false, error: 'sessionCwd module is not loaded' };
 }
 
 function getSessionResumeOptions() {
