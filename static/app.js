@@ -1424,55 +1424,14 @@ function getNavigationOptions() {
   };
 }
 
+function getNavigationModule() {
+  const mod = window.CCBridge?.navigation;
+  if (!mod) console.error('CCBridge navigation module is not loaded');
+  return mod;
+}
+
 function showPage(page) {
-  const navigation = window.CCBridge?.navigation;
-  if (navigation?.showPage) {
-    navigation.showPage(page, getNavigationOptions());
-    return;
-  }
-  document.querySelectorAll('.nav-btn').forEach(b => b.classList.toggle('active', b.dataset.page === page));
-  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
-  const target = document.getElementById(`page-${page}`);
-  if (target) target.classList.add('active');
-  // 更新全局 titlebar
-  const pageLabel = document.getElementById('titlebar-page-label');
-  const pageKey = page === 'home' ? 'home' : page === 'config' ? 'settings' : page === 'artifacts' ? 'artifacts' : page === 'scheduled' ? 'scheduledTasks' : page === 'feishu-gateway' ? 'messageGateway' : page === 'sessions' ? 'sessions' : page === 'skills' ? 'skills' : page === 'integrations' ? 'integrations' : page === 'memory' ? 'memory' : 'chat';
-  if (pageLabel) pageLabel.textContent = t(pageKey);
-  const isChatPage = page === 'chat';
-  const backBtn = document.getElementById('btn-titlebar-back');
-  if (backBtn) {
-    const canBackToChat = page !== 'home' && !isChatPage && sessionActive;
-    backBtn.style.display = canBackToChat ? '' : 'none';
-    backBtn.textContent = t('backToChat');
-  }
-  const titlebarMeta = document.getElementById('titlebar-meta');
-  if (titlebarMeta) titlebarMeta.style.display = isChatPage ? '' : 'none';
-  const btnExport = document.getElementById('btn-export-chat');
-  if (btnExport) btnExport.style.display = isChatPage ? '' : 'none';
-  const btnPanel = document.getElementById('btn-toggle-right-panel');
-  if (btnPanel) btnPanel.style.display = isChatPage ? '' : 'none';
-  [btnSessionPin, btnSessionCwd, btnSessionRename, btnSessionDelete].forEach(btn => {
-    if (btn) btn.style.display = 'none';
-  });
-  if (isChatPage) {
-    renderTopbarMeta();
-    renderTopbarStatusSummary();
-  } else if (page === 'sessions') {
-    renderSessionList(cachedSessions);
-  } else if (page === 'artifacts') {
-    loadArtifacts();
-  } else if (page === 'skills') {
-    loadSkills();
-  } else if (page === 'integrations') {
-    loadIntegrations();
-  } else if (page === 'memory') {
-    loadMemoryFiles();
-  } else if (page === 'scheduled') {
-    loadScheduledTasks();
-  } else if (page === 'feishu-gateway') {
-    loadFeishuGateway();
-  }
-  hideMentionPopup();
+  return getNavigationModule()?.showPage?.(page, getNavigationOptions());
 }
 
 function compareSessionsByPinAndTime(a, b) {
@@ -1484,47 +1443,7 @@ async function openLatestOrNewChatSession() {
 }
 
 function initNavigation() {
-  const navigation = window.CCBridge?.navigation;
-  if (navigation?.initNavigation) {
-    navigation.initNavigation(getNavigationOptions());
-    return;
-  }
-  document.querySelectorAll('.nav-btn').forEach(btn => {
-    btn.addEventListener('click', () => {
-      if (btn.dataset.page === 'chat') {
-        openLatestOrNewChatSession();
-        return;
-      }
-      showPage(btn.dataset.page);
-    });
-  });
-  // 全局 titlebar 设置按钮
-  const btnNavSettings = document.getElementById('btn-nav-settings');
-  if (btnNavSettings) {
-    btnNavSettings.addEventListener('click', () => showPage('config'));
-  }
-  // 全局 titlebar 返回聊天按钮
-  const btnBack = document.getElementById('btn-titlebar-back');
-  if (btnBack) {
-    btnBack.addEventListener('click', () => showPage('chat'));
-  }
-  sessionSearchInput?.addEventListener('input', () => renderSessionList(cachedSessions));
-  // 会话页新建会话入口
-  sessionsNewSessionBtn?.addEventListener('click', () => {
-    showPage('chat');
-    startNewSession();
-  });
-  // 设置页标签切换
-  document.querySelectorAll('.settings-tab').forEach(tab => {
-    tab.addEventListener('click', () => {
-      const tabName = tab.dataset.tab;
-      document.querySelectorAll('.settings-tab').forEach(t => t.classList.remove('active'));
-      document.querySelectorAll('.config-tab-panel').forEach(p => p.classList.remove('active'));
-      tab.classList.add('active');
-      const panel = document.querySelector(`.config-tab-panel[data-tab="${tabName}"]`);
-      if (panel) panel.classList.add('active');
-    });
-  });
+  return getNavigationModule()?.initNavigation?.(getNavigationOptions());
 }
 
 async function toggleSessionPin(sessionId) {
@@ -1548,70 +1467,7 @@ function initTopbarSessionActions() {
 }
 
 function initMobileLayout() {
-  const navigation = window.CCBridge?.navigation;
-  if (navigation?.initMobileLayout) {
-    navigation.initMobileLayout();
-    return;
-  }
-  const toggles = document.querySelectorAll('.mobile-menu-toggle');
-  const sidebar = document.querySelector('.sidebar');
-  const backdrop = document.getElementById('mobile-sidebar-backdrop');
-  const mobileQuery = window.matchMedia('(max-width: 760px)');
-
-  if (!toggles.length || !sidebar || !backdrop) return;
-
-  const setExpanded = (expanded) => {
-    toggles.forEach(toggle => toggle.setAttribute('aria-expanded', String(expanded)));
-  };
-
-  const chatSidebar = document.getElementById('chat-sidebar');
-  const closeMenu = () => {
-    sidebar.classList.remove('mobile-open');
-    if (chatSidebar) chatSidebar.classList.remove('open');
-    backdrop.classList.remove('visible');
-    document.body.classList.remove('mobile-overlay');
-    setExpanded(false);
-  };
-
-  const openMenu = () => {
-    sidebar.classList.add('mobile-open');
-    backdrop.classList.add('visible');
-    setExpanded(true);
-  };
-
-  toggles.forEach(toggle => {
-    toggle.addEventListener('click', () => {
-      if (sidebar.classList.contains('mobile-open')) {
-        closeMenu();
-      } else {
-        openMenu();
-      }
-    });
-  });
-
-  backdrop.addEventListener('click', closeMenu);
-  document.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape') closeMenu();
-  });
-
-  sidebar.addEventListener('click', (e) => {
-    if (!mobileQuery.matches) return;
-    if (e.target.closest('.nav-btn, .session-item, #btn-new-session, #welcome-new-session')) closeMenu();
-  });
-
-  document.getElementById('welcome-new-session')?.addEventListener('click', () => {
-    if (mobileQuery.matches) closeMenu();
-  });
-
-  const handleQueryChange = (e) => {
-    if (!e.matches) closeMenu();
-  };
-
-  if (mobileQuery.addEventListener) {
-    mobileQuery.addEventListener('change', handleQueryChange);
-  } else {
-    mobileQuery.addListener(handleQueryChange);
-  }
+  return getNavigationModule()?.initMobileLayout?.();
 }
 
 // ─── SSE 连接 ────────────────────────────────────────────────
