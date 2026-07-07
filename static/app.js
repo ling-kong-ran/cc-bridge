@@ -4679,6 +4679,8 @@ function renderHistoryToolCard(block) {
 }
 
 function formatTime(isoStr) {
+  const formatters = window.CCBridge?.formatters;
+  if (formatters?.formatTime) return formatters.formatTime(isoStr, currentLanguage);
   if (!isoStr) return '';
   try {
     const d = new Date(isoStr);
@@ -4744,6 +4746,8 @@ function renderMd(text) {
 }
 
 function esc(str) {
+  const formatters = window.CCBridge?.formatters;
+  if (formatters?.esc) return formatters.esc(str);
   if (!str) return '';
   return String(str)
     .replace(/&/g, '&amp;')
@@ -4753,6 +4757,8 @@ function esc(str) {
 }
 
 function shortenPlainPath(path, maxSegments = 3) {
+  const formatters = window.CCBridge?.formatters;
+  if (formatters?.shortenPlainPath) return formatters.shortenPlainPath(path, maxSegments);
   if (!path) return '';
   const normalized = String(path).replace(/\\/g, '/').replace(/\/+$/, '');
   const parts = normalized.split('/').filter(Boolean);
@@ -4762,10 +4768,14 @@ function shortenPlainPath(path, maxSegments = 3) {
 }
 
 function shortenPath(path, maxSegments = 3) {
+  const formatters = window.CCBridge?.formatters;
+  if (formatters?.shortenPath) return formatters.shortenPath(path, maxSegments);
   return esc(shortenPlainPath(path, maxSegments));
 }
 
 function sanitizeLinkHref(href) {
+  const formatters = window.CCBridge?.formatters;
+  if (formatters?.sanitizeLinkHref) return formatters.sanitizeLinkHref(href);
   const value = String(href || '').trim().replace(/&amp;/g, '&');
   if (/^(https?:|mailto:)/i.test(value)) return esc(value);
   return '#';

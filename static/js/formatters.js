@@ -127,6 +127,49 @@
     return isDisplayableModel(selectedModel) ? formatModelName(selectedModel) : '';
   }
 
+  function formatTime(isoStr, language = 'en') {
+    if (!isoStr) return '';
+    try {
+      const d = new Date(isoStr);
+      const now = new Date();
+      const locale = language === 'zh' ? 'zh-CN' : 'en-US';
+      if (d.toDateString() === now.toDateString()) {
+        return d.toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit' });
+      }
+      return d.toLocaleDateString(locale, { month: 'numeric', day: 'numeric' });
+    } catch(e) {
+      return isoStr.substring(5, 16);
+    }
+  }
+
+  function esc(str) {
+    if (!str) return '';
+    return String(str)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;');
+  }
+
+  function shortenPlainPath(path, maxSegments = 3) {
+    if (!path) return '';
+    const normalized = String(path).replace(/\\/g, '/').replace(/\/+$/, '');
+    const parts = normalized.split('/').filter(Boolean);
+    if (parts.length <= maxSegments) return normalized;
+    const prefix = /^[A-Za-z]:$/.test(parts[0]) ? `${parts[0]}/` : '';
+    return `.../${prefix}${parts.slice(-maxSegments).join('/')}`;
+  }
+
+  function shortenPath(path, maxSegments = 3) {
+    return esc(shortenPlainPath(path, maxSegments));
+  }
+
+  function sanitizeLinkHref(href) {
+    const value = String(href || '').trim().replace(/&amp;/g, '&');
+    if (/^(https?:|mailto:)/i.test(value)) return esc(value);
+    return '#';
+  }
+
   root.formatters = {
     summarizePrompt,
     formatDuration,
@@ -145,5 +188,10 @@
     formatModelName,
     isDisplayableModel,
     getDisplayModelName,
+    formatTime,
+    esc,
+    shortenPlainPath,
+    shortenPath,
+    sanitizeLinkHref,
   };
 })();
