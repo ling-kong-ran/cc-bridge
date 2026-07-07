@@ -2932,7 +2932,30 @@ const toolStartTimes = new Map();
 // 已结束的 Task id（partial assistant 事件会重复携带同一 tool_use 块，避免重新标记为运行中）
 const finishedTaskIds = new Set();
 
+function getTaskActivityOptions() {
+  return {
+    t,
+    esc,
+    renderMd,
+    scrollToBottom,
+    notifyComplete,
+    getDisplayModelName,
+    getModelValue: () => modelSelect.value,
+    getCurrentAssistantEl: () => currentAssistantEl,
+    getIsResponding: () => isResponding,
+    scheduleRender,
+    runningTasks,
+    finishedTaskIds,
+    subagentBubbles,
+    agentStatusBar: document.getElementById('agent-status-bar'),
+    messagesEl,
+    colors: SUBAGENT_COLORS,
+  };
+}
+
 function registerTaskBlocks(content) {
+  const taskActivity = window.CCBridge?.taskActivity;
+  if (taskActivity?.registerTaskBlocks) return taskActivity.registerTaskBlocks(content, getTaskActivityOptions());
   let changed = false;
   for (const block of content) {
     if (block.type !== 'tool_use' || block.name !== 'Task' || !block.id) continue;
@@ -2952,6 +2975,8 @@ function registerTaskBlocks(content) {
 }
 
 function updateTaskActivity(parentToolUseId, message) {
+  const taskActivity = window.CCBridge?.taskActivity;
+  if (taskActivity?.updateTaskActivity) return taskActivity.updateTaskActivity(parentToolUseId, message, getTaskActivityOptions());
   if (!parentToolUseId || finishedTaskIds.has(parentToolUseId)) return;
   // 会话恢复到一半时可能没见过对应 Task 块，此处兜底注册
   const entry = runningTasks.get(parentToolUseId) || { type: '', desc: '', last: '' };
@@ -2970,6 +2995,8 @@ function updateTaskActivity(parentToolUseId, message) {
 }
 
 function finishTasks(ids) {
+  const taskActivity = window.CCBridge?.taskActivity;
+  if (taskActivity?.finishTasks) return taskActivity.finishTasks(ids, getTaskActivityOptions());
   let changed = false;
   let completedTask = null;
   for (const id of ids || []) {
@@ -2990,6 +3017,8 @@ function finishTasks(ids) {
 }
 
 function clearRunningTasks({ keepFinished = false } = {}) {
+  const taskActivity = window.CCBridge?.taskActivity;
+  if (taskActivity?.clearRunningTasks) return taskActivity.clearRunningTasks(getTaskActivityOptions(), { keepFinished });
   if (runningTasks.size) {
     runningTasks.clear();
     renderAgentStatus();
@@ -2998,6 +3027,8 @@ function clearRunningTasks({ keepFinished = false } = {}) {
 }
 
 function renderAgentStatus() {
+  const taskActivity = window.CCBridge?.taskActivity;
+  if (taskActivity?.renderAgentStatus) return taskActivity.renderAgentStatus(getTaskActivityOptions());
   const bar = document.getElementById('agent-status-bar');
   if (!bar) return;
   if (runningTasks.size === 0) {
@@ -3024,12 +3055,16 @@ const subagentBubbles = new Map();
 const SUBAGENT_COLORS = ['#c792ea', '#82aaff', '#c3e88d', '#ffcb6b', '#f78c6c', '#89ddff'];
 
 function getSubagentColor(id) {
+  const taskActivity = window.CCBridge?.taskActivity;
+  if (taskActivity?.getSubagentColor) return taskActivity.getSubagentColor(id, getTaskActivityOptions());
   let hash = 0;
   for (let i = 0; i < id.length; i++) hash = ((hash << 5) - hash) + id.charCodeAt(i);
   return SUBAGENT_COLORS[Math.abs(hash) % SUBAGENT_COLORS.length];
 }
 
 function renderSubagentBubble(parentToolUseId, message) {
+  const taskActivity = window.CCBridge?.taskActivity;
+  if (taskActivity?.renderSubagentBubble) return taskActivity.renderSubagentBubble(parentToolUseId, message, getTaskActivityOptions());
   if (!currentAssistantEl && !isResponding) return;
   const taskInfo = runningTasks.get(parentToolUseId);
   const agentName = taskInfo?.type || t('subagent');
@@ -3081,6 +3116,8 @@ function renderSubagentBubble(parentToolUseId, message) {
 
 // 清理 subagent 气泡
 function clearSubagentBubbles() {
+  const taskActivity = window.CCBridge?.taskActivity;
+  if (taskActivity?.clearSubagentBubbles) return taskActivity.clearSubagentBubbles(getTaskActivityOptions());
   subagentBubbles.forEach(el => el.remove());
   subagentBubbles.clear();
 }
