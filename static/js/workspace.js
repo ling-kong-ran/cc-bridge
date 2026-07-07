@@ -119,6 +119,110 @@
     pane.style.flexBasis = width;
   }
 
+  function getTabsContext(options = {}) {
+    return {
+      t: options.t || ((key) => key),
+      esc: options.esc || root.formatters?.esc || ((value) => String(value ?? '')),
+      getTabsEl: options.getTabsEl || (() => null),
+      getSessions: options.getSessions || (() => []),
+      getActiveSessionId: options.getActiveSessionId || (() => ''),
+      getStatusLabel: options.getStatusLabel || (() => ''),
+      getTabSessionId: options.getTabSessionId || ((target) => target?.closest?.('.workspace-tab')?.dataset.sessionId || ''),
+      startNewSession: options.startNewSession || (() => {}),
+      closeWorkspaceSession: options.closeWorkspaceSession || (() => {}),
+      renameWorkspaceSession: options.renameWorkspaceSession || (() => {}),
+      activateWorkspaceSession: options.activateWorkspaceSession || (() => {}),
+    };
+  }
+
+  function ensureWorkspaceTabsEvents(options = {}) {
+    const ctx = getTabsContext(options);
+    const tabsEl = ctx.getTabsEl();
+    if (!tabsEl || tabsEl.dataset.eventsBound === '1') return;
+    tabsEl.dataset.eventsBound = '1';
+    tabsEl.addEventListener('click', (e) => {
+      if (e.target.closest('.workspace-new-session')) {
+        ctx.startNewSession();
+        return;
+      }
+      const closeBtn = e.target.closest('.workspace-close-btn');
+      if (closeBtn) {
+        e.preventDefault();
+        e.stopPropagation();
+        ctx.closeWorkspaceSession(ctx.getTabSessionId(closeBtn));
+        return;
+      }
+      const renameBtn = e.target.closest('.workspace-rename-btn');
+      if (renameBtn) {
+        e.preventDefault();
+        e.stopPropagation();
+        ctx.renameWorkspaceSession(ctx.getTabSessionId(renameBtn));
+        return;
+      }
+      const sessionId = ctx.getTabSessionId(e.target);
+      if (sessionId) ctx.activateWorkspaceSession(sessionId);
+    });
+    tabsEl.addEventListener('dblclick', (e) => {
+      if (e.target.closest('.workspace-rename-btn, .workspace-close-btn')) return;
+      const sessionId = ctx.getTabSessionId(e.target);
+      if (!sessionId) return;
+      e.preventDefault();
+      ctx.renameWorkspaceSession(sessionId);
+    });
+    tabsEl.addEventListener('keydown', (e) => {
+      if (e.key !== 'Enter' && e.key !== ' ') return;
+      const closeBtn = e.target.closest('.workspace-close-btn');
+      if (closeBtn) {
+        e.preventDefault();
+        e.stopPropagation();
+        ctx.closeWorkspaceSession(ctx.getTabSessionId(closeBtn));
+        return;
+      }
+      const renameBtn = e.target.closest('.workspace-rename-btn');
+      if (renameBtn) {
+        e.preventDefault();
+        e.stopPropagation();
+        ctx.renameWorkspaceSession(ctx.getTabSessionId(renameBtn));
+        return;
+      }
+      const sessionId = ctx.getTabSessionId(e.target);
+      if (!sessionId) return;
+      e.preventDefault();
+      ctx.activateWorkspaceSession(sessionId);
+    });
+  }
+
+  function renderWorkspaceTabs(options = {}) {
+    const ctx = getTabsContext(options);
+    const tabsEl = ctx.getTabsEl();
+    if (!tabsEl) return;
+    ensureWorkspaceTabsEvents(options);
+    const sessions = ctx.getSessions();
+    const newButton = `
+      <button class="workspace-new-session" type="button" title="${ctx.esc(ctx.t('newSession'))}" aria-label="${ctx.esc(ctx.t('newSession'))}">+</button>
+    `;
+    if (!sessions.length) {
+      tabsEl.innerHTML = `<div class="workspace-tabs-empty">${ctx.esc(ctx.t('workspaceNoTabs'))}</div>${newButton}`;
+      return;
+    }
+    const activeSessionId = ctx.getActiveSessionId();
+    tabsEl.innerHTML = sessions.map(s => {
+      const active = s.sessionId === activeSessionId;
+      return `
+      <div class="workspace-tab ${active ? 'active' : ''} status-${ctx.esc(s.status || 'idle')}" role="tab" tabindex="0" aria-selected="${active ? 'true' : 'false'}" data-session-id="${ctx.esc(s.sessionId)}">
+        <span class="workspace-tab-title-row">
+          <span class="workspace-tab-title">${ctx.esc(s.title || ctx.t('newChat'))}</span>
+          <span class="workspace-tab-actions">
+            <span class="workspace-rename-btn" role="button" tabindex="0" title="${ctx.esc(ctx.t('rename'))}" aria-label="${ctx.esc(ctx.t('rename'))}">EDIT</span>
+            <span class="workspace-close-btn" role="button" tabindex="0" title="${ctx.esc(ctx.t('close'))}" aria-label="${ctx.esc(ctx.t('close'))}">×</span>
+          </span>
+        </span>
+        <span class="workspace-tab-meta">${ctx.esc(ctx.getStatusLabel(s.status))}${(s.status === 'running' || s.status === 'tool') && s.phase ? ` · ${ctx.esc(s.phase)}` : ''}</span>
+      </div>
+    `;
+    }).join('') + newButton;
+  }
+
   function getResizeContext(options = {}) {
     return {
       t: options.t || ((key) => key),
@@ -233,6 +337,8 @@
     appendPreview,
     setPreview,
     applyPaneWidth,
+    ensureWorkspaceTabsEvents,
+    renderWorkspaceTabs,
     ensureLivePaneResizer,
     startWorkspaceResize,
     handleWorkspaceResizeMove,

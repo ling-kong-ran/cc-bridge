@@ -599,7 +599,25 @@ function closeWorkspaceSession(sessionId) {
   renderWorkspace();
 }
 
+function getWorkspaceTabsOptions() {
+  return {
+    t,
+    esc,
+    getTabsEl: () => workspaceTabsEl,
+    getSessions: () => Array.from(workspaceSessions.values()),
+    getActiveSessionId: () => activeWorkspaceSessionId,
+    getStatusLabel: getWorkspaceStatusLabel,
+    getTabSessionId: getWorkspaceTabSessionId,
+    startNewSession,
+    closeWorkspaceSession,
+    renameWorkspaceSession,
+    activateWorkspaceSession,
+  };
+}
+
 function ensureWorkspaceTabsEvents() {
+  const workspace = window.CCBridge?.workspace;
+  if (workspace?.ensureWorkspaceTabsEvents) return workspace.ensureWorkspaceTabsEvents(getWorkspaceTabsOptions());
   if (!workspaceTabsEl || workspaceTabsEl.dataset.eventsBound === '1') return;
   workspaceTabsEl.dataset.eventsBound = '1';
   workspaceTabsEl.addEventListener('click', (e) => {
@@ -655,6 +673,8 @@ function ensureWorkspaceTabsEvents() {
 }
 
 function renderWorkspaceTabs() {
+  const workspace = window.CCBridge?.workspace;
+  if (workspace?.renderWorkspaceTabs) return workspace.renderWorkspaceTabs(getWorkspaceTabsOptions());
   ensureWorkspaceTabsEvents();
   const sessions = Array.from(workspaceSessions.values());
   const newButton = `
