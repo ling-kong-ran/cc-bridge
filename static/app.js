@@ -3189,66 +3189,22 @@ function getHistoryLoaderOptions() {
   };
 }
 
+function getHistoryLoaderModule() {
+  const mod = window.CCBridge?.historyLoader;
+  if (!mod) console.error('CCBridge historyLoader module is not loaded');
+  return mod;
+}
+
 function renderStaticHistory(history) {
-  const historyLoader = window.CCBridge?.historyLoader;
-  if (historyLoader?.renderStaticHistory) return historyLoader.renderStaticHistory(history, getHistoryLoaderOptions());
-  const previousAssistantEl = currentAssistantEl;
-  const previousAssistantMessageId = currentAssistantMessageId;
-  const previousContent = currentContent;
-  const previousStreamBlocks = streamBlocks;
-  resetAssistantStreamState();
-  renderHistory(history);
-  currentAssistantEl = previousAssistantEl;
-  currentAssistantMessageId = previousAssistantMessageId;
-  currentContent = previousContent;
-  streamBlocks = previousStreamBlocks;
+  return getHistoryLoaderModule()?.renderStaticHistory?.(history, getHistoryLoaderOptions());
 }
 
 async function loadSessionHistory(sessionId, cwd) {
-  const historyLoader = window.CCBridge?.historyLoader;
-  if (historyLoader?.loadSessionHistory) return historyLoader.loadSessionHistory(sessionId, cwd, getHistoryLoaderOptions());
-  try {
-    const resp = await fetch('/api/sessions/history', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ session_id: sessionId, cwd: cwd || cwdInput.value.trim() || '' }),
-    });
-    const history = await resp.json();
-    if (history && history.length > 0) {
-      renderStaticHistory(history);
-    }
-  } catch(e) {
-    console.error('History load failed:', e);
-  }
+  return getHistoryLoaderModule()?.loadSessionHistory?.(sessionId, cwd, getHistoryLoaderOptions());
 }
 
 async function reloadSessionHistory(sessionId, cwd) {
-  const historyLoader = window.CCBridge?.historyLoader;
-  if (historyLoader?.reloadSessionHistory) return historyLoader.reloadSessionHistory(sessionId, cwd, getHistoryLoaderOptions());
-  try {
-    const resp = await fetch('/api/sessions/history', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ session_id: sessionId, cwd: cwd || cwdInput.value.trim() || '' }),
-    });
-    const history = await resp.json();
-    if (!Array.isArray(history) || history.length === 0) return;
-    const systemMessages = Array.from(messagesEl.querySelectorAll('.system-msg')).map(el => ({
-      text: el.textContent || '',
-      isError: el.classList.contains('error'),
-    }));
-    messagesEl.innerHTML = '';
-    resetAssistantStreamState();
-    toolResults.clear();
-    toolStartTimes.clear();
-    renderStaticHistory(history);
-    captureActiveWorkspaceSnapshot();
-    for (const msg of systemMessages) {
-      if (msg.text) addSystemMsg(msg.text, msg.isError);
-    }
-  } catch(e) {
-    console.error('History reload failed:', e);
-  }
+  return getHistoryLoaderModule()?.reloadSessionHistory?.(sessionId, cwd, getHistoryLoaderOptions());
 }
 
 function renderHistory(history) {
