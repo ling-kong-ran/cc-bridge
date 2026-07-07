@@ -112,6 +112,7 @@ jobs:
           name: desktop-${{ matrix.platform }}
           path: |
             release/*
+            !release/builder-debug.yml
             !release/*-unpacked/**
             !release/win-unpacked/**
             !release/mac/**
