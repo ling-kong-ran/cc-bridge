@@ -270,6 +270,16 @@ function initSessionWorkspace() {
 }
 
 function saveWorkspaceState() {
+  const workspace = window.CCBridge?.workspace;
+  if (workspace?.writeState && workspace?.serializeState) {
+    workspace.writeState(workspace.serializeState({
+      mode: workspaceMode,
+      activeSessionId: activeWorkspaceSessionId,
+      sessions: workspaceSessions,
+      widths: workspacePaneWidths,
+    }), WORKSPACE_STORAGE_KEY);
+    return;
+  }
   const sessions = Array.from(workspaceSessions.values())
     .filter(s => s.sessionId && !s.sessionId.startsWith('pending-'))
     .map(s => ({
@@ -297,10 +307,10 @@ function saveWorkspaceState() {
 
 function loadWorkspaceState() {
   try {
-    const raw = localStorage.getItem(WORKSPACE_STORAGE_KEY);
-    if (!raw) return;
-    const state = JSON.parse(raw);
-    workspaceMode = state.mode === 'grid' ? 'grid' : 'focus';
+    const workspace = window.CCBridge?.workspace;
+    const state = workspace?.readState ? workspace.readState(WORKSPACE_STORAGE_KEY) : JSON.parse(localStorage.getItem(WORKSPACE_STORAGE_KEY) || 'null');
+    if (!state) return;
+    workspaceMode = workspace?.normalizeStoredMode ? workspace.normalizeStoredMode(state.mode) : (state.mode === 'grid' ? 'grid' : 'focus');
     workspaceSessions.clear();
     for (const s of (Array.isArray(state.sessions) ? state.sessions : [])) {
       if (s.sessionId) workspaceSessions.set(s.sessionId, workspaceSessionFromMeta(s.sessionId, s));
@@ -315,7 +325,9 @@ function loadWorkspaceState() {
 }
 
 function workspaceSessionFromMeta(sessionId, meta = {}) {
+  const workspace = window.CCBridge?.workspace;
   const existing = workspaceSessions.get(sessionId) || {};
+  if (workspace?.createSessionRecord) return workspace.createSessionRecord(sessionId, meta, existing, t);
   const nextStatus = meta.status || existing.status || 'idle';
   const rawPhase = Object.prototype.hasOwnProperty.call(meta, 'phase') ? meta.phase : existing.phase;
   return {
@@ -352,6 +364,8 @@ function captureActiveWorkspaceSnapshot() {
 }
 
 function getWorkspaceSessionPreview(session) {
+  const workspace = window.CCBridge?.workspace;
+  if (workspace?.previewText) return workspace.previewText(session, WORKSPACE_PREVIEW_MAX_CHARS);
   if (!session) return '';
   return (session.previewText || '').slice(-WORKSPACE_PREVIEW_MAX_CHARS);
 }
@@ -359,16 +373,30 @@ function getWorkspaceSessionPreview(session) {
 function appendWorkspaceSessionPreview(sessionId, text) {
   if (!sessionId || !text) return;
   const session = workspaceSessions.get(sessionId);
-  if (!session) return;
-  session.previewText = `${session.previewText || ''}${text}`.slice(-WORKSPACE_PREVIEW_MAX_CHARS);
+  const workspace = window.CCBridge?.workspace;
+  const changed = workspace?.appendPreview
+    ? workspace.appendPreview(session, text, WORKSPACE_PREVIEW_MAX_CHARS)
+    : (() => {
+      if (!session) return false;
+      session.previewText = `${session.previewText || ''}${text}`.slice(-WORKSPACE_PREVIEW_MAX_CHARS);
+      return true;
+    })();
+  if (!changed) return;
   scheduleWorkspacePreviewRender();
 }
 
 function setWorkspaceSessionPreview(sessionId, text) {
   if (!sessionId) return;
   const session = workspaceSessions.get(sessionId);
-  if (!session) return;
-  session.previewText = (text || '').slice(-WORKSPACE_PREVIEW_MAX_CHARS);
+  const workspace = window.CCBridge?.workspace;
+  const changed = workspace?.setPreview
+    ? workspace.setPreview(session, text, WORKSPACE_PREVIEW_MAX_CHARS)
+    : (() => {
+      if (!session) return false;
+      session.previewText = (text || '').slice(-WORKSPACE_PREVIEW_MAX_CHARS);
+      return true;
+    })();
+  if (!changed) return;
   scheduleWorkspacePreviewRender();
 }
 
@@ -435,14 +463,14 @@ function setWorkspaceMode(mode) {
 }
 
 function getWorkspaceStatusLabel(status) {
-  const key = {
+  const workspace = window.CCBridge?.workspace;
+  return t(workspace?.statusKey ? workspace.statusKey(status) : ({
     idle: 'workspaceIdle',
     running: 'workspaceRunning',
     tool: 'workspaceTool',
     done: 'workspaceDone',
     error: 'workspaceError',
-  }[status || 'idle'] || 'workspaceIdle';
-  return t(key);
+  }[status || 'idle'] || 'workspaceIdle'));
 }
 
 function updateWorkspaceSessionStatus(sessionId, status, phase = '') {
@@ -688,6 +716,15 @@ function ensureLivePaneResizer() {
 }
 
 function applyWorkspacePaneWidth(pane, sessionId) {
+  const workspace = window.CCBridge?.workspace;
+  if (workspace?.applyPaneWidth) {
+    workspace.applyPaneWidth(pane, sessionId, {
+      mode: workspaceMode,
+      widths: workspacePaneWidths,
+      sessionCount: workspaceSessions.size,
+    });
+    return;
+  }
   if (!pane || workspaceMode !== 'grid') {
     if (pane) {
       pane.style.flex = '';

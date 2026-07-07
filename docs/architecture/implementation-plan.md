@@ -137,6 +137,7 @@ cc-bridge/
 - 新增 `static/js/input.js`，把输入区、附件上传、slash commands、模型胶囊和 @mention 自动补全逻辑从 `static/app.js` 拆出并挂载到 `window.CCBridge.input`。
 - 新增 `static/js/sessions.js`，把会话列表、欢迎页会话、会话操作、cwd 右键菜单和会话迁移弹窗逻辑从 `static/app.js` 拆出并挂载到 `window.CCBridge.sessions`。
 - 新增 `static/js/chat-renderer.js`，把聊天流式渲染、Markdown block 渲染和工具卡片渲染基础逻辑从 `static/app.js` 拆出并挂载到 `window.CCBridge.chatRenderer`。
+- 新增 `static/js/workspace.js`，把 workspace 状态序列化、会话记录归一化、预览文本和面板宽度计算基础逻辑从 `static/app.js` 拆出并挂载到 `window.CCBridge.workspace`。
 
 ## 后续验收标准
 
