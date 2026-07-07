@@ -178,6 +178,7 @@ cc-bridge/
 - 扩展 `static/js/workspace.js`，继续承接 workspace pane resizer 创建、拖拽状态更新和宽度保存逻辑，减少 `static/app.js` 的 workspace 交互职责。
 - 扩展 `static/js/workspace.js`，继续承接 workspace tabs 事件绑定和标签页渲染逻辑，减少 `static/app.js` 的 workspace 标签页职责。
 - 扩展 `static/js/workspace.js`，继续承接 workspace 主面板和快照面板渲染逻辑，减少 `static/app.js` 的 workspace 面板 DOM 职责。
+- 扩展 `static/js/sse.js`，继续承接 session started/stopped/taken 和 viewer 用户消息等 SSE 会话生命周期事件处理逻辑。
 
 ## 后续验收标准
 

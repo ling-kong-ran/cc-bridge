@@ -87,6 +87,86 @@
     return sendAction(clientId, action, extra);
   }
 
+  function handleSessionStarted(data = {}, options = {}) {
+    if (data.session_id) options.setCurrentSessionId?.(data.session_id);
+    options.setCurrentRunId?.(data.run_id || null);
+    const wasActive = options.getSessionActive?.();
+    options.setSessionActive?.(true);
+    options.setIsViewer?.(!!data.viewing);
+    options.updateUI?.();
+    const modelLabel = options.getDisplayModelName?.(data.model || '') || '';
+    options.renderTopbarMeta?.(data.model || '');
+    if (data.remote_target_id && options.remoteTargetSelect) {
+      options.remoteTargetSelect.value = data.remote_target_id;
+      options.updateRemoteMutateRow?.();
+    }
+    const cliSelectEl = document.getElementById('cli-select');
+    if (data.cli && cliSelectEl && [...cliSelectEl.options].some(o => o.value === data.cli)) {
+      cliSelectEl.value = data.cli;
+      options.renderTopbarMeta?.(data.model || '');
+    }
+    if (!wasActive) {
+      const welcome = options.messagesEl?.querySelector?.('.welcome-msg');
+      if (welcome) welcome.remove();
+      if (data.session_id) {
+        options.setCurrentSessionId?.(data.session_id);
+        options.setCurrentRunId?.(data.run_id || options.getCurrentRunId?.());
+        options.ensureWorkspaceSession?.(data.session_id, {
+          title: data.title || undefined,
+          cwd: data.cwd || options.cwdInput?.value?.trim?.() || '',
+          model: data.model || options.modelSelect?.value || '',
+          cli: data.cli || document.getElementById('cli-select')?.value || '',
+          status: data.running === false ? 'idle' : 'running',
+          runId: data.run_id || '',
+        });
+        options.setActiveWorkspaceSessionId?.(data.session_id);
+        if (data.cwd) {
+          options.cwdInput.value = data.cwd;
+          options.updateRuntimeSummary?.();
+        }
+        options.refreshRightPaneFiles?.();
+        options.showPage?.('chat');
+        options.loadSessionHistory?.(data.session_id, data.cwd || '');
+        if (options.getIsViewer?.()) {
+          options.addSystemMsg?.(options.t?.('viewingSession'));
+        } else {
+          options.addSystemMsg?.(modelLabel ? options.t?.('sessionStarted', { model: modelLabel }) : options.t?.('sessionStartedPlain'));
+        }
+      } else if (options.getIsViewer?.()) {
+        options.addSystemMsg?.(options.t?.('viewingSession'));
+      } else {
+        options.addSystemMsg?.(modelLabel ? options.t?.('sessionStarted', { model: modelLabel }) : options.t?.('sessionStartedPlain'));
+      }
+    }
+  }
+
+  function handleSessionStopped(data = {}, options = {}) {
+    if (!options.isEventForCurrentSession?.(data)) return;
+    options.setSessionActive?.(false);
+    options.setIsResponding?.(false);
+    options.setIsViewer?.(false);
+    options.setCurrentRunId?.(null);
+    options.updateUI?.();
+    options.addSystemMsg?.(options.t?.('sessionStopped'));
+  }
+
+  function handleSessionTaken(data = {}, options = {}) {
+    if (data.session_id && data.session_id === options.getCurrentSessionId?.()) {
+      options.addSystemMsg?.(options.t?.('sessionTaken') || '会话被其他客户端接管，切换为观察模式');
+      options.setIsViewer?.(true);
+      options.setIsResponding?.(false);
+      options.updateUI?.();
+    }
+  }
+
+  function handleUserMessage(data = {}, options = {}) {
+    if (!options.isEventForCurrentSession?.(data)) return;
+    if (data.content) {
+      options.addUserMessage?.(data.content);
+      options.scrollToBottom?.(true);
+    }
+  }
+
   root.sse = {
     getClientId,
     createEventSource,
@@ -98,5 +178,9 @@
     setConnectionStatus,
     updateConnectionText,
     sendActionRequest,
+    handleSessionStarted,
+    handleSessionStopped,
+    handleSessionTaken,
+    handleUserMessage,
   };
 })();

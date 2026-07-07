@@ -2232,6 +2232,39 @@ function extractMessagePreviewText(message) {
   return text;
 }
 
+function getSseLifecycleOptions() {
+  return {
+    t,
+    messagesEl,
+    cwdInput,
+    modelSelect,
+    remoteTargetSelect,
+    getCurrentRunId: () => currentRunId,
+    getCurrentSessionId: () => currentSessionId,
+    getSessionActive: () => sessionActive,
+    getIsViewer: () => isViewer,
+    setCurrentRunId: (value) => { currentRunId = value; },
+    setCurrentSessionId: (value) => { currentSessionId = value; },
+    setSessionActive: (value) => { sessionActive = value; },
+    setIsViewer: (value) => { isViewer = value; },
+    setIsResponding: (value) => { isResponding = value; },
+    setActiveWorkspaceSessionId: (value) => { activeWorkspaceSessionId = value; },
+    updateUI,
+    getDisplayModelName,
+    renderTopbarMeta,
+    updateRemoteMutateRow,
+    ensureWorkspaceSession,
+    updateRuntimeSummary,
+    refreshRightPaneFiles,
+    showPage,
+    loadSessionHistory,
+    addSystemMsg,
+    isEventForCurrentSession,
+    addUserMessage,
+    scrollToBottom,
+  };
+}
+
 function bindSSEEvents(source = eventSource) {
   source.addEventListener('connected', (e) => {
     const data = JSON.parse(e.data);
@@ -2241,6 +2274,8 @@ function bindSSEEvents(source = eventSource) {
 
   source.addEventListener('session_started', (e) => {
     const data = JSON.parse(e.data);
+    const sse = window.CCBridge?.sse;
+    if (sse?.handleSessionStarted) return sse.handleSessionStarted(data, getSseLifecycleOptions());
     if (data.session_id) currentSessionId = data.session_id;
     currentRunId = data.run_id || null;
     const wasActive = sessionActive;
@@ -2298,6 +2333,8 @@ function bindSSEEvents(source = eventSource) {
 
   source.addEventListener('session_stopped', (e) => {
     const data = JSON.parse(e.data || '{}');
+    const sse = window.CCBridge?.sse;
+    if (sse?.handleSessionStopped) return sse.handleSessionStopped(data, getSseLifecycleOptions());
     if (!isEventForCurrentSession(data)) return;
     sessionActive = false;
     isResponding = false;
@@ -2311,6 +2348,8 @@ function bindSSEEvents(source = eventSource) {
     // 会话被其他客户端接管，服务端已自动注册本端为 viewer 并推送 session_started(viewing=true)
     // 前端只需显示提示，无需调用 resumeSession（避免 ping-pong 循环）
     const data = JSON.parse(e.data);
+    const sse = window.CCBridge?.sse;
+    if (sse?.handleSessionTaken) return sse.handleSessionTaken(data, getSseLifecycleOptions());
     if (data.session_id && data.session_id === currentSessionId) {
       addSystemMsg(t('sessionTaken') || '会话被其他客户端接管，切换为观察模式');
       isViewer = true;
@@ -2322,6 +2361,8 @@ function bindSSEEvents(source = eventSource) {
   source.addEventListener('user_message', (e) => {
     // viewer 收到 owner 发送的用户消息（一问一答中的"问"）
     const data = JSON.parse(e.data);
+    const sse = window.CCBridge?.sse;
+    if (sse?.handleUserMessage) return sse.handleUserMessage(data, getSseLifecycleOptions());
     if (!isEventForCurrentSession(data)) return;
     if (data.content) {
       addUserMessage(data.content);
