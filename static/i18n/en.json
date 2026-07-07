@@ -436,6 +436,7 @@
   "updateUpToDate": "Already up to date",
   "updateCheckRunning": "Checking…",
   "updateChecking": "Updating…",
+  "updateConfirm": "New version {version} is available. Start update?",
   "quoteMessage": "Quote",
   "quotedMessage": "Quoted message",
   "removeQuote": "Remove quote",

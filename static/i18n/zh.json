@@ -436,6 +436,7 @@
   "updateUpToDate": "已是最新版本",
   "updateCheckRunning": "检查中…",
   "updateChecking": "正在更新…",
+  "updateConfirm": "发现新版本 {version}，是否开始更新？",
   "quoteMessage": "引用",
   "quotedMessage": "已引用消息",
   "removeQuote": "移除引用",

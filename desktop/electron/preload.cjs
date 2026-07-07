@@ -4,6 +4,7 @@ contextBridge.exposeInMainWorld('ccBridgeDesktop', {
   platform: process.platform,
   openLogs: () => ipcRenderer.invoke('desktop:open-logs'),
   closeWindow: () => ipcRenderer.invoke('desktop:close-window'),
+  getVersion: () => ipcRenderer.invoke('desktop:get-version'),
   checkUpdate: () => ipcRenderer.invoke('desktop:check-update'),
   installUpdate: () => ipcRenderer.invoke('desktop:install-update'),
 })

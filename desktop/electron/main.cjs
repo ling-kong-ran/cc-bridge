@@ -255,6 +255,7 @@ if (!gotLock) {
     ipcMain.handle('desktop:close-window', () => {
       if (mainWindow && !mainWindow.isDestroyed()) mainWindow.close()
     })
+    ipcMain.handle('desktop:get-version', () => app.getVersion())
     ipcMain.handle('desktop:check-update', checkDesktopUpdate)
     ipcMain.handle('desktop:install-update', installDesktopUpdate)
     createWindow()

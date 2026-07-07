@@ -144,6 +144,42 @@
     if (overlay) overlay.style.display = 'none';
   }
 
+  async function loadNavVersionBadge() {
+    if (!window.ccBridgeDesktop?.getVersion) return;
+    try {
+      const version = await window.ccBridgeDesktop.getVersion();
+      renderNavVersionBadge({ ok: true, local: version });
+    } catch (e) { /* ignore */ }
+  }
+
+  function renderNavVersionBadge(data) {
+    const badge = document.getElementById('nav-version-badge');
+    const text = document.getElementById('nav-version-text');
+    const dot = document.getElementById('nav-update-dot');
+    if (!badge || !text) return;
+    const localVersion = data?.local_short || data?.local || '';
+    if (!localVersion) {
+      badge.style.display = 'none';
+      return;
+    }
+    badge.style.display = '';
+    badge.classList.toggle('has-update', Boolean(data?.has_update));
+    text.textContent = data?.has_update ? `${localVersion} → ${data.remote || ''}` : localVersion;
+    badge.title = data?.has_update ? `更新可用：${data.remote || ''}` : `版本 ${localVersion}`;
+    badge.setAttribute('aria-label', badge.title);
+    if (dot) dot.style.display = data?.has_update ? '' : 'none';
+  }
+
+  async function promptAndRunUpdate(options = {}) {
+    const ctx = getContext(options);
+    const info = ctx.getUpdateInfo();
+    if (!info?.has_update) return;
+    const remote = info.remote || '';
+    if (!window.confirm(ctx.t('updateConfirm', { version: remote }))) return;
+    openUpdateModal();
+    await runUpdate(options);
+  }
+
   async function checkForUpdate(manual = false, options = {}) {
     const ctx = getContext(options);
     const checkBtn = document.getElementById('btn-check-update');
@@ -164,6 +200,7 @@
           return resp.json();
         })();
       ctx.setUpdateInfo(data);
+      renderNavVersionBadge(data);
       if (!data.ok) {
         if (manual && checkHint) {
           checkHint.textContent = data.error ? `${ctx.t('updateFailed')}: ${data.error}` : ctx.t('updateFailed');
@@ -283,10 +320,12 @@
 
   function initUpdateModal(options = {}) {
     initCliUpdate(options);
+    loadNavVersionBadge();
     document.getElementById('update-close')?.addEventListener('click', closeUpdateModal);
     document.getElementById('update-skip')?.addEventListener('click', () => skipThisVersion());
     document.getElementById('update-run')?.addEventListener('click', () => runUpdate());
     document.getElementById('btn-check-update')?.addEventListener('click', () => checkForUpdate(true));
+    document.getElementById('nav-version-badge')?.addEventListener('click', () => promptAndRunUpdate(options));
     document.getElementById('update-overlay')?.addEventListener('click', (e) => {
       if (e.target === e.currentTarget) closeUpdateModal();
     });
@@ -312,6 +351,9 @@
     setUpdateStatus,
     openUpdateModal,
     closeUpdateModal,
+    loadNavVersionBadge,
+    renderNavVersionBadge,
+    promptAndRunUpdate,
     checkForUpdate,
     runUpdate,
     skipThisVersion,
