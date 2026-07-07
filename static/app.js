@@ -3479,39 +3479,16 @@ function renderContextTrace(trace = {}) {
 }
 
 // ─── Toast 通知 ─────────────────────────────────────────────────
-const toastContainer = document.getElementById('toast-container');
-let toastTimer = null;
-
 function getToastOptions() {
-  return { toastContainer };
+  return { toastContainer: document.getElementById('toast-container') };
 }
 
 function showToast(msg, type = 'info', duration = 3000) {
-  const toast = window.CCBridge?.toast;
-  if (toast?.showToast) return toast.showToast(msg, type, duration, getToastOptions());
-  const icon = { success: '✓', error: '✗', warning: '!', info: 'i' }[type] || 'i';
-  const el = document.createElement('div');
-  el.className = `toast ${type}`;
-  el.innerHTML = `<span class="toast-icon">${icon}</span><span class="toast-msg">${msg}</span><button class="toast-close">&times;</button>`;
-  el.querySelector('.toast-close').addEventListener('click', () => dismissToast(el));
-  el.addEventListener('mouseenter', () => { if (el._timer) clearTimeout(el._timer); });
-  el.addEventListener('mouseleave', () => { el._timer = setTimeout(() => dismissToast(el), 2000); });
-  toastContainer.appendChild(el);
-  el._timer = setTimeout(() => dismissToast(el), duration);
-  // 最多保留 5 条，旧的自上而下消失
-  const activeToasts = Array.from(toastContainer.children).filter(item => !item._dismissing);
-  activeToasts.slice(0, Math.max(0, activeToasts.length - 5)).forEach(dismissToast);
-  return el;
+  return window.CCBridge.toast?.showToast?.(msg, type, duration, getToastOptions());
 }
 
 function dismissToast(toast) {
-  const toastModule = window.CCBridge?.toast;
-  if (toastModule?.dismissToast) return toastModule.dismissToast(toast);
-  if (toast._dismissing) return;
-  toast._dismissing = true;
-  if (toast._timer) { clearTimeout(toast._timer); toast._timer = null; }
-  toast.classList.add('dismissing');
-  setTimeout(() => { if (toast.parentNode) toast.remove(); }, 200);
+  return window.CCBridge.toast?.dismissToast?.(toast);
 }
 
 // ─── 输入 ────────────────────────────────────────────────────
