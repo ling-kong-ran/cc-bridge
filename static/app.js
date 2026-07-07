@@ -242,7 +242,17 @@ document.addEventListener('DOMContentLoaded', async () => {
   initDirectoryPicker();
   loadSessions();
   initFocusConfigReload();
-  // 工具卡片折叠事件委托（支持 Shift+点击展开/折叠全部）
+  initToolCardInteractions();
+  showPage('home');
+  if (autoUpdateEnabled) setTimeout(() => checkForUpdate(), 3000);
+});
+
+function initToolCardInteractions() {
+  const toolCards = window.CCBridge?.toolCards;
+  if (toolCards?.initToolCardInteractions) {
+    toolCards.initToolCardInteractions({ root: document });
+    return;
+  }
   function toggleCard(card, shiftKey) {
     if (shiftKey) {
       const allCards = document.querySelectorAll('.tool-card');
@@ -269,9 +279,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (!card) return;
     toggleCard(card, e.shiftKey);
   });
-  showPage('home');
-  if (autoUpdateEnabled) setTimeout(() => checkForUpdate(), 3000);
-});
+}
 
 function initSessionWorkspace() {
   if (!workspaceEl || !workspaceTabsEl || !workspacePanesEl || !workspaceLivePane) return;
