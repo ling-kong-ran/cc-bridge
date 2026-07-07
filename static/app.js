@@ -3777,119 +3777,14 @@ function getSessionResumeOptions() {
   };
 }
 
+function getSessionResumeModule() {
+  const mod = window.CCBridge?.sessionResume;
+  if (!mod) console.error('CCBridge sessionResume module is not loaded');
+  return mod;
+}
+
 async function resumeSession(sessionId, cwd, model, savedCost = 0, remoteTargetId = '', savedTokens = null, cli = '') {
-  const sessionResume = window.CCBridge?.sessionResume;
-  if (sessionResume?.resumeSession) return sessionResume.resumeSession(sessionId, cwd, model, savedCost, remoteTargetId, savedTokens, cli, getSessionResumeOptions());
-  if (!clientId) {
-    addSystemMsg(t('notConnected'), true);
-    return;
-  }
-
-  // 清空当前消息区
-  clearQuotedMessagesForSend();
-  messagesEl.innerHTML = '';
-  currentAssistantEl = null;
-  currentAssistantMessageId = null;
-  currentContent = [];
-  streamBlocks = {};
-  isResponding = false;
-  currentRunId = null;
-  currentSessionId = sessionId;
-  resetAssistantStreamState();
-  totalCost = Number.isFinite(savedCost) ? savedCost : 0;
-  totalTokens = normalizeTokenUsage(savedTokens);
-  renderTopbarMeta(model || modelSelect.value);
-  renderCost();
-  renderTokens();
-
-  // 设置 UI
-  if (cwd) {
-    cwdInput.value = cwd;
-    updateRuntimeSummary();
-  }
-  refreshRightPaneFiles();
-  if (model && hasModelOption(model)) {
-    modelSelect.value = model;
-    renderTopbarMeta(model);
-  }
-  // 恢复远程目标选择
-  if (remoteTargetSelect) {
-    remoteTargetSelect.value = remoteTargetId || '';
-    updateRemoteMutateRow();
-  }
-  // 恢复 CLI 选择
-  const cliSelectEl = document.getElementById('cli-select');
-  if (cliSelectEl && cli && [...cliSelectEl.options].some(o => o.value === cli)) {
-    cliSelectEl.value = cli;
-    renderTopbarMeta(model || modelSelect.value);
-  }
-
-  addSystemMsg(t('restoring'));
-
-  // 加载历史消息
-  try {
-    const resp = await fetch('/api/sessions/history', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ session_id: sessionId, cwd: cwd }),
-    });
-    const history = await resp.json();
-    if (history && history.length > 0) {
-      renderStaticHistory(history);
-    }
-  } catch(e) {
-    console.error('历史消息加载失败:', e);
-  }
-
-  let resumeCwd = cwd || cwdInput.value.trim() || null;
-  const notifyPlatforms = notifyFeishu?.checked ? ['feishu'] : [];
-  let result = await sendAction('resume_session', {
-    session_id: sessionId,
-    model: model || modelSelect.value,
-    cli: cli || document.getElementById('cli-select')?.value || '',
-    cwd: resumeCwd,
-    skip_permissions: document.getElementById('skip-permissions').checked,
-    remote_target_id: remoteTargetId || '',
-    allow_remote_mutate: !!remoteAllowMutate?.checked,
-    notify_platforms: notifyPlatforms,
-  });
-
-  // 目录无效时，让用户手动指定新目录
-  if (result && !result.ok && isCwdError(result.error || '')) {
-    addSystemMsg(t('cwdNotExist', { path: resumeCwd || '(空)' }), true);
-    const newCwd = await promptCwdForSession(resumeCwd);
-    if (newCwd) {
-      const updateResult = await updateSessionCwd(sessionId, newCwd);
-      if (updateResult.ok) {
-        addSystemMsg(t('cwdChanged', { path: newCwd }));
-        cwdInput.value = newCwd;
-        updateRuntimeSummary();
-        resumeCwd = newCwd;
-        // 重试 resume
-        result = await sendAction('resume_session', {
-          session_id: sessionId,
-          model: model || modelSelect.value,
-          cli: cli || document.getElementById('cli-select')?.value || '',
-          cwd: resumeCwd,
-          skip_permissions: document.getElementById('skip-permissions').checked,
-          remote_target_id: remoteTargetId || '',
-          allow_remote_mutate: !!remoteAllowMutate?.checked,
-          notify_platforms: notifyPlatforms,
-        });
-      } else {
-        addSystemMsg(t('cwdNotChanged', { message: updateResult.error || t('unknownError') }), true);
-      }
-    }
-  }
-
-  if (result && result.ok) {
-    sessionActive = true;
-    updateUI();
-    addSystemMsg(t('restored'));
-  } else {
-    addSystemMsg(t('restoreFailed', { message: result?.error || t('unknownError') }), true);
-  }
-  loadSessions();
+  return getSessionResumeModule()?.resumeSession?.(sessionId, cwd, model, savedCost, remoteTargetId, savedTokens, cli, getSessionResumeOptions());
 }
 
 function resetAssistantStreamState() {

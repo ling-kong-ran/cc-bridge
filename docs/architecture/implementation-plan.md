@@ -187,6 +187,7 @@ cc-bridge/
 - 新增 `static/js/welcome-runtime.js`，把欢迎页运行时选择器渲染和选择同步逻辑从 `static/app.js` 拆出并挂载到 `window.CCBridge.welcomeRuntime`。
 - 收敛 `static/app.js` 中欢迎页运行时 wrapper，移除剩余本地选择器渲染和变更同步 fallback 实现，统一委托 `static/js/welcome-runtime.js`。
 - 新增 `static/js/session-resume.js`，把会话恢复、历史预加载和 cwd 失效重试逻辑从 `static/app.js` 拆出并挂载到 `window.CCBridge.sessionResume`。
+- 收敛 `static/app.js` 中会话恢复 wrapper，移除剩余本地恢复状态重置、历史预加载和 cwd 失效重试 fallback 实现，统一委托 `static/js/session-resume.js`。
 - 新增 `static/js/session-cwd.js`，把会话 cwd 错误识别、目录重选和 cwd 持久化更新逻辑从 `static/app.js` 拆出并挂载到 `window.CCBridge.sessionCwd`。
 - 扩展 `static/js/workspace.js`，继续承接 workspace pane resizer 创建、拖拽状态更新和宽度保存逻辑，减少 `static/app.js` 的 workspace 交互职责。
 - 扩展 `static/js/workspace.js`，继续承接 workspace tabs 事件绑定和标签页渲染逻辑，减少 `static/app.js` 的 workspace 标签页职责。
