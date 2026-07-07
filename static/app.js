@@ -3306,6 +3306,20 @@ function dismissToast(toast) {
 // ─── 输入 ────────────────────────────────────────────────────
 const quotePreviewBar = document.getElementById('quote-preview-bar');
 
+function getMessageExtrasOptions() {
+  return {
+    t,
+    esc,
+    setVisible,
+    addSystemMsg,
+    showPage,
+    domText,
+    messagesEl,
+    inputEl,
+    quotePreviewBar,
+  };
+}
+
 function initInput() {
   window.CCBridge.input?.initInput?.();
 }
@@ -3347,6 +3361,8 @@ function consumeAttachedFiles() {
 }
 
 async function copyConversationMarkdown() {
+  const messageExtras = window.CCBridge?.messageExtras;
+  if (messageExtras?.copyConversationMarkdown) return messageExtras.copyConversationMarkdown(getMessageExtrasOptions());
   const markdown = buildConversationMarkdown();
   if (!markdown) {
     addSystemMsg(t('nothingToExport'), true);
@@ -3361,6 +3377,8 @@ async function copyConversationMarkdown() {
 }
 
 function buildConversationMarkdown() {
+  const messageExtras = window.CCBridge?.messageExtras;
+  if (messageExtras?.buildConversationMarkdown) return messageExtras.buildConversationMarkdown(getMessageExtrasOptions());
   const lines = [];
   messagesEl.querySelectorAll('.message, .system-msg').forEach(el => {
     if (el.classList.contains('user')) {
@@ -3375,16 +3393,22 @@ function buildConversationMarkdown() {
 }
 
 function domText(el) {
+  const messageExtras = window.CCBridge?.messageExtras;
+  if (messageExtras?.domText) return messageExtras.domText(el);
   return (el.querySelector('.msg-content') || el).textContent.trim();
 }
 
 // ─── 消息引用 ────────────────────────────────────────────────
 function hideMsgContextMenu() {
+  const messageExtras = window.CCBridge?.messageExtras;
+  if (messageExtras?.hideMsgContextMenu) return messageExtras.hideMsgContextMenu();
   const menu = document.getElementById('msg-context-menu');
   if (menu) { menu.style.display = 'none'; menu.style.visibility = 'hidden'; }
 }
 
 function normalizeQuoteEntry(entry) {
+  const messageExtras = window.CCBridge?.messageExtras;
+  if (messageExtras?.normalizeQuoteEntry) return messageExtras.normalizeQuoteEntry(entry);
   if (entry && typeof entry === 'object') {
     return {
       type: entry.type || 'text',
@@ -3397,11 +3421,15 @@ function normalizeQuoteEntry(entry) {
 }
 
 function quoteDisplayText(entry) {
+  const messageExtras = window.CCBridge?.messageExtras;
+  if (messageExtras?.quoteDisplayText) return messageExtras.quoteDisplayText(entry);
   const quote = normalizeQuoteEntry(entry);
   return quote.text;
 }
 
 function quoteIntoInput(text, meta = null) {
+  const messageExtras = window.CCBridge?.messageExtras;
+  if (messageExtras?.quoteIntoInput) return messageExtras.quoteIntoInput(text, meta, getMessageExtrasOptions());
   const normalized = (text || '').trim();
   if (!normalized) return;
   quotedMessages.push(normalizeQuoteEntry({ ...(meta || {}), text: normalized }));
@@ -3414,6 +3442,8 @@ function quoteIntoInput(text, meta = null) {
 }
 
 function renderQuotePreview() {
+  const messageExtras = window.CCBridge?.messageExtras;
+  if (messageExtras?.renderQuotePreview) return messageExtras.renderQuotePreview(getMessageExtrasOptions());
   if (!quotePreviewBar) return;
   if (quotedMessages.length === 0) {
     setVisible(quotePreviewBar, false);
@@ -3439,6 +3469,8 @@ function renderQuotePreview() {
 }
 
 function initMessageContextMenu() {
+  const messageExtras = window.CCBridge?.messageExtras;
+  if (messageExtras?.initMessageContextMenu) return messageExtras.initMessageContextMenu(getMessageExtrasOptions());
   const menu = document.getElementById('msg-context-menu');
   menu?.remove();
 
@@ -3492,10 +3524,14 @@ function handleGlobalShortcuts(e) {
 }
 
 function quotePayloadForBackend(quotes) {
+  const messageExtras = window.CCBridge?.messageExtras;
+  if (messageExtras?.quotePayloadForBackend) return messageExtras.quotePayloadForBackend(quotes);
   return quotes.map(normalizeQuoteEntry).filter(q => q.text || (q.path && q.lines.length));
 }
 
 function quoteBackendPayload(quotes) {
+  const messageExtras = window.CCBridge?.messageExtras;
+  if (messageExtras?.quoteBackendPayload) return messageExtras.quoteBackendPayload(quotes);
   return quotes.map(normalizeQuoteEntry).map(q => {
     if (q.type === 'file_lines' && q.path && q.lines.length) {
       return { type: 'file_lines', path: q.path, lines: q.lines };
@@ -3504,9 +3540,22 @@ function quoteBackendPayload(quotes) {
   }).filter(q => q.text || (q.path && q.lines?.length));
 }
 
+function getQuotedMessagesForSend() {
+  const messageExtras = window.CCBridge?.messageExtras;
+  if (messageExtras?.getQuotedMessages) return messageExtras.getQuotedMessages();
+  return quotedMessages;
+}
+
+function clearQuotedMessagesForSend() {
+  const messageExtras = window.CCBridge?.messageExtras;
+  if (messageExtras?.clearQuotedMessages) return messageExtras.clearQuotedMessages(getMessageExtrasOptions());
+  quotedMessages = [];
+  renderQuotePreview();
+}
+
 async function sendMessage() {
   let content = inputEl.value.trim();
-  const quotesForThisTurn = quotePayloadForBackend(quotedMessages);
+  const quotesForThisTurn = quotePayloadForBackend(getQuotedMessagesForSend());
   const isLiveFollowup = isResponding;
   const attachedFiles = getAttachedFiles();
   if ((!content && attachedFiles.length === 0 && quotesForThisTurn.length === 0) || !sessionActive) return;
@@ -3525,8 +3574,7 @@ async function sendMessage() {
         .join('\n\n');
       content = content ? `${quotedText}\n\n${content}` : quotedText;
     }
-    quotedMessages = [];
-    renderQuotePreview();
+    clearQuotedMessagesForSend();
   }
 
   // 注入文件路径。上传缓存文件会保留在工作目录中，供历史会话和资产页继续打开。
@@ -3606,8 +3654,7 @@ function getSlashCommandName(content) {
 
 function resetSessionViewState() {
   stopTurnTimer();
-  quotedMessages = [];
-  renderQuotePreview();
+  clearQuotedMessagesForSend();
   messagesEl.innerHTML = '';
   currentAssistantEl = null;
   currentAssistantMessageId = null;
@@ -4131,8 +4178,7 @@ async function resumeSession(sessionId, cwd, model, savedCost = 0, remoteTargetI
   }
 
   // 清空当前消息区
-  quotedMessages = [];
-  renderQuotePreview();
+  clearQuotedMessagesForSend();
   messagesEl.innerHTML = '';
   currentAssistantEl = null;
   currentAssistantMessageId = null;
