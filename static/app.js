@@ -3921,7 +3921,60 @@ function getSlashCommandName(content) {
   return match ? match[0] : '';
 }
 
+function getSessionControlOptions() {
+  return {
+    t,
+    addSystemMsg,
+    showPage,
+    stopTurnTimer,
+    clearQuotedMessagesForSend,
+    emptyTokenUsage,
+    renderTopbarMeta,
+    renderCost,
+    renderTokens,
+    ensureWorkspaceSession,
+    refreshRightPaneFiles,
+    updateRuntimeSummary,
+    sendAction,
+    loadSessions,
+    getClientId: () => clientId,
+    getState: () => ({
+      currentAssistantEl,
+      currentAssistantMessageId,
+      currentContent,
+      streamBlocks,
+      totalCost,
+      totalTokens,
+      currentSessionId,
+      currentRunId,
+      activeWorkspaceSessionId,
+    }),
+    setState: (state = {}) => {
+      if ('currentAssistantEl' in state) currentAssistantEl = state.currentAssistantEl;
+      if ('currentAssistantMessageId' in state) currentAssistantMessageId = state.currentAssistantMessageId;
+      if ('currentContent' in state) currentContent = state.currentContent;
+      if ('streamBlocks' in state) streamBlocks = state.streamBlocks;
+      if ('totalCost' in state) totalCost = state.totalCost;
+      if ('totalTokens' in state) totalTokens = state.totalTokens;
+      if ('currentSessionId' in state) currentSessionId = state.currentSessionId;
+      if ('currentRunId' in state) currentRunId = state.currentRunId;
+      if ('activeWorkspaceSessionId' in state) activeWorkspaceSessionId = state.activeWorkspaceSessionId;
+    },
+    messagesEl,
+    cwdInput,
+    modelSelect,
+    remoteTargetSelect,
+    remoteAllowMutate,
+    memoryAutoInject,
+    notifyFeishu,
+    skipPermissions: document.getElementById('skip-permissions'),
+    cliSelect: document.getElementById('cli-select'),
+  };
+}
+
 function resetSessionViewState() {
+  const sessionControl = window.CCBridge?.sessionControl;
+  if (sessionControl?.resetSessionViewState) return sessionControl.resetSessionViewState(getSessionControlOptions());
   stopTurnTimer();
   clearQuotedMessagesForSend();
   messagesEl.innerHTML = '';
@@ -3939,6 +3992,8 @@ function resetSessionViewState() {
 }
 
 function startNewSession() {
+  const sessionControl = window.CCBridge?.sessionControl;
+  if (sessionControl?.startNewSession) return sessionControl.startNewSession(getSessionControlOptions());
   if (!clientId) {
     addSystemMsg(t('notConnected'), true);
     return;
@@ -3949,6 +4004,8 @@ function startNewSession() {
 }
 
 function createNewSession(cwd) {
+  const sessionControl = window.CCBridge?.sessionControl;
+  if (sessionControl?.createNewSession) return sessionControl.createNewSession(cwd, getSessionControlOptions());
   resetSessionViewState();
   const pendingSessionId = `pending-${Date.now()}`;
   activeWorkspaceSessionId = pendingSessionId;
@@ -3979,6 +4036,8 @@ function createNewSession(cwd) {
 }
 
 async function startNewSessionFromCwd(cwd) {
+  const sessionControl = window.CCBridge?.sessionControl;
+  if (sessionControl?.startNewSessionFromCwd) return sessionControl.startNewSessionFromCwd(cwd, getSessionControlOptions());
   const nextCwd = (cwd || '').trim();
   if (!nextCwd || !clientId) {
     if (!clientId) addSystemMsg(t('notConnected'), true);
