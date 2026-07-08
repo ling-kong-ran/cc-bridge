@@ -188,7 +188,7 @@ function checkExistingBackend(port) {
     method: 'GET',
     timeout: 800,
   }).then(result => {
-    if (result.statusCode !== 200 || result.data?.app !== 'cc-bridge' || result.data?.mode !== 'desktop') return null
+    if (result.statusCode !== 200 || result.data?.app !== 'cc-bridge') return null
     if (result.data?.app_root && result.data.app_root !== normalizedAppRoot()) return null
     return {
       type: 'server_ready',
