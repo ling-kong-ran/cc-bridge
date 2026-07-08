@@ -1,6 +1,6 @@
 const { app, BrowserWindow, Menu, ipcMain, shell, Notification } = require('electron')
 const { autoUpdater } = require('electron-updater')
-const { spawn } = require('node:child_process')
+const { spawn, spawnSync } = require('node:child_process')
 const crypto = require('node:crypto')
 const fs = require('node:fs')
 const http = require('node:http')
@@ -57,10 +57,91 @@ function runtimeRoot() {
   return path.join(APP_ROOT, 'runtime')
 }
 
+function isWindowsAppExecutionAlias(filePath) {
+  return String(filePath || '').replace(/\\/g, '/').toLowerCase().includes('/microsoft/windowsapps/')
+}
+
+function isUsableFile(filePath) {
+  try {
+    return Boolean(filePath && fs.existsSync(filePath) && fs.statSync(filePath).isFile())
+  } catch {
+    return false
+  }
+}
+
+function pythonVersion(command) {
+  try {
+    const result = spawnSync(command, ['-c', 'import sys; print(f"{sys.version_info[0]}.{sys.version_info[1]}")'], {
+      encoding: 'utf8',
+      windowsHide: true,
+      timeout: 8000,
+    })
+    const text = (result.stdout || '').trim()
+    const match = text.match(/^(\d+)\.(\d+)$/)
+    if (!match) return null
+    return { major: Number(match[1]), minor: Number(match[2]) }
+  } catch {
+    return null
+  }
+}
+
+function isSupportedPython(command) {
+  if (process.platform === 'win32' && isWindowsAppExecutionAlias(command)) return false
+  const version = pythonVersion(command)
+  return Boolean(version && (version.major > 3 || (version.major === 3 && version.minor >= 10)))
+}
+
+function resolvePythonFromLauncher() {
+  if (process.platform !== 'win32') return ''
+  try {
+    const result = spawnSync('py', ['-3', '-c', 'import sys; print(sys.executable)'], {
+      encoding: 'utf8',
+      windowsHide: true,
+      timeout: 8000,
+    })
+    const candidate = (result.stdout || '').trim()
+    if (isUsableFile(candidate) && isSupportedPython(candidate)) return candidate
+  } catch {}
+  return ''
+}
+
+function resolvePythonFromCommonDirs() {
+  if (process.platform !== 'win32') return ''
+  const bases = [
+    path.join(os.homedir(), 'AppData', 'Local', 'Programs', 'Python'),
+    process.env.ProgramFiles ? path.join(process.env.ProgramFiles, 'Python') : '',
+    process.env['ProgramFiles(x86)'] ? path.join(process.env['ProgramFiles(x86)'], 'Python') : '',
+  ].filter(Boolean)
+  const candidates = []
+  for (const base of bases) {
+    try {
+      for (const name of fs.readdirSync(base)) {
+        const python = path.join(base, name, 'python.exe')
+        if (isUsableFile(python)) {
+          const version = pythonVersion(python)
+          if (version && (version.major > 3 || (version.major === 3 && version.minor >= 10))) {
+            candidates.push({ python, version })
+          }
+        }
+      }
+    } catch {}
+  }
+  candidates.sort((a, b) => (b.version.major - a.version.major) || (b.version.minor - a.version.minor))
+  return candidates[0]?.python || ''
+}
+
 function resolvePythonCommand() {
-  if (process.env.CCB_DESKTOP_PYTHON) return process.env.CCB_DESKTOP_PYTHON
-  if (process.platform === 'win32') return 'python'
-  return 'python3'
+  if (process.env.CCB_DESKTOP_PYTHON && isSupportedPython(process.env.CCB_DESKTOP_PYTHON)) return process.env.CCB_DESKTOP_PYTHON
+  if (process.platform === 'win32') {
+    const launcherPython = resolvePythonFromLauncher()
+    if (launcherPython) return launcherPython
+    const installedPython = resolvePythonFromCommonDirs()
+    if (installedPython) return installedPython
+    if (isSupportedPython('python')) return 'python'
+    if (isSupportedPython('python3')) return 'python3'
+    return 'python'
+  }
+  return isSupportedPython('python3') ? 'python3' : 'python'
 }
 
 function configureLoginStartup() {
@@ -201,10 +282,10 @@ function checkExistingBackend(port, requireAppRootMatch = true) {
   }).catch(() => null)
 }
 
-async function findExistingBackend() {
+async function findExistingBackend(requireAppRootMatch = true) {
   const startPort = Number(process.env.CCB_PORT || 17878)
   const checks = []
-  for (let port = startPort; port < startPort + 50; port += 1) checks.push(checkExistingBackend(port))
+  for (let port = startPort; port < startPort + 50; port += 1) checks.push(checkExistingBackend(port, requireAppRootMatch))
   const results = await Promise.all(checks)
   return results.find(Boolean) || null
 }
@@ -212,13 +293,7 @@ async function findExistingBackend() {
 async function waitForExistingBackend(timeoutMs = READY_TIMEOUT_MS) {
   const start = Date.now()
   while (Date.now() - start < timeoutMs) {
-    // 轮询自己刚 spawn 的后端：只校验 app==cc-bridge，放宽 app_root 严格匹配，
-    // 避免 Windows 路径大小写/短路径名差异导致漏判。
-    const startPort = Number(process.env.CCB_PORT || 17878)
-    const checks = []
-    for (let port = startPort; port < startPort + 50; port += 1) checks.push(checkExistingBackend(port, false))
-    const results = await Promise.all(checks)
-    const existing = results.find(Boolean)
+    const existing = await findExistingBackend(false)
     if (existing) return existing
     await new Promise(resolve => setTimeout(resolve, 500))
   }
@@ -257,29 +332,34 @@ function spawnBackend() {
   return { child: backendProcess, token }
 }
 
+function openBackend(event, token = '') {
+  if (!event || backendReady) return
+  backendReady = { ...event, token: event.token || token }
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.loadURL(event.url)
+  }
+}
+
 async function startBackend() {
-  const existing = await findExistingBackend()
+  const existing = await findExistingBackend(false)
   if (existing) {
-    backendReady = existing
-    if (mainWindow && !mainWindow.isDestroyed()) mainWindow.loadURL(existing.url)
+    openBackend(existing)
     return
   }
 
   const { child, token } = spawnBackend()
-  Promise.race([
-    waitForReady(child),
-    waitForExistingBackend(),
-  ])
+  waitForReady(child)
+    .then(event => openBackend(event, token))
+    .catch(error => console.error('stdout ready 检测失败', error))
+
+  waitForExistingBackend()
     .then(event => {
-      if (!event) throw new Error(`等待后端启动超时 (${READY_TIMEOUT_MS}ms)`)
-      backendReady = { ...event, token: event.token || token }
-      if (mainWindow && !mainWindow.isDestroyed()) {
-        mainWindow.loadURL(event.url)
-      }
+      if (event) openBackend(event, token)
+      else if (!backendReady) throw new Error(`等待后端启动超时 (${READY_TIMEOUT_MS}ms)`)
     })
     .catch(error => {
       console.error(error)
-      if (mainWindow && !mainWindow.isDestroyed()) mainWindow.loadFile(pagePath('backend-error.html'))
+      if (mainWindow && !mainWindow.isDestroyed() && !backendReady) mainWindow.loadFile(pagePath('backend-error.html'))
     })
 }
 

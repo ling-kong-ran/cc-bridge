@@ -15,7 +15,15 @@ from .state import log
 _MIN_PYTHON = (3, 10)
 
 
+def _is_windows_app_execution_alias(path: Path) -> bool:
+    text = str(path).replace("\\", "/").lower()
+    return "/microsoft/windowsapps/" in text
+
+
 def _python_version(path: Path) -> tuple[int, int] | None:
+    if os.name == "nt" and _is_windows_app_execution_alias(path):
+        log(f"跳过 WindowsApps Python 占位入口：{path}")
+        return None
     try:
         proc = subprocess.run(
             [str(path), "-c", "import sys; print(sys.version_info[:2])"],
@@ -140,6 +148,9 @@ def find_server_python(allow_install: bool = True) -> Path:
         found = shutil.which(cmd)
         if found:
             p = Path(found)
+            if os.name == "nt" and _is_windows_app_execution_alias(p):
+                log(f"跳过 WindowsApps Python 占位入口：{found}")
+                continue
             ver = _python_version(p)
             if ver and ver < _MIN_PYTHON:
                 log(f"PATH 中的 Python 版本过低（{ver[0]}.{ver[1]}），跳过：{found}")
