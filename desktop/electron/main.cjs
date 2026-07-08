@@ -210,6 +210,16 @@ async function findExistingBackend() {
   return results.find(Boolean) || null
 }
 
+async function waitForExistingBackend(timeoutMs = READY_TIMEOUT_MS) {
+  const start = Date.now()
+  while (Date.now() - start < timeoutMs) {
+    const existing = await findExistingBackend()
+    if (existing) return existing
+    await new Promise(resolve => setTimeout(resolve, 500))
+  }
+  return null
+}
+
 function spawnBackend() {
   const token = crypto.randomBytes(32).toString('hex')
   const env = {
@@ -251,9 +261,13 @@ async function startBackend() {
   }
 
   const { child, token } = spawnBackend()
-  waitForReady(child)
+  Promise.race([
+    waitForReady(child),
+    waitForExistingBackend(),
+  ])
     .then(event => {
-      backendReady = { ...event, token }
+      if (!event) throw new Error(`等待后端启动超时 (${READY_TIMEOUT_MS}ms)`)
+      backendReady = { ...event, token: event.token || token }
       if (mainWindow && !mainWindow.isDestroyed()) {
         mainWindow.loadURL(event.url)
       }
