@@ -130,11 +130,8 @@
 
   function renderTools(tools) {
     const el = document.getElementById('tools-list');
-    const countEl = document.getElementById('tools-count');
     if (!el) return;
     const list = Array.isArray(tools) ? tools : [];
-    const enabledCount = list.filter(tool => tool.enabled).length;
-    if (countEl) countEl.textContent = t('toolsCount', { enabled: enabledCount, count: list.length });
     if (!list.length) {
       el.innerHTML = `<p class="empty-state">${esc(t('noTools'))}</p>`;
       return;

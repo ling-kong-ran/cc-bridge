@@ -3056,6 +3056,43 @@ html.light-theme body.resizing-workspace-pane .workspace-pane-resizer::after {
   scroll-behavior: smooth;
 }
 
+.scroll-latest-btn {
+  position: absolute;
+  right: 24px;
+  bottom: 18px;
+  z-index: 10;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 12px;
+  border: 1px solid rgba(var(--accent-rgb), 0.34);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--bg-raised) 92%, transparent);
+  color: var(--text-bright);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 700;
+  box-shadow: var(--shadow-sm);
+  cursor: pointer;
+  transition: opacity var(--t-fast), transform var(--t-fast), border-color var(--t-fast), background var(--t-fast);
+}
+
+.scroll-latest-btn::after {
+  content: '↓';
+  color: var(--green);
+  font-size: 13px;
+}
+
+.scroll-latest-btn:hover {
+  transform: translateY(-1px);
+  border-color: rgba(var(--accent-rgb), 0.62);
+  background: var(--bg-hover);
+}
+
+.scroll-latest-btn[hidden] {
+  display: none;
+}
+
 /* ─── Welcome ───────────────────────────────────────────────── */
 .welcome-msg {
   display: flex;
@@ -6486,7 +6523,6 @@ html.light-theme .agent-status-bar {
 
   .sessions-toolbar,
   .skills-toolbar,
-  .tools-toolbar,
   .artifacts-toolbar,
   .memory-toolbar {
     flex-direction: column;
@@ -6504,14 +6540,8 @@ html.light-theme .agent-status-bar {
   }
 
   .sessions-count,
-  .skills-count,
-  .tools-count {
+  .skills-count {
     align-self: flex-start;
-  }
-
-  .tools-note {
-    max-width: none;
-    text-align: left;
   }
 
   .skills-grid,
@@ -6980,28 +7010,6 @@ html.light-theme .agent-status-bar {
   font-size: 13px;
   line-height: 1.5;
 }
-
-.tools-toolbar {
-  min-height: 42px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 8px 12px;
-  border: 1px solid var(--border-dim);
-  border-radius: var(--radius-sm);
-  background: color-mix(in srgb, var(--bg-surface) 76%, transparent);
-}
-
-.tools-count,
-.tools-note {
-  color: var(--text-ghost);
-  font-family: var(--font-mono);
-  font-size: 11px;
-  letter-spacing: 0.05em;
-}
-
-.tools-note { max-width: 620px; line-height: 1.45; }
 
 .tools-grid {
   display: grid;

@@ -70,6 +70,7 @@
   "addFile": "添加文件",
   "messagePlaceholder": "输入消息...（回车发送，Shift+回车换行）",
   "send": "发送",
+  "backToLatest": "回到最新",
 
   "stop": "停止",
   "uiSettings": "界面设置",
@@ -213,8 +214,6 @@
   "tools": "工具",
   "toolsKicker": "Agent 能力",
   "toolsSubtitle": "查看并控制 Agent 可使用的工具，支持 Claude 内置工具和自定义扩展工具。",
-  "toolsCount": "已启用 {enabled} / 共 {count} 个工具",
-  "toolsNote": "Computer Use 仅面向隔离的后台目标，不会控制你当前正在使用的键盘或鼠标。",
   "noTools": "暂无工具",
   "toolEnabled": "已启用",
   "toolDisabled": "已禁用",

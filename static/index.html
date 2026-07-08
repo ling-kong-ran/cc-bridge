@@ -181,6 +181,9 @@
                   <div class="workspace-pane-status" data-i18n="workspaceIdle">Idle</div>
                 </div>
                 <div id="messages" class="messages" role="log" aria-live="polite" aria-relevant="additions text"></div>
+                <button id="btn-scroll-latest" class="scroll-latest-btn" type="button" title="Back to latest" data-i18n-title="backToLatest" aria-label="Back to latest" data-i18n-aria-label="backToLatest" hidden>
+                  <span data-i18n="backToLatest">Back to latest</span>
+                </button>
               </section>
             </div>
           </div>
@@ -407,10 +410,6 @@
             </div>
             <button id="btn-tools-refresh" class="btn-mini" type="button" data-i18n="refresh">Refresh</button>
           </header>
-          <div class="tools-toolbar">
-            <div id="tools-count" class="tools-count"></div>
-            <div class="tools-note" data-i18n="toolsNote">Computer Use runs only against isolated background targets and does not control your active keyboard or mouse.</div>
-          </div>
           <div id="tools-list" class="tools-grid">
             <p class="empty-state" data-i18n="loading">Loading...</p>
           </div>

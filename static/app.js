@@ -144,6 +144,7 @@ const workspacePaneWidths = new Map();
 
 // ─── DOM ─────────────────────────────────────────────────────
 const messagesEl = document.getElementById('messages');
+const btnScrollLatest = document.getElementById('btn-scroll-latest');
 const workspaceEl = document.getElementById('session-workspace');
 const workspaceTabsEl = document.getElementById('workspace-tabs');
 const workspacePanesEl = document.getElementById('workspace-panes');
@@ -2379,6 +2380,7 @@ function updateUI() {
 function getMessageScrollOptions() {
   return {
     messagesEl,
+    btnScrollLatest,
     requestAnimationFrame: window.requestAnimationFrame.bind(window),
   };
 }

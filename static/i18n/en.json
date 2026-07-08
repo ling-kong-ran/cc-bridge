@@ -70,6 +70,7 @@
   "addFile": "Add File",
   "messagePlaceholder": "Type a message... (Enter to send, Shift+Enter for newline)",
   "send": "Send",
+  "backToLatest": "Back to latest",
 
   "stop": "Stop",
   "uiSettings": "Interface Settings",
@@ -213,8 +214,6 @@
   "tools": "Tools",
   "toolsKicker": "Agent capabilities",
   "toolsSubtitle": "Review and control the tools agents can use, including Claude built-ins and custom extensions.",
-  "toolsCount": "{enabled} of {count} tools enabled",
-  "toolsNote": "Computer Use only targets isolated background contexts and does not control your active keyboard or mouse.",
   "noTools": "No tools",
   "toolEnabled": "Enabled",
   "toolDisabled": "Disabled",
