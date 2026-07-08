@@ -1,6 +1,8 @@
 """项目 Python 环境检测与准备。"""
 from __future__ import annotations
 
+import os
+import re
 import shutil
 import socket
 import subprocess
@@ -9,6 +11,95 @@ from pathlib import Path
 
 from .probe import REPO_ROOT, venv_python_path
 from .state import log
+
+_MIN_PYTHON = (3, 10)
+
+
+def _python_version(path: Path) -> tuple[int, int] | None:
+    try:
+        proc = subprocess.run(
+            [str(path), "-c", "import sys; print(sys.version_info[:2])"],
+            capture_output=True, text=True, timeout=8,
+        )
+        out = proc.stdout.strip()
+        m = re.match(r"\((\d+),\s*(\d+)\)", out)
+        if m:
+            return int(m[1]), int(m[2])
+    except Exception:
+        pass
+    return None
+
+
+def _scan_common_python_dirs() -> list[Path]:
+    """扫描常见 Python 安装目录，返回版本号从高到低的候选路径。"""
+    candidates: list[tuple[tuple[int, int] | None, Path]] = []
+
+    if os.name == "nt":
+        # py launcher — 优先用最新 Python 3
+        try:
+            proc = subprocess.run(
+                ["py", "-3", "-c", "import sys; print(sys.executable)"],
+                capture_output=True, text=True, timeout=8,
+            )
+            exe = proc.stdout.strip()
+            if exe:
+                p = Path(exe)
+                ver = _python_version(p)
+                if ver and ver >= _MIN_PYTHON:
+                    candidates.append((ver, p))
+        except Exception:
+            pass
+
+        bases = [
+            Path(os.environ.get("LOCALAPPDATA", "")) / "Programs" / "Python",
+            Path(os.environ.get("ProgramFiles", "C:/Program Files")) / "Python",
+            Path(os.environ.get("ProgramFiles(x86)", "C:/Program Files (x86)")) / "Python",
+        ]
+        for base in bases:
+            if not base.is_dir():
+                continue
+            for d in sorted(base.iterdir(), reverse=True):  # Python312 > Python311
+                if not d.is_dir():
+                    continue
+                exe = d / "python.exe"
+                if exe.is_file():
+                    ver = _python_version(exe)
+                    candidates.append((ver, exe))
+    else:
+        for pattern in ("python3.13", "python3.12", "python3.11", "python3.10"):
+            found = shutil.which(pattern)
+            if found:
+                p = Path(found)
+                ver = _python_version(p)
+                candidates.append((ver, p))
+        bases = [
+            Path("/usr/local/bin"),
+            Path("/opt/homebrew/bin"),
+        ]
+        for base in bases:
+            if not base.is_dir():
+                continue
+            for entry in sorted(base.iterdir(), reverse=True):
+                if not entry.is_file():
+                    continue
+                if re.match(r"python3\.\d+$", entry.name):
+                    ver = _python_version(entry)
+                    candidates.append((ver, entry))
+
+    # 版本降序，None 放最后
+    def _sort_key(item: tuple[tuple[int, int] | None, Path]) -> tuple[int, int]:
+        v = item[0]
+        return v if v else (-1, -1)
+
+    candidates.sort(key=_sort_key, reverse=True)
+
+    seen: set[str] = set()
+    result: list[Path] = []
+    for ver, path in candidates:
+        if str(path) not in seen:
+            seen.add(str(path))
+            result.append(path)
+    return result
 
 
 def find_server_python(allow_install: bool = True) -> Path:
@@ -37,19 +128,27 @@ def find_server_python(allow_install: bool = True) -> Path:
             _install_deps(venv_python)
             return venv_python
 
-    # 3. 无网 / .venv 创建失败：尝试系统 Python
+    # 3. 无网 / .venv 创建失败：扫描机器上的 Python，选版本最高的 ≥ 3.10
+    for candidate in _scan_common_python_dirs():
+        ver = _python_version(candidate)
+        if ver and ver >= _MIN_PYTHON:
+            log(f"使用扫描到的 Python（{ver[0]}.{ver[1]}）：{candidate}")
+            return candidate
+
+    # 4. PATH 中的 python3 / python
     for cmd in ("python3", "python"):
         found = shutil.which(cmd)
         if found:
+            p = Path(found)
+            ver = _python_version(p)
+            if ver and ver < _MIN_PYTHON:
+                log(f"PATH 中的 Python 版本过低（{ver[0]}.{ver[1]}），跳过：{found}")
+                continue
             log(f"使用系统 Python：{found}")
-            if online:
-                _install_deps(Path(found))
-            return Path(found)
+            return p
 
-    # 4. 当前进程 Python（最后兜底）
+    # 5. 当前进程 Python（最后兜底）
     log(f"使用当前 Python：{sys.executable}")
-    if online:
-        _install_deps(Path(sys.executable))
     return Path(sys.executable)
 
 
