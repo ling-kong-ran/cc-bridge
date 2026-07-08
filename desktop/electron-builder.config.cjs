@@ -1,5 +1,3 @@
-const fs = require('node:fs')
-
 const extraResources = [
   {
     from: '.',
@@ -15,14 +13,6 @@ const extraResources = [
     ],
   },
 ]
-
-if (fs.existsSync('runtime')) {
-  extraResources.push({
-    from: 'runtime',
-    to: 'cc-bridge/runtime',
-    filter: ['**/*'],
-  })
-}
 
 module.exports = {
   appId: 'local.cc-bridge.desktop',

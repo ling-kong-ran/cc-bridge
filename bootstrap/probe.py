@@ -8,8 +8,6 @@ import subprocess
 import sys
 from pathlib import Path
 
-from .runtime import get_bundled_runtime
-
 REPO_ROOT = Path(__file__).resolve().parents[1]
 NPM_PREFIX = Path.home() / ".ccb" / "npm-global"
 
@@ -135,7 +133,6 @@ def detect_cli() -> dict:
 
 
 def get_environment_status() -> dict:
-    runtime = get_bundled_runtime()
     return {
         "os": {"name": os.name, "platform": platform.system(), "release": platform.release()},
         "python": detect_python(),
@@ -144,11 +141,4 @@ def get_environment_status() -> dict:
         "cli": detect_cli(),
         "npm_prefix": str(NPM_PREFIX),
         "npm_bin_dirs": [str(p) for p in npm_bin_dirs()],
-        "bundled_runtime": {
-            "available": runtime.get("available", False),
-            "skip_python_install": runtime.get("skip_python_install", False),
-            "root": str(runtime.get("root", "")),
-            "manifest_path": str(runtime.get("manifest_path", "")),
-            "pythonpath": [str(p) for p in runtime.get("pythonpath", [])],
-        },
     }

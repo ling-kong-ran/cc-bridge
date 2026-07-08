@@ -5,7 +5,6 @@ TARGET="installer"
 RELEASE="0"
 VERSION=""
 SKIP_INSTALL="0"
-SKIP_RUNTIME="0"
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -25,19 +24,15 @@ while [[ $# -gt 0 ]]; do
       SKIP_INSTALL="1"
       shift
       ;;
-    --skip-runtime)
-      SKIP_RUNTIME="1"
-      shift
-      ;;
     *)
-      echo "用法: $0 [pack|installer] [--skip-install] [--skip-runtime] [--release] [--version x.y.z]" >&2
+      echo "用法: $0 [pack|installer] [--skip-install] [--release] [--version x.y.z]" >&2
       exit 2
       ;;
   esac
 done
 
 if [[ "$TARGET" != "pack" && "$TARGET" != "installer" ]]; then
-  echo "用法: $0 [pack|installer] [--skip-install] [--skip-runtime] [--release] [--version x.y.z]" >&2
+  echo "用法: $0 [pack|installer] [--skip-install] [--release] [--version x.y.z]" >&2
   exit 2
 fi
 
@@ -60,12 +55,7 @@ if [[ "$RELEASE" == "1" ]]; then
 fi
 
 step "检查桌面端 Python 入口语法"
-python -m py_compile server.py bootstrap.py ccb_bridge.py scripts/prepare-desktop-runtime.py bootstrap/*.py
-
-if [[ "$SKIP_RUNTIME" != "1" ]]; then
-  step "准备随包 Python 依赖"
-  python scripts/prepare-desktop-runtime.py
-fi
+python -m py_compile server.py bootstrap.py ccb_bridge.py bootstrap/*.py
 
 if [[ "$SKIP_INSTALL" != "1" ]]; then
   if [[ -f package-lock.json ]]; then
