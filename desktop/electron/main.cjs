@@ -82,8 +82,7 @@ function createWindow() {
     minHeight: 640,
     show: false,
     frame: false,
-    transparent: true,
-    backgroundColor: '#00000000',
+    backgroundColor: '#14181f',
     hasShadow: true,
     titleBarStyle: 'hidden',
     icon: iconPath(),
@@ -180,7 +179,7 @@ function requestJson(options, body = null) {
   })
 }
 
-function checkExistingBackend(port) {
+function checkExistingBackend(port, requireAppRootMatch = true) {
   return requestJson({
     hostname: '127.0.0.1',
     port,
@@ -189,7 +188,7 @@ function checkExistingBackend(port) {
     timeout: 800,
   }).then(result => {
     if (result.statusCode !== 200 || result.data?.app !== 'cc-bridge') return null
-    if (result.data?.app_root && result.data.app_root !== normalizedAppRoot()) return null
+    if (requireAppRootMatch && result.data?.app_root && result.data.app_root !== normalizedAppRoot()) return null
     return {
       type: 'server_ready',
       host: '127.0.0.1',
@@ -213,7 +212,13 @@ async function findExistingBackend() {
 async function waitForExistingBackend(timeoutMs = READY_TIMEOUT_MS) {
   const start = Date.now()
   while (Date.now() - start < timeoutMs) {
-    const existing = await findExistingBackend()
+    // 轮询自己刚 spawn 的后端：只校验 app==cc-bridge，放宽 app_root 严格匹配，
+    // 避免 Windows 路径大小写/短路径名差异导致漏判。
+    const startPort = Number(process.env.CCB_PORT || 17878)
+    const checks = []
+    for (let port = startPort; port < startPort + 50; port += 1) checks.push(checkExistingBackend(port, false))
+    const results = await Promise.all(checks)
+    const existing = results.find(Boolean)
     if (existing) return existing
     await new Promise(resolve => setTimeout(resolve, 500))
   }
