@@ -2,6 +2,7 @@ const { app, BrowserWindow, Menu, ipcMain, shell, Notification } = require('elec
 const { autoUpdater } = require('electron-updater')
 const { spawn } = require('node:child_process')
 const crypto = require('node:crypto')
+const fs = require('node:fs')
 const http = require('node:http')
 const os = require('node:os')
 const path = require('node:path')
@@ -34,6 +35,26 @@ function iconPath() {
 
 if (process.platform === 'win32') {
   app.setAppUserModelId(APP_ID)
+}
+
+function runtimeManifestPath() {
+  return path.join(APP_ROOT, 'runtime', 'manifest.json')
+}
+
+function readRuntimeManifest() {
+  if (!app.isPackaged) return null
+  try {
+    const manifestPath = runtimeManifestPath()
+    if (!fs.existsSync(manifestPath)) return null
+    return JSON.parse(fs.readFileSync(manifestPath, 'utf8'))
+  } catch (error) {
+    console.error('读取内置运行时 manifest 失败', error)
+    return null
+  }
+}
+
+function runtimeRoot() {
+  return path.join(APP_ROOT, 'runtime')
 }
 
 function resolvePythonCommand() {
@@ -196,6 +217,8 @@ function spawnBackend() {
     CCB_DESKTOP: '1',
     CCB_DESKTOP_TOKEN: token,
     CCB_HOST: '127.0.0.1',
+    CCB_BUNDLED_RUNTIME_ROOT: runtimeRoot(),
+    CCB_BUNDLED_MANIFEST: runtimeManifestPath(),
   }
   const args = ['-u', 'bootstrap.py', '--desktop']
   if (process.env.CCB_BOOTSTRAP_ASSUME_YES === '1') args.push('--yes')

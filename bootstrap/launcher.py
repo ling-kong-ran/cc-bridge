@@ -7,11 +7,18 @@ from pathlib import Path
 
 from .claude_setup import server_env
 from .probe import REPO_ROOT
+from .runtime import bundled_python_paths
 from .state import log
 
 
-def launch_server(python: Path, desktop: bool = False) -> int:
+def launch_server(python: Path, desktop: bool = False, extra_env: dict[str, str] | None = None) -> int:
     env = server_env()
+    python_paths = [str(p) for p in bundled_python_paths()]
+    if python_paths:
+        old_pythonpath = env.get("PYTHONPATH", "")
+        env["PYTHONPATH"] = os.pathsep.join(python_paths + ([old_pythonpath] if old_pythonpath else []))
+    if extra_env:
+        env.update(extra_env)
     cmd = [str(python), "-u", "server.py"]
     if desktop:
         env["CCB_DESKTOP"] = "1"

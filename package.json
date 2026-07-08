@@ -11,11 +11,11 @@
   "main": "desktop/electron/main.cjs",
   "scripts": {
     "desktop:dev": "electron .",
-    "desktop:pack": "electron-builder --dir",
-    "desktop:dist": "electron-builder",
-    "desktop:dist:win": "electron-builder --win nsis",
-    "desktop:dist:mac": "electron-builder --mac dmg zip",
-    "desktop:dist:linux": "electron-builder --linux AppImage deb",
+    "desktop:pack": "electron-builder --dir -c desktop/electron-builder.config.cjs",
+    "desktop:dist": "electron-builder -c desktop/electron-builder.config.cjs",
+    "desktop:dist:win": "electron-builder --win nsis -c desktop/electron-builder.config.cjs",
+    "desktop:dist:mac": "electron-builder --mac dmg zip -c desktop/electron-builder.config.cjs",
+    "desktop:dist:linux": "electron-builder --linux AppImage deb -c desktop/electron-builder.config.cjs",
     "package:desktop": "powershell -ExecutionPolicy Bypass -File scripts/package-desktop.ps1",
     "package:desktop:pack": "powershell -ExecutionPolicy Bypass -File scripts/package-desktop.ps1 -Target pack",
     "package:desktop:release": "powershell -ExecutionPolicy Bypass -File scripts/package-desktop.ps1 -Release"

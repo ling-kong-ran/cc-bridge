@@ -11,14 +11,13 @@ from .probe import REPO_ROOT, venv_python_path
 from .state import log
 
 
-def find_server_python() -> Path:
+def find_server_python(allow_install: bool = True) -> Path:
     """查找可用的 Python 解释器。
 
-    有网：优先 .venv，没有则自动创建并安装依赖。
-    无网：使用已有的 .venv 或系统 Python（必须有依赖）。
-    都没有：提示用户安装 Python。
+    allow_install=True：联网时可创建 .venv 并安装依赖。
+    allow_install=False：只使用已存在的环境，不执行任何安装流程。
     """
-    online = _check_internet()
+    online = _check_internet() if allow_install else False
     log(f"网络状态：{'在线' if online else '离线'}")
 
     # 1. 项目 .venv

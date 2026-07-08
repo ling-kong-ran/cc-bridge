@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import os
 import sys
 
 from bootstrap.claude_setup import ensure_claude_cli
@@ -10,6 +11,7 @@ from bootstrap.launcher import launch_server
 from bootstrap.node_setup import ensure_node
 from bootstrap.probe import get_environment_status
 from bootstrap.python_setup import ensure_python_version
+from bootstrap.runtime import bundled_python_paths, get_bundled_runtime, has_bundled_python_deps
 from bootstrap.state import log, write_state
 from bootstrap.venv_setup import find_server_python
 
@@ -22,9 +24,21 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
+def _ensure_claude_runtime(yes: bool = False) -> None:
+    """确保 Claude CLI 可用；只有缺 CLI 且需要 npm 时才准备 Node/npm。"""
+    try:
+        ensure_claude_cli(yes)
+    except RuntimeError as exc:
+        if "需要 npm" not in str(exc):
+            raise
+        ensure_node(yes)
+        ensure_claude_cli(yes)
+
+
 def main() -> int:
     args = parse_args()
     try:
+        runtime = get_bundled_runtime()
         ensure_python_version()
         status = get_environment_status()
         write_state(status)
@@ -32,9 +46,20 @@ def main() -> int:
             log("环境状态已写入 ~/.ccb/bootstrap_state.json")
             return 0
 
+        if args.desktop and has_bundled_python_deps(runtime):
+            log("桌面包模式：使用随包 Python 依赖，跳过 pip 安装；Claude CLI 保持原有检测/安装流程")
+            python = find_server_python(allow_install=False)
+            python_paths = bundled_python_paths(runtime)
+            extra_env = {}
+            if python_paths:
+                old_pythonpath = os.environ.get("PYTHONPATH", "")
+                extra_env["PYTHONPATH"] = os.pathsep.join(str(p) for p in python_paths) + (os.pathsep + old_pythonpath if old_pythonpath else "")
+            _ensure_claude_runtime(args.yes)
+            write_state(get_environment_status())
+            return launch_server(python, desktop=args.desktop, extra_env=extra_env)
+
         python = find_server_python()
-        ensure_node(args.yes)
-        ensure_claude_cli(args.yes)
+        _ensure_claude_runtime(args.yes)
         write_state(get_environment_status())
         return launch_server(python, desktop=args.desktop)
     except KeyboardInterrupt:

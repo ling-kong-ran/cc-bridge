@@ -8,6 +8,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+from .runtime import get_bundled_runtime
+
 REPO_ROOT = Path(__file__).resolve().parents[1]
 NPM_PREFIX = Path.home() / ".ccb" / "npm-global"
 
@@ -20,11 +22,12 @@ def npm_bin_dirs() -> list[Path]:
 
 
 def path_with_controlled_npm(env: dict[str, str] | None = None) -> dict[str, str]:
-    """构造将受控 npm bin 放在最前的环境变量。"""
+    """构造将内置运行时与受控 npm bin 放在最前的环境变量。"""
     merged = dict(env or os.environ)
-    prefix = os.pathsep.join(str(p) for p in npm_bin_dirs())
+    dirs = npm_bin_dirs()
+    prefix = os.pathsep.join(str(p) for p in dirs)
     old_path = merged.get("PATH", "")
-    merged["PATH"] = prefix + (os.pathsep + old_path if old_path else "")
+    merged["PATH"] = prefix + (os.pathsep + old_path if old_path else "") if prefix else old_path
     return merged
 
 
@@ -87,8 +90,8 @@ def _controlled_claude_candidates() -> list[Path]:
     return [folder / name for folder in npm_bin_dirs() for name in names]
 
 
-def detect_cli() -> dict:
-    """按约定顺序检测 ccb / claude CLI。"""
+def detect_available_clis() -> list[dict]:
+    """按约定顺序检测所有可用的 ccb / claude CLI。"""
     candidates: list[tuple[str, str, str]] = []
 
     local_names = ["ccb.exe"] if os.name == "nt" else ["ccb", "ccb.exe"]
@@ -109,19 +112,30 @@ def detect_cli() -> dict:
             candidates.append(("claude (~/.ccb/npm-global)", str(p), "controlled-npm"))
             break
 
+    env = path_with_controlled_npm()
     for cmd, label in (("ccb", "ccb (PATH)"), ("claude", "claude (PATH)")):
-        found = shutil.which(cmd)
+        found = shutil.which(cmd, path=env.get("PATH"))
         if found:
             candidates.append((label, found, "path"))
 
-    available = [
-        {"name": name, "path": path, "source": source, "version": command_version(path, "--version")}
-        for name, path, source in candidates
-    ]
+    seen: set[str] = set()
+    available = []
+    for name, path, source in candidates:
+        if path in seen:
+            continue
+        seen.add(path)
+        available.append({"name": name, "path": path, "source": source, "version": command_version(path, "--version")})
+    return available
+
+
+def detect_cli() -> dict:
+    """按约定顺序检测 ccb / claude CLI。"""
+    available = detect_available_clis()
     return {"available": available, "selected": available[0] if available else None}
 
 
 def get_environment_status() -> dict:
+    runtime = get_bundled_runtime()
     return {
         "os": {"name": os.name, "platform": platform.system(), "release": platform.release()},
         "python": detect_python(),
@@ -130,4 +144,11 @@ def get_environment_status() -> dict:
         "cli": detect_cli(),
         "npm_prefix": str(NPM_PREFIX),
         "npm_bin_dirs": [str(p) for p in npm_bin_dirs()],
+        "bundled_runtime": {
+            "available": runtime.get("available", False),
+            "skip_python_install": runtime.get("skip_python_install", False),
+            "root": str(runtime.get("root", "")),
+            "manifest_path": str(runtime.get("manifest_path", "")),
+            "pythonpath": [str(p) for p in runtime.get("pythonpath", [])],
+        },
     }

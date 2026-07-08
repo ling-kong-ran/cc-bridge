@@ -4,6 +4,7 @@ __pycache__/
 uploads/
 ccb.exe
 vendor/
+runtime/
 node_modules/
 release/
 dist/

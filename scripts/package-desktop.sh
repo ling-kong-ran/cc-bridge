@@ -4,6 +4,8 @@ set -euo pipefail
 TARGET="installer"
 RELEASE="0"
 VERSION=""
+SKIP_INSTALL="0"
+SKIP_RUNTIME="0"
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -19,15 +21,23 @@ while [[ $# -gt 0 ]]; do
       VERSION="${2:-}"
       shift 2
       ;;
+    --skip-install)
+      SKIP_INSTALL="1"
+      shift
+      ;;
+    --skip-runtime)
+      SKIP_RUNTIME="1"
+      shift
+      ;;
     *)
-      echo "用法: $0 [pack|installer] [--release] [--version x.y.z]" >&2
+      echo "用法: $0 [pack|installer] [--skip-install] [--skip-runtime] [--release] [--version x.y.z]" >&2
       exit 2
       ;;
   esac
 done
 
 if [[ "$TARGET" != "pack" && "$TARGET" != "installer" ]]; then
-  echo "用法: $0 [pack|installer] [--release] [--version x.y.z]" >&2
+  echo "用法: $0 [pack|installer] [--skip-install] [--skip-runtime] [--release] [--version x.y.z]" >&2
   exit 2
 fi
 
@@ -50,14 +60,21 @@ if [[ "$RELEASE" == "1" ]]; then
 fi
 
 step "检查桌面端 Python 入口语法"
-python -m py_compile server.py bootstrap.py bootstrap/launcher.py
+python -m py_compile server.py bootstrap.py ccb_bridge.py scripts/prepare-desktop-runtime.py bootstrap/*.py
 
-if [[ -f package-lock.json ]]; then
-  step "安装 npm 依赖（npm ci）"
-  npm ci
-else
-  step "安装 npm 依赖（npm install）"
-  npm install
+if [[ "$SKIP_RUNTIME" != "1" ]]; then
+  step "准备随包 Python 依赖"
+  python scripts/prepare-desktop-runtime.py
+fi
+
+if [[ "$SKIP_INSTALL" != "1" ]]; then
+  if [[ -f package-lock.json ]]; then
+    step "安装 npm 依赖（npm ci）"
+    npm ci
+  else
+    step "安装 npm 依赖（npm install）"
+    npm install
+  fi
 fi
 
 if [[ "$RELEASE" == "1" ]]; then

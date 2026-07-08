@@ -4,6 +4,8 @@ param(
 
     [switch]$SkipInstall,
 
+    [switch]$SkipRuntime,
+
     [switch]$Release,
 
     [ValidatePattern('^\d+\.\d+\.\d+$')]
@@ -36,7 +38,14 @@ if ($Release) {
 }
 
 Invoke-Step 'Check Python entry syntax' {
-    python -m py_compile server.py bootstrap.py bootstrap/launcher.py
+    $PythonFiles = @('server.py', 'bootstrap.py', 'ccb_bridge.py', 'scripts/prepare-desktop-runtime.py') + (Get-ChildItem -Path 'bootstrap' -Filter '*.py' | ForEach-Object { $_.FullName })
+    python -m py_compile @PythonFiles
+}
+
+if (-not $SkipRuntime) {
+    Invoke-Step 'Prepare bundled Python dependencies' {
+        python scripts/prepare-desktop-runtime.py
+    }
 }
 
 if (-not $SkipInstall) {

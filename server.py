@@ -64,6 +64,7 @@ from backend.routes.gateway_routes import encode_gateway_get_body, handle_gatewa
 from backend.routes.remote_routes import handle_remote_get, handle_remote_post
 from backend.responses import send_response
 from backend.services.sessions_service import list_gui_sessions
+from bootstrap.probe import NPM_PREFIX
 # 飞书模块延迟加载 — 避免 lark_oapi SDK 拖慢 server 启动
 class _LazyFeishu:
     """延迟导入飞书相关模块。首次访问任意属性时自动触发 import。"""
@@ -1177,14 +1178,15 @@ def create_directory(parent: str, name: str) -> dict:
 
 
 # ─── CLI 安装 ─────────────────────────────────────────────
-INSTALL_CLI_COMMAND = "npm install -g @anthropic-ai/claude-code"
+INSTALL_CLI_COMMAND = f"npm install --prefix {NPM_PREFIX} @anthropic-ai/claude-code"
 _install_lock = asyncio.Lock()
 
 
 async def install_cli() -> dict:
-    """通过 npm 全局安装 Claude Code CLI，返回安装结果。"""
+    """安装 Claude Code CLI 到受控 npm prefix，返回安装结果。"""
     import shutil as _shutil
 
+    available = refresh_clis()
     npm = _shutil.which("npm")
     if not npm:
         return {"ok": False, "error": "npm_not_found"}
@@ -1194,8 +1196,9 @@ async def install_cli() -> dict:
 
     async with _install_lock:
         try:
+            NPM_PREFIX.mkdir(parents=True, exist_ok=True)
             proc = await asyncio.create_subprocess_exec(
-                npm, "install", "-g", "@anthropic-ai/claude-code",
+                npm, "install", "--prefix", str(NPM_PREFIX), "@anthropic-ai/claude-code",
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.STDOUT,
                 limit=1024 * 1024 * 5,

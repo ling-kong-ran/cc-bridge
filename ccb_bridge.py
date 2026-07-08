@@ -15,62 +15,14 @@ from pathlib import Path
 
 import shutil
 
+from bootstrap.probe import detect_available_clis
 from config_manager import list_tools
 
 
-def _controlled_npm_claude_candidates() -> list[Path]:
-    """受控 npm prefix 中 Claude Code CLI 可能生成的可执行文件。"""
-    prefix = Path.home() / ".ccb" / "npm-global"
-    bin_dirs = [prefix, prefix / "node_modules" / ".bin"] if os.name == "nt" else [prefix / "bin", prefix / "node_modules" / ".bin"]
-    names = ["claude.cmd", "claude.exe", "claude"] if os.name == "nt" else ["claude"]
-    return [folder / name for folder in bin_dirs for name in names]
-
-
 def _detect_available_clis() -> list[dict]:
-    """检测所有可用的 CLI，返回列表 [{name, path, source}]"""
-    available = []
-    # 1. 同级目录的 ccb.exe（与 start.bat 同层）
-    local_ccb = Path(__file__).parent / "ccb.exe"
-    if local_ccb.exists():
-        available.append({
-            "name": "ccb (本地)",
-            "path": str(local_ccb),
-            "source": "local",
-        })
-    # 2. start.bat 所在目录的上一层（即仓库根目录的父目录）
-    parent_ccb = Path(__file__).parent.parent / "ccb.exe"
-    if parent_ccb.exists() and parent_ccb != local_ccb:
-        available.append({
-            "name": "ccb (上级目录)",
-            "path": str(parent_ccb),
-            "source": "local",
-        })
-    # 3. 受控 npm prefix 中的 claude（bootstrap 推荐安装位置）
-    for candidate in _controlled_npm_claude_candidates():
-        if candidate.exists():
-            available.append({
-                "name": "claude (~/.ccb/npm-global)",
-                "path": str(candidate),
-                "source": "controlled-npm",
-            })
-            break
-    # 4. PATH 中的 ccb
-    found = shutil.which("ccb")
-    if found:
-        available.append({
-            "name": "ccb (PATH)",
-            "path": found,
-            "source": "path",
-        })
-    # 5. PATH 中的 claude
-    found = shutil.which("claude")
-    if found:
-        available.append({
-            "name": "claude (PATH)",
-            "path": found,
-            "source": "path",
-        })
-    return available
+    """检测所有可用的 CLI，返回列表 [{name, path, source}]。"""
+    return detect_available_clis()
+
 
 def get_available_clis() -> list[dict]:
     """供 API 调用，返回可用 CLI 列表"""
