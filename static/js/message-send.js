@@ -139,7 +139,8 @@
         });
         ctx.updateUI();
       }
-      ctx.addSystemMsg(result?.error || ctx.t('requestFailed', { message: 'send_message' }), true);
+      const formatMessage = root.i18n?.formatMessage || ((data) => data?.error || data?.message || ctx.t('unknownError'));
+      ctx.addSystemMsg(formatMessage(result, 'requestFailed'), true);
       return;
     }
 

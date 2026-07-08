@@ -52,6 +52,10 @@
     }
   }
 
+  function formatMessage(data, fallbackKey = 'unknownError') {
+    return root.i18n?.formatMessage ? root.i18n.formatMessage(data, fallbackKey) : String(data?.error || data?.message || getContext().t(fallbackKey) || '');
+  }
+
   function buildResumePayload(ctx, sessionId, model, cli, cwd, remoteTargetId, notifyPlatforms) {
     return {
       session_id: sessionId,
@@ -127,7 +131,7 @@
           resumeCwd = newCwd;
           result = await ctx.sendAction('resume_session', buildResumePayload(ctx, sessionId, model, cli, resumeCwd, remoteTargetId, notifyPlatforms));
         } else {
-          ctx.addSystemMsg(ctx.t('cwdNotChanged', { message: updateResult.error || ctx.t('unknownError') }), true);
+          ctx.addSystemMsg(ctx.t('cwdNotChanged', { message: formatMessage(updateResult) }), true);
         }
       }
     }
@@ -137,7 +141,7 @@
       ctx.updateUI();
       ctx.addSystemMsg(ctx.t('restored'));
     } else {
-      ctx.addSystemMsg(ctx.t('restoreFailed', { message: result?.error || ctx.t('unknownError') }), true);
+      ctx.addSystemMsg(ctx.t('restoreFailed', { message: formatMessage(result) }), true);
     }
     ctx.loadSessions();
   }

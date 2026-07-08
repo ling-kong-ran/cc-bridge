@@ -94,8 +94,8 @@ def validate_cli(cli_path: str) -> str:
     resolved = _shutil.which(cli_path) if not os.path.isabs(cli_path) else cli_path
     if not resolved or not os.path.isfile(resolved):
         raise FileNotFoundError(
-            f"CLI 不可用：{cli_path}。请确保已安装 Claude Code CLI（ccb 或 claude），"
-            "可在设置中切换或点击「安装 CLI」按钮。"
+            f"CLI unavailable: {cli_path}. Install Claude Code CLI (ccb or claude), "
+            "then switch it in settings or use the install button."
         )
     return resolved
 
@@ -104,7 +104,7 @@ def validate_cwd(cwd: str) -> str:
     """校验工作目录存在且可访问。"""
     if not cwd or not os.path.isdir(cwd):
         raise FileNotFoundError(
-            f"工作目录不可用：{cwd or '(空)'}。目录可能已被删除或重命名，请检查路径是否正确。"
+            f"Working directory unavailable: {cwd or '(empty)'}. It may have been deleted or renamed."
         )
     return cwd
 
@@ -240,7 +240,7 @@ async def _discover_slash_commands_uncached(cli: str, model: str, run_cwd: str, 
             })
             return data
 
-        data["error"] = "\n".join(line for line in stderr_lines if line).strip() or "CLI 未返回初始化事件"
+        data["error"] = "\n".join(line for line in stderr_lines if line).strip() or "CLI did not return an init event"
         return data
     except Exception as exc:
         return {
@@ -447,10 +447,10 @@ class CCBSession:
     async def send_live_message(self, content: str):
         """向当前持久进程补充输入，不改变本轮 owner / 锁状态。"""
         if not self.can_accept_live_input():
-            raise RuntimeError("当前会话暂不支持活跃中补充发送")
+            raise RuntimeError("Live follow-up input is unavailable for this session")
         async with self._message_lock:
             if not self.can_accept_live_input():
-                raise RuntimeError("当前会话暂不支持活跃中补充发送")
+                raise RuntimeError("Live follow-up input is unavailable for this session")
             await self._write_persistent_payload(content)
 
     def _can_use_persistent_cli(self) -> bool:
@@ -486,7 +486,7 @@ class CCBSession:
 
     async def _write_persistent_payload(self, content: str):
         if not self._proc or not self._proc.stdin:
-            raise RuntimeError("持久 CLI 进程不可用")
+            raise RuntimeError("Persistent CLI process is unavailable")
         payload = {
             "type": "user",
             "message": {
@@ -506,7 +506,7 @@ class CCBSession:
         if not should_replay:
             return False
 
-        await self._emit_event({"type": "system", "subtype": "persistent_cli_fallback", "message": "持久 CLI 不可用，已自动切换为普通模式"})
+        await self._emit_event({"type": "system", "subtype": "persistent_cli_fallback", "message": "Persistent CLI is unavailable; switched to one-shot mode", "message_key": "persistentCliFallback"})
         await self._send_one_shot_message(content)
         return True
 
@@ -801,7 +801,7 @@ class CCBSession:
                 if stderr_text:
                     err = {"type": "error", "message": stderr_text}
                 else:
-                    err = {"type": "error", "message": "ccb 进程未返回任何输出，请检查配置和 API Key"}
+                    err = {"type": "error", "message": "CLI returned no output. Check configuration and API key.", "message_key": "cliNoOutput"}
                 await self._emit_event(err)
             else:
                 stderr_task.cancel()
@@ -819,7 +819,7 @@ class CCBSession:
                     if replayed:
                         return
                     if self.is_running:
-                        await self._emit_event({"type": "error", "message": "持久 CLI 进程已退出，下一条消息将自动回退为普通模式"})
+                        await self._emit_event({"type": "error", "message": "Persistent CLI exited; the next message will use one-shot mode", "message_key": "persistentCliExited"})
                 self.is_running = False  # 进程结束，允许下一条消息创建新的 mak_event_handler
                 self._message_owner_id = None
                 self._message_started_at = None

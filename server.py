@@ -765,11 +765,11 @@ def format_slash_commands(discovered: dict) -> dict:
         source = "skill" if skill_name in cli_skills or skill else "cli"
         description = ""
         if skill:
-            description = skill.get("description") or "运行该技能"
+            description = skill.get("description") or "Run this skill"
         elif source == "skill":
-            description = "运行该技能"
+            description = "Run this skill"
         else:
-            description = "CLI 动态命令"
+            description = "CLI command"
 
         commands.append({
             "name": display_name,
@@ -804,11 +804,11 @@ MIME_TYPES = {
 def git_review(cwd: str) -> dict:
     """返回工作目录的 git 状态概览，用于右侧审查面板。"""
     if not cwd or not os.path.isdir(cwd):
-        return {"error": "工作目录不存在"}
+        return {"error": "Working directory does not exist", "error_key": "cwdNotExist", "error_params": {"path": cwd or ""}}
 
     # 检查是否 git 仓库
     if not os.path.isdir(os.path.join(cwd, ".git")):
-        return {"git": False, "message": "当前目录不是 Git 仓库"}
+        return {"git": False, "message": "Not a Git repository", "message_key": "reviewNoGit"}
 
     def _git(args):
         try:
@@ -882,9 +882,9 @@ def git_review(cwd: str) -> dict:
 def git_diff_file(cwd: str, file_path: str, staged: bool = False) -> dict:
     """返回单个文件的 unified diff 内容。"""
     if not cwd or not os.path.isdir(cwd):
-        return {"error": "工作目录不存在"}
+        return {"error": "Working directory does not exist", "error_key": "cwdNotExist", "error_params": {"path": cwd or ""}}
     if not os.path.isdir(os.path.join(cwd, ".git")):
-        return {"error": "当前目录不是 Git 仓库"}
+        return {"error": "Not a Git repository", "error_key": "reviewNoGit"}
 
     def _git(args):
         try:
@@ -950,7 +950,7 @@ def browse_files(path: str) -> dict:
 
     path = os.path.normpath(path)
     if not os.path.isdir(path):
-        return {"current": path, "parent": None, "items": [], "error": "路径不存在"}
+        return {"current": path, "parent": None, "items": [], "error": "Path not found", "error_key": "pathNotFound"}
 
     parent = os.path.dirname(path)
     if parent == path:
@@ -969,7 +969,7 @@ def browse_files(path: str) -> dict:
             elif os.path.isfile(full):
                 items.append({"name": entry, "path": full.replace("\\", "/"), "type": "file"})
     except PermissionError:
-        return {"current": path, "parent": parent, "items": [], "error": "无权限访问"}
+        return {"current": path, "parent": parent, "items": [], "error": "Permission denied", "error_key": "permissionDenied"}
 
     return {
         "current": path.replace("\\", "/"),
@@ -986,12 +986,12 @@ def search_files(path: str, query: str, max_results: int = 200) -> dict:
 
     if not path or path == "/":
         if sys.platform == "win32":
-            return {"current": "/", "parent": None, "items": [], "error": "请先选择一个具体目录后再搜索"}
+            return {"current": "/", "parent": None, "items": [], "error": "Choose a concrete directory before searching", "error_key": "searchNeedConcreteDir"}
         path = "/"
 
     path = os.path.normpath(path)
     if not os.path.isdir(path):
-        return {"current": path, "parent": None, "items": [], "error": "路径不存在"}
+        return {"current": path, "parent": None, "items": [], "error": "Path not found", "error_key": "pathNotFound"}
 
     excluded_dirs = {'node_modules', '__pycache__', '.git', 'venv', '.venv'}
     items = []
@@ -1039,7 +1039,7 @@ def search_files(path: str, query: str, max_results: int = 200) -> dict:
                         "truncated": True,
                     }
     except PermissionError:
-        return {"current": path.replace("\\", "/"), "parent": None, "items": [], "error": "无权限访问"}
+        return {"current": path.replace("\\", "/"), "parent": None, "items": [], "error": "Permission denied", "error_key": "permissionDenied"}
 
     items.sort(key=lambda item: (item["type"] != "dir", item.get("display", item["name"]).lower()))
     return {
@@ -1126,7 +1126,7 @@ def browse_directory(path: str) -> dict:
 
     path = os.path.normpath(path)
     if not os.path.isdir(path):
-        return {"current": path, "parent": None, "items": [], "error": "路径不存在"}
+        return {"current": path, "parent": None, "items": [], "error": "Path not found", "error_key": "pathNotFound"}
 
     parent = os.path.dirname(path)
     if parent == path:
@@ -1147,7 +1147,7 @@ def browse_directory(path: str) -> dict:
                     "type": "dir",
                 })
     except PermissionError:
-        return {"current": path, "parent": parent, "items": [], "error": "无权限访问"}
+        return {"current": path, "parent": parent, "items": [], "error": "Permission denied", "error_key": "permissionDenied"}
 
     return {
         "current": path.replace("\\", "/"),
@@ -1159,18 +1159,18 @@ def browse_directory(path: str) -> dict:
 def create_directory(parent: str, name: str) -> dict:
     name = (name or "").strip()
     if not name:
-        return {"ok": False, "error": "名称不能为空"}
+        return {"ok": False, "error": "Folder name is required", "error_key": "folderNameRequired"}
     if any(c in name for c in '\\/:*?"<>|') or name in ('.', '..'):
-        return {"ok": False, "error": "名称含非法字符"}
+        return {"ok": False, "error": "Folder name contains invalid characters", "error_key": "folderNameInvalid"}
     if not parent or not os.path.isdir(parent):
-        return {"ok": False, "error": "父目录不存在"}
+        return {"ok": False, "error": "Parent directory does not exist", "error_key": "parentDirNotFound"}
     full = os.path.join(parent, name)
     if os.path.exists(full):
-        return {"ok": False, "error": "同名目录已存在"}
+        return {"ok": False, "error": "A folder with this name already exists", "error_key": "folderAlreadyExists"}
     try:
         os.mkdir(full)
     except PermissionError:
-        return {"ok": False, "error": "无权限创建"}
+        return {"ok": False, "error": "Permission denied", "error_key": "folderCreateDenied"}
     except OSError as e:
         return {"ok": False, "error": str(e)}
     return {"ok": True, "path": full.replace("\\", "/")}
@@ -1427,7 +1427,7 @@ async def prepare_contextual_message(client_id: str, content: str, cwd: str, ses
             "candidates": 0,
             "injected": [],
             "skipped": [],
-            "errors": ["自动上下文召回超时，已跳过注入以避免阻塞发送"],
+            "errors": [{"message": "Auto context recall timed out; skipped injection to avoid blocking send", "message_key": "contextRecallTimeout"}],
             "created_at": time.time(),
         }
     except Exception as exc:
@@ -1442,7 +1442,7 @@ async def prepare_contextual_message(client_id: str, content: str, cwd: str, ses
             "candidates": 0,
             "injected": [],
             "skipped": [],
-            "errors": [f"自动上下文召回失败，已跳过注入: {exc}"],
+            "errors": [{"message": f"Auto context recall failed; skipped injection: {exc}", "message_key": "contextRecallFailed", "message_params": {"message": str(exc)}}],
             "created_at": time.time(),
         }
     if not trace:
@@ -1931,7 +1931,7 @@ async def handle_action(body: bytes, writer: asyncio.StreamWriter):
         client_session_agents.pop(client_id, None)
         client_viewing.pop(client_id, None)
 
-        on_event = make_owner_event_handler(client_id, run_id, session, model, cwd or "", remote_target_id, cli, "新会话")
+        on_event = make_owner_event_handler(client_id, run_id, session, model, cwd or "", remote_target_id, cli, "New session")
 
         try:
             await session.start(model=model, cwd=cwd, on_event=on_event, skip_permissions=skip_perms,
@@ -2136,7 +2136,7 @@ async def handle_action(body: bytes, writer: asyncio.StreamWriter):
             quote_cwd = client_meta.get(viewing_owner, {}).get("cwd", "")
         quote_context = build_quote_context(data.get("quotes") or [], quote_cwd)
         if quote_context:
-            content = f"引用内容:\n{quote_context}\n\n{content}".strip()
+            content = f"Quoted context:\n{quote_context}\n\n{content}".strip()
         # viewer 在 owner 正在生成时优先走持久进程 stdin 补充发送；不接管、不改锁 holder。
         viewing_owner = client_viewing.get(client_id)
         if viewing_owner:
@@ -2154,8 +2154,13 @@ async def handle_action(body: bytes, writer: asyncio.StreamWriter):
                     await broadcast_user_message(active_sid, content, client_id)
                     await send_response(writer, 200, "application/json", b'{"ok":true,"live":true}')
                     return
-                await push_event(client_id, "error", {"message": "当前会话暂不支持活跃中补充发送"})
-                await send_response(writer, 200, "application/json", b'{"ok":false,"error":"live input unavailable"}')
+                live_error = {
+                    "message": "Live follow-up input is unavailable for this session",
+                    "message_key": "liveInputUnavailable",
+                }
+                await push_event(client_id, "error", live_error)
+                err = json.dumps({"ok": False, "error": live_error["message"], "error_key": live_error["message_key"]}, ensure_ascii=False).encode("utf-8")
+                await send_response(writer, 200, "application/json; charset=utf-8", err)
                 return
 
             resume_id = client_session_ids.get(client_id) or client_session_ids.get(viewing_owner, "")
@@ -2219,7 +2224,7 @@ async def handle_action(body: bytes, writer: asyncio.StreamWriter):
                         platforms = (client_meta.get(client_id, {}) or {}).get("notify_platforms", [])
                         _notify_log.info(f"takeover-result cid={client_id} platforms={platforms} meta_keys={list((client_meta.get(client_id) or {}).keys())}")
                         if platforms:
-                            title = client_last_msg.get(client_id, "新会话")
+                            title = client_last_msg.get(client_id, "New session")
                             prompt, summary, elapsed = _notify_summary(client_id)
                             takeover_model = meta.get("model") or requested_model or get_default_model()
                             asyncio.create_task(_notify_gui_complete(title, takeover_model, platforms, summary=summary, prompt=prompt, elapsed=elapsed))
@@ -2243,7 +2248,7 @@ async def handle_action(body: bytes, writer: asyncio.StreamWriter):
                         platforms = (client_meta.get(client_id, {}) or {}).get("notify_platforms", [])
                         _notify_log.info(f"takeover-ended cid={client_id} platforms={platforms}")
                         if platforms:
-                            title = client_last_msg.get(client_id, "新会话")
+                            title = client_last_msg.get(client_id, "New session")
                             prompt, summary, elapsed = _notify_summary(client_id)
                             takeover_model = meta.get("model") or requested_model or get_default_model()
                             asyncio.create_task(_notify_gui_complete(title, takeover_model, platforms, summary=summary, prompt=prompt, elapsed=elapsed))
@@ -2258,7 +2263,7 @@ async def handle_action(body: bytes, writer: asyncio.StreamWriter):
                         platforms = (client_meta.get(client_id, {}) or {}).get("notify_platforms", [])
                         _notify_log.info(f"takeover-error cid={client_id} platforms={platforms}")
                         if platforms:
-                            title = client_last_msg.get(client_id, "新会话")
+                            title = client_last_msg.get(client_id, "New session")
                             takeover_model = meta.get("model") or requested_model or get_default_model()
                             err_msg = event.get("message", "")
                             asyncio.create_task(_notify_gui_complete(title, takeover_model, platforms, error=err_msg))
@@ -2337,7 +2342,7 @@ async def handle_action(body: bytes, writer: asyncio.StreamWriter):
                 meta.get("cwd", ""),
                 meta.get("remote_target_id", ""),
                 meta.get("cli", ""),
-                content.strip()[:50] or "新会话",
+                content.strip()[:50] or "New session",
             )
             try:
                 await session.start(
@@ -2434,9 +2439,14 @@ async def handle_action(body: bytes, writer: asyncio.StreamWriter):
             sid = client_session_ids.get(client_id)
             is_live_followup = bool(sid and session_locks.get(sid, {}).get("locked"))
             if is_live_followup:
+                live_error = {
+                    "message": "Live follow-up input is unavailable for this session",
+                    "message_key": "liveInputUnavailable",
+                }
                 if not content or not session.can_accept_live_input():
-                    await push_event(client_id, "error", {"message": "当前会话暂不支持活跃中补充发送"})
-                    await send_response(writer, 200, "application/json", b'{"ok":false,"error":"live input unavailable"}')
+                    await push_event(client_id, "error", live_error)
+                    err = json.dumps({"ok": False, "error": live_error["message"], "error_key": live_error["message_key"]}, ensure_ascii=False).encode("utf-8")
+                    await send_response(writer, 200, "application/json; charset=utf-8", err)
                     return
                 try:
                     await session.send_live_message(content)
@@ -2475,8 +2485,13 @@ async def handle_action(body: bytes, writer: asyncio.StreamWriter):
                 await push_generation_started(vid, session)
             await send_response(writer, 200, "application/json", json.dumps({"ok": True, "run_id": run_id}, ensure_ascii=False).encode("utf-8"))
         else:
-            await push_event(client_id, "error", {"message": "Session not running"})
-            await send_response(writer, 200, "application/json", b'{"ok":false,"error":"no session"}')
+            no_session_error = {
+                "message": "Session is not running",
+                "message_key": "sessionNotRunning",
+            }
+            await push_event(client_id, "error", no_session_error)
+            err = json.dumps({"ok": False, "error": no_session_error["message"], "error_key": no_session_error["message_key"]}, ensure_ascii=False).encode("utf-8")
+            await send_response(writer, 200, "application/json; charset=utf-8", err)
 
     elif action == "stop":
         sid = data.get("session_id") or client_session_ids.get(client_id, "")
@@ -2486,8 +2501,13 @@ async def handle_action(body: bytes, writer: asyncio.StreamWriter):
             # viewer 不能 stop session，只能 stop 自己 viewing 的 session
             viewer_owner = client_viewing.get(client_id)
             if viewer_owner:
-                await push_event(client_id, "error", {"message": "Viewer cannot stop session"})
-                await send_response(writer, 200, "application/json", b'{"ok":false,"error":"viewer cannot stop"}')
+                viewer_error = {
+                    "message": "Viewer cannot stop session",
+                    "message_key": "viewerCannotStop",
+                }
+                await push_event(client_id, "error", viewer_error)
+                err = json.dumps({"ok": False, "error": viewer_error["message"], "error_key": viewer_error["message_key"]}, ensure_ascii=False).encode("utf-8")
+                await send_response(writer, 200, "application/json; charset=utf-8", err)
                 return
             await session.stop(requester_id=client_id)
             await release_session_lock_for_client(client_id)
@@ -2518,8 +2538,13 @@ async def handle_action(body: bytes, writer: asyncio.StreamWriter):
         session = session_manager.get_session_by_run_id(run_id) if run_id else get_current_session(client_id)
         # viewer 不能 interrupt
         if client_viewing.get(client_id):
-            await push_event(client_id, "error", {"message": "Viewer cannot interrupt"})
-            await send_response(writer, 200, "application/json", b'{"ok":false,"error":"viewer cannot interrupt"}')
+            viewer_error = {
+                "message": "Viewer cannot interrupt",
+                "message_key": "viewerCannotInterrupt",
+            }
+            await push_event(client_id, "error", viewer_error)
+            err = json.dumps({"ok": False, "error": viewer_error["message"], "error_key": viewer_error["message_key"]}, ensure_ascii=False).encode("utf-8")
+            await send_response(writer, 200, "application/json; charset=utf-8", err)
             return
         interrupted = False
         if session and session.is_running:
@@ -2578,7 +2603,7 @@ async def _notify_scheduled_task_event(event_type: str, data: dict):
         _notify_log.info(f"scheduled notify failed: {exc}")
 
 
-def make_owner_event_handler(client_id: str, run_id: str, session, model: str, cwd: str, remote_target_id: str, cli: str, default_title: str = "新会话"):
+def make_owner_event_handler(client_id: str, run_id: str, session, model: str, cwd: str, remote_target_id: str, cli: str, default_title: str = "New session"):
 
     async def on_event(event: dict):
         evt_type = event.get("type", "unknown")
@@ -2635,7 +2660,7 @@ def make_owner_event_handler(client_id: str, run_id: str, session, model: str, c
     return on_event
 
 
-async def _notify_turn_complete_once(client_id: str, sid: str, session, model: str, default_title: str = "新会话", error: str = "") -> bool:
+async def _notify_turn_complete_once(client_id: str, sid: str, session, model: str, default_title: str = "New session", error: str = "") -> bool:
     """会话完成时最多发送一次 GUI 通知；可由 result/process_ended/release 共同复用。"""
     if not client_id:
         return False
@@ -2706,7 +2731,8 @@ async def _notify_gui_complete(title: str, model: str, platforms: list, error: s
         try:
             gw = get_feishu_gateway()
             if error:
-                summary = f"执行失败：{error[:200]}"
+                lang = get_gui_settings().get("language", "zh")
+                summary = f"Execution failed: {error[:200]}" if lang == "en" else f"执行失败：{error[:200]}"
                 prompt = ""
             lang = get_gui_settings().get("language", "zh")
             _notify_log.info(f"lang={lang} title={title[:30]} prompt_len={len(prompt)} summary_len={len(summary)} elapsed={elapsed:.1f}s")

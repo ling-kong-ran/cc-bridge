@@ -106,7 +106,8 @@
     }
 
     if (data.is_error && data.errors) {
-      data.errors.forEach(e => ctx.addSystemMsg(e, true));
+      const formatMessage = root.i18n?.formatMessage || ((item) => String(item?.error || item?.message || item || ''));
+      data.errors.forEach(e => ctx.addSystemMsg(formatMessage(e), true));
     } else if (ctx.isSlashCommand(finishedTurn) && !hadAssistantOutput) {
       ctx.addSystemMsg(ctx.t('commandCompleted', { command: ctx.getSlashCommandName(finishedTurn) }));
     }

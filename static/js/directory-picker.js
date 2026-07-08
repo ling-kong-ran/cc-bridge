@@ -83,7 +83,8 @@
       });
       const data = await resp.json();
       if (!data.ok) {
-        alert(data.error || ctx.t('requestFailed', { message: '' }));
+        const formatMessage = root.i18n?.formatMessage || ((item) => item?.error || item?.message || ctx.t('requestFailed', { message: '' }));
+        alert(formatMessage(data, 'requestFailed'));
         return;
       }
       await navigatePicker(parent, options);
@@ -123,7 +124,8 @@
       const data = await resp.json();
 
       if (data.error) {
-        if (ctx.pickerList) ctx.pickerList.innerHTML = `<div class="picker-empty">${ctx.esc(data.error)}</div>`;
+        const formatMessage = root.i18n?.formatMessage || ((item) => item?.error || item?.message || ctx.t('unknownError'));
+        if (ctx.pickerList) ctx.pickerList.innerHTML = `<div class="picker-empty">${ctx.esc(formatMessage(data))}</div>`;
         return;
       }
 

@@ -5,6 +5,7 @@
     return {
       t: options.t || ((key) => key),
       esc: options.esc || ((str) => String(str || '')),
+      formatMessage: options.formatMessage || root.i18n?.formatMessage || ((item) => String(item?.message || item?.error || item || '')),
       quoteDisplayText: options.quoteDisplayText || ((entry) => String(entry?.text || entry || '')),
       scrollToBottom: options.scrollToBottom || (() => {}),
       messagesEl: options.messagesEl || document.getElementById('chat-messages'),
@@ -101,6 +102,7 @@
             `;
           }).join('')}
           ${skipped.length ? `<div class="context-trace-skipped">${ctx.esc(ctx.t('contextTraceSkipped', { count: skipped.length, items: skipped.slice(0, 3).map(item => item.title || item.path || item.reason).join('、') }))}</div>` : ''}
+          ${Array.isArray(trace.errors) && trace.errors.length ? `<div class="context-trace-skipped">${ctx.esc(trace.errors.slice(0, 3).map(item => ctx.formatMessage(item)).join('、'))}</div>` : ''}
         </div>
       </details>
     `;

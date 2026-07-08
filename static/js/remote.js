@@ -152,6 +152,10 @@
     };
   }
 
+  function formatMessage(data, fallbackKey = 'unknownError') {
+    return root.i18n?.formatMessage ? root.i18n.formatMessage(data, fallbackKey) : String(data?.error || data?.message || t(fallbackKey) || '');
+  }
+
   function setFormStatus(text, kind) {
     const status = document.getElementById('remote-form-status');
     if (!status) return;
@@ -174,7 +178,7 @@
       });
       if (!resp.ok) {
         const err = await resp.json().catch(() => ({}));
-        setFormStatus(err.error || t('remoteSaveFailed'), 'err');
+        setFormStatus(formatMessage(err, 'remoteSaveFailed'), 'err');
         return;
       }
       await loadTargets();

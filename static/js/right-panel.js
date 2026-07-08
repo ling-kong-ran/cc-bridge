@@ -13,6 +13,10 @@
     return String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   }
 
+  function formatMessage(data, fallbackKey = 'unknownError') {
+    return root.i18n?.formatMessage ? root.i18n.formatMessage(data, fallbackKey) : String(data?.error || data?.message || t(fallbackKey) || '');
+  }
+
   function setVisible(el, visible, display = '') {
     if (!el) return;
     el.style.display = visible ? display : 'none';
@@ -360,12 +364,12 @@ async function loadReview(cwd) {
     const resp = await fetch(`/api/review?cwd=${encodeURIComponent(cwd)}`);
     const data = await resp.json();
     if (data.error) {
-      panel.innerHTML = `<div class="review-empty">${esc(data.error)}</div>`;
+      panel.innerHTML = `<div class="review-empty">${esc(formatMessage(data))}</div>`;
       updateWorkspaceHeader('review');
       return;
     }
     if (!data.git) {
-      panel.innerHTML = `<div class="review-empty">${esc(data.message || t('reviewNoGit'))}</div>`;
+      panel.innerHTML = `<div class="review-empty">${esc(formatMessage(data, 'reviewNoGit'))}</div>`;
       updateWorkspaceHeader('review');
       return;
     }
@@ -442,7 +446,7 @@ async function loadReviewDiff(file, staged) {
     const resp = await fetch(`/api/review-diff?cwd=${encodeURIComponent(_reviewCwd)}&file=${encodeURIComponent(file)}&staged=${staged ? '1' : '0'}`);
     const data = await resp.json();
     if (data.error) {
-      diffPreviewContentEl.innerHTML = `<div class="file-preview-state">${esc(data.error)}</div>`;
+      diffPreviewContentEl.innerHTML = `<div class="file-preview-state">${esc(formatMessage(data))}</div>`;
       return;
     }
     renderDiffContent(data);
@@ -825,8 +829,9 @@ async function openFilePreview(filePath) {
     const resp = await fetch(`/api/file-preview?path=${encodeURIComponent(filePath)}&cwd=${encodeURIComponent(cwd)}`);
     const data = await resp.json();
     if (!data.ok) {
-      previewContentEl.innerHTML = `<div class="file-preview-state">${esc(t('filePreviewUnsupported'))}</div>`;
-      if (previewMetaEl) previewMetaEl.textContent = data.error || '';
+      const message = formatMessage(data, 'filePreviewUnsupported');
+      previewContentEl.innerHTML = `<div class="file-preview-state">${esc(message)}</div>`;
+      if (previewMetaEl) previewMetaEl.textContent = message;
       return;
     }
     currentPreviewFile = data;

@@ -45,6 +45,10 @@
     };
   }
 
+  function formatMessage(data, fallbackKey = 'unknownError') {
+    return root.i18n?.formatMessage ? root.i18n.formatMessage(data, fallbackKey) : String(data?.error || data?.message || getContext().t(fallbackKey) || '');
+  }
+
   function initFilePicker(options = {}) {
     defaultOptions = { ...defaultOptions, ...options };
     if (initialized) return;
@@ -217,7 +221,7 @@
       const data = await resp.json();
 
       if (data.error) {
-        if (ctx.list) ctx.list.innerHTML = `<div class="picker-empty">${ctx.esc(data.error)}</div>`;
+        if (ctx.list) ctx.list.innerHTML = `<div class="picker-empty">${ctx.esc(formatMessage(data))}</div>`;
         return;
       }
 
@@ -271,7 +275,7 @@
       if (seq !== searchSeq || ctx.search?.value.trim() !== keyword) return;
 
       if (data.error) {
-        if (ctx.list) ctx.list.innerHTML = `<div class="picker-empty">${ctx.esc(data.error)}</div>`;
+        if (ctx.list) ctx.list.innerHTML = `<div class="picker-empty">${ctx.esc(formatMessage(data))}</div>`;
         return;
       }
 
@@ -387,7 +391,7 @@
       cwd: ctx.cwdInput?.value.trim() || '',
     });
     if (!data.ok) {
-      ctx.addSystemMsg(ctx.t('remoteFileCacheFailed', { message: data.error || 'failed' }), true);
+      ctx.addSystemMsg(ctx.t('remoteFileCacheFailed', { message: formatMessage(data, 'unknownError') }), true);
       return;
     }
     ctx.addAttachment({

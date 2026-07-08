@@ -5,6 +5,10 @@
   let gatewayScopes = [];
   let onboardState = null;
 
+  function formatMessage(data, fallbackKey = 'unknownError') {
+    return root.i18n?.formatMessage ? root.i18n.formatMessage(data, fallbackKey) : String(data?.error || data?.message || t(fallbackKey) || '');
+  }
+
   function init() {
     document.getElementById('btn-feishu-gateway-refresh')?.addEventListener('click', loadGateway);
     document.getElementById('btn-feishu-gateway-save')?.addEventListener('click', () => saveConfig());
@@ -83,7 +87,7 @@
         body: JSON.stringify({ domain: 'feishu' }),
       });
       const data = await resp.json();
-      if (!resp.ok || !data.ok) throw new Error(data.error || resp.statusText);
+      if (!resp.ok || !data.ok) throw new Error(formatMessage(data, 'unknownError'));
 
       onboardState = {
         device_code: data.device_code,
@@ -128,7 +132,7 @@
     }
     if (data.status === 'failed') {
       const status = document.getElementById('feishu-onboard-status');
-      if (status) status.textContent = (t('feishuOnboardFailed') || 'Registration failed: ') + (data.error || '');
+      if (status) status.textContent = (t('feishuOnboardFailed') || 'Registration failed: ') + formatMessage(data);
       cancelOnboard(true);
       return;
     }
@@ -199,7 +203,7 @@
     try {
       const resp = await root.api.request('/api/feishu-gateway/config');
       const data = await resp.json();
-      if (!resp.ok) throw new Error(data.error || resp.statusText);
+      if (!resp.ok) throw new Error(formatMessage(data, 'unknownError'));
       gatewayConfig = data.config || data || {};
       fillConfig(gatewayConfig);
       renderStatus(gatewayConfig);
@@ -220,7 +224,7 @@
     try {
       const resp = await root.api.request('/api/feishu-gateway/scopes');
       const data = await resp.json();
-      if (!resp.ok) throw new Error(data.error || resp.statusText);
+      if (!resp.ok) throw new Error(formatMessage(data, 'unknownError'));
       gatewayScopes = Array.isArray(data.scopes) ? data.scopes : (Array.isArray(data) ? data : []);
       renderScopes();
     } catch (e) {
@@ -276,7 +280,7 @@
         body: JSON.stringify(payload),
       });
       const data = await resp.json();
-      if (!resp.ok) throw new Error(data.error || resp.statusText);
+      if (!resp.ok) throw new Error(formatMessage(data, 'unknownError'));
       gatewayConfig = data.config || data || payload;
       fillConfig(gatewayConfig);
       renderStatus(gatewayConfig);
@@ -402,7 +406,7 @@
         body: JSON.stringify({ scope_key: scopeKey }),
       });
       const data = await resp.json();
-      if (!resp.ok) throw new Error(data.error || resp.statusText);
+      if (!resp.ok) throw new Error(formatMessage(data, 'unknownError'));
       showToast(successMessage, 'success');
       await loadScopes();
     } catch (e) {

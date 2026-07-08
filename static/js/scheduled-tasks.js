@@ -3,6 +3,10 @@
 
   let scheduledTasks = [];
 
+  function formatMessage(data, fallbackKey = 'unknownError') {
+    return root.i18n?.formatMessage ? root.i18n.formatMessage(data, fallbackKey) : String(data?.error || data?.message || t(fallbackKey) || '');
+  }
+
   function init() {
     document.getElementById('btn-scheduled-refresh')?.addEventListener('click', () => {
       loadTasks().catch((e) => console.warn('Load scheduled tasks failed:', e));
@@ -200,7 +204,7 @@
     });
     const data = await resp.json();
     if (!resp.ok) {
-      showToast(data.error || t('scheduledSaveFailed'), 'error');
+      showToast(formatMessage(data, 'scheduledSaveFailed'), 'error');
       return;
     }
     showToast(t('scheduledTaskSaved'), 'success');

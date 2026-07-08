@@ -17,8 +17,20 @@
     return text;
   }
 
+  function formatMessage(data, fallbackKey = 'unknownError') {
+    if (!data) return t(fallbackKey);
+    if (typeof data === 'string') return i18nMap[data] ? t(data) : data;
+    const key = data.message_key || data.error_key || data.key;
+    const params = data.message_params || data.error_params || data.params || {};
+    if (key) return t(key, params);
+    const text = data.message || data.error;
+    if (typeof text === 'string' && i18nMap[text]) return t(text, params);
+    return text || t(fallbackKey);
+  }
+
   root.i18n = {
     load,
     t,
+    formatMessage,
   };
 })();

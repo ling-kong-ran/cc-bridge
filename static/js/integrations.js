@@ -1,6 +1,10 @@
 (function () {
   const root = window.CCBridge = window.CCBridge || {};
 
+  function formatMessage(data, fallbackKey = 'unknownError') {
+    return root.i18n?.formatMessage ? root.i18n.formatMessage(data, fallbackKey) : String(data?.error || data?.message || t(fallbackKey) || '');
+  }
+
   function renderMcpServers(servers) {
     const el = document.getElementById('mcp-list');
     if (!el) return;
@@ -122,7 +126,7 @@
         body: JSON.stringify(payload),
       });
       const data = await resp.json().catch(() => ({}));
-      if (!resp.ok) throw new Error(data.error || 'save failed');
+      if (!resp.ok) throw new Error(formatMessage(data));
       hideMcpForm();
       await loadMcpServers();
       addSystemMsg(t('mcpSaved'));

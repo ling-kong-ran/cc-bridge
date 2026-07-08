@@ -26,6 +26,11 @@
     };
   }
 
+  function formatMessage(data, fallbackKey = 'unknownError', options = {}) {
+    const ctx = getContext(options);
+    return root.i18n?.formatMessage ? root.i18n.formatMessage(data, fallbackKey) : String(data?.error || data?.message || ctx.t(fallbackKey) || '');
+  }
+
   function initCliUpdate(options = {}) {
     defaultOptions = { ...defaultOptions, ...options };
   }
@@ -203,7 +208,7 @@
       renderNavVersionBadge(data);
       if (!data.ok) {
         if (manual && checkHint) {
-          checkHint.textContent = data.error ? `${ctx.t('updateFailed')}: ${data.error}` : ctx.t('updateFailed');
+          checkHint.textContent = data.error ? `${ctx.t('updateFailed')}: ${formatMessage(data, 'unknownError', options)}` : ctx.t('updateFailed');
           checkHint.className = 'update-check-hint err';
         }
         return;
@@ -269,7 +274,7 @@
       if (window.ccBridgeDesktop?.installUpdate) {
         const result = await window.ccBridgeDesktop.installUpdate();
         if (!result.ok) {
-          setUpdateStatus(result.error ? `${ctx.t('updateRestartManual')}: ${result.error}` : ctx.t('updateRestartManual'), 'err');
+          setUpdateStatus(result.error ? `${ctx.t('updateRestartManual')}: ${formatMessage(result, 'unknownError', options)}` : ctx.t('updateRestartManual'), 'err');
           if (runBtn) runBtn.disabled = false;
           return;
         }

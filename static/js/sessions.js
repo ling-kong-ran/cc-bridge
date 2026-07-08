@@ -1,6 +1,10 @@
 (function () {
   const root = window.CCBridge = window.CCBridge || {};
 
+  function formatMessage(data, fallbackKey = 'unknownError') {
+    return root.i18n?.formatMessage ? root.i18n.formatMessage(data, fallbackKey) : String(data?.error || data?.message || t(fallbackKey) || '');
+  }
+
   let migrateTargetCwd = '';
 
   function syncWorkspaceSessionsFromRecords(sessions) {
@@ -367,7 +371,7 @@
         body: JSON.stringify({ session_id: sessionId, title }),
       });
       const data = await resp.json();
-      if (!data.ok) throw new Error(data.error || 'renameFailed');
+      if (!data.ok) throw new Error(formatMessage(data, 'renameFailed'));
       const session = workspaceSessions.get(sessionId);
       if (session) {
         session.title = title;
@@ -376,7 +380,7 @@
       }
       await loadSessions();
     } catch (e) {
-      addSystemMsg(t(e.message || 'renameFailed') || t('renameFailed'), true);
+      addSystemMsg(e.message || t('renameFailed'), true);
     }
   }
 
@@ -537,7 +541,7 @@
       }
       await loadSessions();
     } else {
-      addSystemMsg(t('cwdNotChanged', { message: result.error || t('unknownError') }), true);
+      addSystemMsg(t('cwdNotChanged', { message: formatMessage(result) }), true);
     }
   }
 
