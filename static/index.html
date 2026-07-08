@@ -82,6 +82,10 @@
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2l2.4 6.8L21 11l-6.6 2.2L12 20l-2.4-6.8L3 11l6.6-2.2L12 2z"></path><path d="M5 3v4"></path><path d="M3 5h4"></path><path d="M19 17v4"></path><path d="M17 19h4"></path></svg>
             <span data-i18n="skills">Skills</span>
           </button>
+          <button class="nav-btn" data-page="tools" title="Tools" data-i18n-title="tools">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.3-3.3a5 5 0 0 1-6.6 6.6L7.4 19.6a2 2 0 0 1-2.8-2.8l7-7a5 5 0 0 1 6.6-6.6l-3.5 3.1z"></path></svg>
+            <span data-i18n="tools">Tools</span>
+          </button>
           <button class="nav-btn" data-page="integrations" title="Integrations" data-i18n-title="integrations">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 7H5a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-4"></path><path d="M15 3h6v6"></path><path d="M10 14 21 3"></path></svg>
             <span data-i18n="integrations">Integrations</span>
@@ -387,6 +391,27 @@
             <div id="skills-count" class="skills-count"></div>
           </div>
           <div id="skills-list" class="skills-grid">
+            <p class="empty-state" data-i18n="loading">Loading...</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- 工具页 -->
+      <div id="page-tools" class="page tools-page">
+        <div class="tools-shell">
+          <header class="tools-header">
+            <div>
+              <div class="tools-kicker" data-i18n="toolsKicker">Agent capabilities</div>
+              <h2 data-i18n="tools">Tools</h2>
+              <p class="tools-subtitle" data-i18n="toolsSubtitle">Review and enable the tools agents can use.</p>
+            </div>
+            <button id="btn-tools-refresh" class="btn-mini" type="button" data-i18n="refresh">Refresh</button>
+          </header>
+          <div class="tools-toolbar">
+            <div id="tools-count" class="tools-count"></div>
+            <div class="tools-note" data-i18n="toolsNote">Computer Use runs only against isolated background targets and does not control your active keyboard or mouse.</div>
+          </div>
+          <div id="tools-list" class="tools-grid">
             <p class="empty-state" data-i18n="loading">Loading...</p>
           </div>
         </div>
@@ -1051,8 +1076,11 @@
           </select>
         </div>
         <div class="settings-row">
-          <label class="field-label" for="agent-form-tools" data-i18n="agentTools">Tools</label>
-          <input id="agent-form-tools" class="input" placeholder="Read, Grep, Glob, Bash, Write, Edit">
+          <div class="field-label" id="agent-form-tools-label" data-i18n="agentTools">Tools</div>
+          <div id="agent-form-tools" class="agent-tools-picker" role="group" aria-labelledby="agent-form-tools-label">
+            <p class="empty-state" data-i18n="loading">Loading...</p>
+          </div>
+          <p class="field-help" data-i18n="agentToolsHelp">Select the tools this agent can use.</p>
         </div>
         <div class="settings-row">
           <label class="field-label" for="agent-form-color" data-i18n="agentColor">Color</label>

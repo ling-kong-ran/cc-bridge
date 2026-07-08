@@ -1124,6 +1124,7 @@ function getNavigationOptions() {
     getCachedSessions: () => cachedSessions,
     loadArtifacts,
     loadSkills,
+    loadTools,
     loadIntegrations,
     loadMemoryFiles,
     loadScheduledTasks,
@@ -2430,6 +2431,10 @@ function initAgentSkills() {
 
 function loadSkills() {
   return window.CCBridge.agentSkills?.loadSkills?.();
+}
+
+function loadTools() {
+  return window.CCBridge.agentSkills?.loadTools?.();
 }
 
 function renderAgents(agents) {

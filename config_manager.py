@@ -8,11 +8,14 @@ from pathlib import Path
 from typing import Any
 import re
 
+from custom_tools.registry import list_custom_tool_manifests
+
 CLAUDE_DIR = Path(os.environ.get("USERPROFILE", "~")) / ".claude"
 CCB_DIR = Path.home() / ".ccb"
 SETTINGS_FILE = CLAUDE_DIR / "settings.json"
 CLAUDE_JSON_FILE = Path.home() / ".claude.json"
 GUI_SETTINGS_FILE = CCB_DIR / "gui_settings.json"
+TOOL_SETTINGS_FILE = CCB_DIR / "tool_settings.json"
 ENV_PROFILES_FILE = CCB_DIR / "env_profiles.json"
 SKILLS_DIR = CLAUDE_DIR / "skills"
 AGENTS_DIR = CLAUDE_DIR / "agents"
@@ -179,9 +182,237 @@ def save_mcp_server(data: dict[str, Any]) -> dict[str, Any]:
     return _normalize_mcp_server(name, config, scope)
 
 
-# 项目级配置
-PROJECT_DIR = Path(__file__).parent.parent
-PROJECT_SETTINGS = PROJECT_DIR / "settings.json"
+DEFAULT_TOOLS: list[dict[str, Any]] = [
+    {
+        "name": "Task",
+        "label": "Task",
+        "description": "启动子代理处理搜索、研究或多步骤任务。",
+        "source": "claude",
+        "category": "agent",
+        "risk": "medium",
+        "enabled": True,
+        "custom": False,
+    },
+    {
+        "name": "Bash",
+        "label": "Bash",
+        "description": "在本机执行 shell 命令。",
+        "source": "claude",
+        "category": "terminal",
+        "risk": "high",
+        "enabled": True,
+        "custom": False,
+    },
+    {
+        "name": "Read",
+        "label": "Read",
+        "description": "读取本地文件内容。",
+        "source": "claude",
+        "category": "filesystem",
+        "risk": "low",
+        "enabled": True,
+        "custom": False,
+    },
+    {
+        "name": "Edit",
+        "label": "Edit",
+        "description": "对已有文件执行精确文本替换。",
+        "source": "claude",
+        "category": "filesystem",
+        "risk": "high",
+        "enabled": True,
+        "custom": False,
+    },
+    {
+        "name": "Write",
+        "label": "Write",
+        "description": "创建或覆盖本地文件。",
+        "source": "claude",
+        "category": "filesystem",
+        "risk": "high",
+        "enabled": True,
+        "custom": False,
+    },
+    {
+        "name": "Glob",
+        "label": "Glob",
+        "description": "按文件名模式搜索项目文件。",
+        "source": "claude",
+        "category": "search",
+        "risk": "low",
+        "enabled": True,
+        "custom": False,
+    },
+    {
+        "name": "Grep",
+        "label": "Grep",
+        "description": "按内容搜索项目文件。",
+        "source": "claude",
+        "category": "search",
+        "risk": "low",
+        "enabled": True,
+        "custom": False,
+    },
+    {
+        "name": "WebFetch",
+        "label": "WebFetch",
+        "description": "读取指定网页内容。",
+        "source": "claude",
+        "category": "network",
+        "risk": "medium",
+        "enabled": True,
+        "custom": False,
+    },
+    {
+        "name": "WebSearch",
+        "label": "WebSearch",
+        "description": "执行网页搜索。",
+        "source": "claude",
+        "category": "network",
+        "risk": "medium",
+        "enabled": True,
+        "custom": False,
+    },
+    {
+        "name": "TodoWrite",
+        "label": "TodoWrite",
+        "description": "维护当前任务列表。",
+        "source": "claude",
+        "category": "planning",
+        "risk": "low",
+        "enabled": True,
+        "custom": False,
+    },
+    {
+        "name": "computer_use",
+        "label": "Computer Use",
+        "description": "Computer Use 自定义 MCP 工具：让 Agent 感知并操作受控后台目标、虚拟会话或无头上下文；不会接管用户当前真实键盘鼠标。",
+        "source": "custom",
+        "category": "automation",
+        "risk": "high",
+        "enabled": True,
+        "custom": True,
+        "driver": "isolated-background",
+        "platforms": ["windows", "macos", "linux"],
+    },
+]
+
+
+def _normalize_tool_name(name: str) -> str:
+    return str(name or "").strip()
+
+
+def _tool_sort_key(tool: dict[str, Any]) -> tuple[int, str]:
+    return (0 if tool.get("enabled") else 1, str(tool.get("label") or tool.get("name") or "").lower())
+
+
+def get_tool_settings() -> dict[str, Any]:
+    """读取工具开关配置。"""
+    data = _read_json_file(TOOL_SETTINGS_FILE)
+    if not isinstance(data.get("tools"), dict):
+        data["tools"] = {}
+    if not isinstance(data.get("custom_tools"), list):
+        data["custom_tools"] = []
+    return data
+
+
+def save_tool_settings(data: dict[str, Any]):
+    """保存工具开关配置。"""
+    if not isinstance(data.get("tools"), dict):
+        data["tools"] = {}
+    if not isinstance(data.get("custom_tools"), list):
+        data["custom_tools"] = []
+    _write_json_file(TOOL_SETTINGS_FILE, data)
+
+
+def _merge_tool_definition(tool: dict[str, Any], settings: dict[str, Any]) -> dict[str, Any]:
+    name = _normalize_tool_name(tool.get("name"))
+    item = {**tool, "name": name}
+    saved = settings.get("tools", {}).get(name, {})
+    if isinstance(saved, dict) and "enabled" in saved:
+        item["enabled"] = bool(saved.get("enabled"))
+    item.setdefault("label", name)
+    item.setdefault("description", "")
+    item.setdefault("source", "custom" if item.get("custom") else "claude")
+    item.setdefault("category", "general")
+    item.setdefault("risk", "medium")
+    item.setdefault("custom", item.get("source") != "claude")
+    return item
+
+
+def list_tools(extra_tools: list[dict[str, Any]] | None = None) -> list[dict[str, Any]]:
+    """列出 GUI 已知工具，包含 Claude 原生工具、自定义工具和未来扩展工具。"""
+    settings = get_tool_settings()
+    merged: dict[str, dict[str, Any]] = {}
+    for tool in DEFAULT_TOOLS:
+        name = _normalize_tool_name(tool.get("name"))
+        if name:
+            merged[name] = _merge_tool_definition(tool, settings)
+
+    for tool in list_custom_tool_manifests():
+        if not isinstance(tool, dict):
+            continue
+        name = _normalize_tool_name(tool.get("name"))
+        if not name:
+            continue
+        current = merged.get(name, {})
+        merged[name] = _merge_tool_definition({**current, **tool, "custom": True, "source": tool.get("source") or "custom"}, settings)
+
+    for tool in settings.get("custom_tools", []):
+        if not isinstance(tool, dict):
+            continue
+        name = _normalize_tool_name(tool.get("name"))
+        if not name:
+            continue
+        merged[name] = _merge_tool_definition({**tool, "custom": True, "source": tool.get("source") or "custom"}, settings)
+
+    for tool in extra_tools or []:
+        if not isinstance(tool, dict):
+            continue
+        name = _normalize_tool_name(tool.get("name") or tool.get("id"))
+        if not name:
+            continue
+        current = merged.get(name, {})
+        merged[name] = _merge_tool_definition({**current, **tool, "name": name}, settings)
+
+    return sorted(merged.values(), key=_tool_sort_key)
+
+
+def set_tool_enabled(name: str, enabled: bool) -> dict[str, Any]:
+    """更新单个工具的可用状态。"""
+    tool_name = _normalize_tool_name(name)
+    if not tool_name or not re.match(r"^[A-Za-z0-9_.-]{1,80}$", tool_name):
+        raise ValueError("invalid tool name")
+    settings = get_tool_settings()
+    known = {tool["name"] for tool in list_tools()}
+    if tool_name not in known:
+        raise ValueError("tool not found")
+    settings["tools"][tool_name] = {"enabled": bool(enabled)}
+    save_tool_settings(settings)
+    return next(tool for tool in list_tools() if tool.get("name") == tool_name)
+
+
+def register_custom_tool(data: dict[str, Any]) -> dict[str, Any]:
+    """注册一个自定义工具定义，供后续 agent 多选和工具页展示。"""
+    name = _normalize_tool_name(data.get("name"))
+    if not name or not re.match(r"^[A-Za-z0-9_.-]{1,80}$", name):
+        raise ValueError("invalid tool name")
+    settings = get_tool_settings()
+    custom_tools = [tool for tool in settings.get("custom_tools", []) if isinstance(tool, dict) and tool.get("name") != name]
+    custom_tools.append({
+        "name": name,
+        "label": str(data.get("label") or name).strip(),
+        "description": str(data.get("description") or "").strip(),
+        "source": "custom",
+        "category": str(data.get("category") or "custom").strip(),
+        "risk": str(data.get("risk") or "medium").strip(),
+        "custom": True,
+    })
+    settings["custom_tools"] = custom_tools
+    settings.setdefault("tools", {})[name] = {"enabled": bool(data.get("enabled", True))}
+    save_tool_settings(settings)
+    return next(tool for tool in list_tools() if tool.get("name") == name)
+
 
 
 def get_settings() -> dict[str, Any]:

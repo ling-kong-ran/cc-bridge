@@ -6474,6 +6474,7 @@ html.light-theme .agent-status-bar {
 
   .sessions-shell,
   .skills-shell,
+  .tools-shell,
   .artifacts-shell,
   .integrations-shell,
   .memory-shell,
@@ -6485,19 +6486,55 @@ html.light-theme .agent-status-bar {
 
   .sessions-toolbar,
   .skills-toolbar,
+  .tools-toolbar,
   .artifacts-toolbar,
   .memory-toolbar {
     flex-direction: column;
     align-items: stretch;
   }
 
+  .tools-header {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .tools-header .btn-mini {
+    width: 100%;
+    justify-content: center;
+  }
+
   .sessions-count,
-  .skills-count {
+  .skills-count,
+  .tools-count {
     align-self: flex-start;
   }
 
-  .skills-grid {
+  .tools-note {
+    max-width: none;
+    text-align: left;
+  }
+
+  .skills-grid,
+  .tools-grid {
     grid-template-columns: 1fr;
+  }
+
+  .tools-page .tools-card {
+    min-height: 0;
+  }
+
+  .tools-page .tools-card-head {
+    align-items: flex-start;
+    gap: 10px;
+  }
+
+  .tools-page .tool-switch {
+    min-width: 96px;
+  }
+
+  .agent-tools-picker {
+    grid-template-columns: 1fr;
+    max-height: 220px;
   }
 
   .skill-card {
@@ -6897,6 +6934,152 @@ html.light-theme .agent-status-bar {
   padding: 0 4px;
   font-size: 9.5px;
 }
+
+
+/* ─── Tools 管理页 ─────────────────────────────────────────── */
+.tools-page { overflow: hidden; }
+
+.tools-shell {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  width: 100%;
+  max-width: 1120px;
+  margin: 0 auto;
+  padding: 28px 36px;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.tools-header,
+.skills-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.tools-kicker,
+.skills-kicker {
+  color: var(--green-dim);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  margin-bottom: 6px;
+}
+
+.tools-header h2,
+.skills-header h2 { margin: 0; color: var(--text-bright); }
+
+.tools-subtitle {
+  margin: 6px 0 0;
+  color: var(--text-muted);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.tools-toolbar {
+  min-height: 42px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 12px;
+  border: 1px solid var(--border-dim);
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--bg-surface) 76%, transparent);
+}
+
+.tools-count,
+.tools-note {
+  color: var(--text-ghost);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.05em;
+}
+
+.tools-note { max-width: 620px; line-height: 1.45; }
+
+.tools-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 12px;
+  align-content: start;
+}
+
+.tools-page .tools-card {
+  min-height: 170px;
+  padding: 15px;
+  border: 1px solid var(--border-dim);
+  border-radius: var(--radius-lg);
+  background:
+    linear-gradient(135deg, rgba(var(--accent-rgb), 0.055), transparent 46%),
+    var(--bg-surface);
+  box-shadow: var(--shadow-sm);
+  transition: transform var(--t-fast), border-color var(--t-fast), background var(--t-fast), opacity var(--t-fast);
+}
+
+.tools-page .tools-card.disabled { opacity: .66; }
+.tools-page .tools-card:hover { transform: translateY(-2px); border-color: rgba(var(--accent-rgb), 0.34); background: var(--bg-raised); }
+.tools-page .tools-card-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+.tools-page .tools-card-title { color: var(--text-bright); font-weight: 700; font-size: 14px; }
+.tools-page .tools-card-name { margin-top: 3px; color: var(--text-ghost); font-family: var(--font-mono); font-size: 10px; }
+.tools-page .tools-card-desc { margin: 12px 0; color: var(--text-muted); font-size: 12px; line-height: 1.55; }
+.tools-page .tools-card-meta { display: flex; flex-wrap: wrap; gap: 6px; }
+.tools-page .tools-card-meta span { border: 1px solid var(--border-dim); border-radius: 999px; padding: 3px 8px; color: var(--text-muted); font-family: var(--font-mono); font-size: 10px; }
+
+.tools-page .tool-switch {
+  min-width: 104px;
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  cursor: pointer;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  font-size: 10px;
+}
+.tools-page .tool-switch input { position: absolute; opacity: 0; width: 1px; height: 1px; }
+.tools-page .tool-switch-track { position: relative; width: 40px; height: 22px; flex: 0 0 auto; border: 1px solid var(--border); border-radius: 999px; background: var(--bg-raised); transition: all var(--t-base) var(--ease-out); }
+.tools-page .tool-switch-thumb { position: absolute; top: 3px; left: 3px; width: 14px; height: 14px; border-radius: 50%; background: var(--text-muted); transition: transform var(--t-base) var(--ease-spring), background var(--t-base); }
+.tools-page .tool-switch input:checked + .tool-switch-track { border-color: var(--green-dim); background: var(--green-faint); box-shadow: var(--green-glow); }
+.tools-page .tool-switch input:checked + .tool-switch-track .tool-switch-thumb { transform: translateX(18px); background: var(--green); }
+.tools-page .tool-switch input:focus-visible + .tool-switch-track { outline: 2px solid var(--green); outline-offset: 3px; }
+.tools-page .tool-switch-text { min-width: 38px; }
+
+.agent-tools-picker {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+  gap: 8px;
+  padding: 10px;
+  border: 1px solid var(--border-dim);
+  border-radius: var(--radius-sm);
+  background: var(--bg-input);
+  max-height: 240px;
+  overflow: auto;
+}
+
+.agent-tool-option {
+  min-height: 52px;
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr);
+  gap: 9px;
+  align-items: start;
+  padding: 9px;
+  border: 1px solid var(--border-dim);
+  border-radius: var(--radius-xs);
+  background: color-mix(in srgb, var(--bg-surface) 78%, transparent);
+  cursor: pointer;
+}
+.agent-tool-option:hover { border-color: var(--border-light); background: var(--bg-hover); }
+.agent-tool-option input { margin-top: 2px; accent-color: var(--green); }
+.agent-tool-name { display: block; color: var(--text-bright); font-family: var(--font-mono); font-size: 11px; }
+.agent-tool-desc { display: block; margin-top: 3px; color: var(--text-muted); font-size: 11px; line-height: 1.35; }
+.field-help { margin: 6px 0 0; color: var(--text-ghost); font-size: 11px; line-height: 1.4; }
 
 
 /* ─── Skills 管理页 ─────────────────────────────────────────── */

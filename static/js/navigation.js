@@ -10,7 +10,7 @@
     if (target) target.classList.add('active');
 
     const pageLabel = document.getElementById('titlebar-page-label');
-    const pageKey = page === 'home' ? 'home' : page === 'config' ? 'settings' : page === 'artifacts' ? 'artifacts' : page === 'scheduled' ? 'scheduledTasks' : page === 'feishu-gateway' ? 'messageGateway' : page === 'sessions' ? 'sessions' : page === 'skills' ? 'skills' : page === 'integrations' ? 'integrations' : page === 'memory' ? 'memory' : 'chat';
+    const pageKey = page === 'home' ? 'home' : page === 'config' ? 'settings' : page === 'artifacts' ? 'artifacts' : page === 'scheduled' ? 'scheduledTasks' : page === 'feishu-gateway' ? 'messageGateway' : page === 'sessions' ? 'sessions' : page === 'skills' ? 'skills' : page === 'tools' ? 'tools' : page === 'integrations' ? 'integrations' : page === 'memory' ? 'memory' : 'chat';
     if (pageLabel) pageLabel.textContent = t(pageKey);
 
     const isChatPage = page === 'chat';
@@ -39,6 +39,8 @@
       options.loadArtifacts?.();
     } else if (page === 'skills') {
       options.loadSkills?.();
+    } else if (page === 'tools') {
+      options.loadTools?.();
     } else if (page === 'integrations') {
       options.loadIntegrations?.();
     } else if (page === 'memory') {

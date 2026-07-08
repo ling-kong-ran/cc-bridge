@@ -40,6 +40,9 @@ from config_manager import (
     get_available_models_with_profiles,
     list_mcp_servers,
     save_mcp_server,
+    list_tools,
+    set_tool_enabled,
+    register_custom_tool,
     create_agent,
     update_agent,
     delete_agent,
@@ -2756,6 +2759,8 @@ async def handle_api_get(path: str, writer: asyncio.StreamWriter, query: dict = 
         data = skill
     elif path == "/api/agents":
         data = list_agents()
+    elif path == "/api/tools":
+        data = {"tools": list_tools()}
     elif path == "/api/session/agents":
         cid = (query or {}).get("id", [""])[0]
         data = {"agents": client_session_agents.get(cid, [])}
@@ -3068,6 +3073,26 @@ async def handle_api_post(path: str, body: bytes, writer: asyncio.StreamWriter):
             await send_response(writer, 400, "application/json; charset=utf-8", resp)
             return
         resp = json.dumps(updated, ensure_ascii=False).encode("utf-8")
+        await send_response(writer, 200, "application/json; charset=utf-8", resp)
+        return
+    elif path == "/api/tools/toggle":
+        try:
+            updated = set_tool_enabled(str(data.get("name", "")), bool(data.get("enabled")))
+        except ValueError as exc:
+            resp = json.dumps({"error": str(exc)}, ensure_ascii=False).encode("utf-8")
+            await send_response(writer, 400, "application/json; charset=utf-8", resp)
+            return
+        resp = json.dumps(updated, ensure_ascii=False).encode("utf-8")
+        await send_response(writer, 200, "application/json; charset=utf-8", resp)
+        return
+    elif path == "/api/tools/register":
+        try:
+            saved = register_custom_tool(data)
+        except ValueError as exc:
+            resp = json.dumps({"error": str(exc)}, ensure_ascii=False).encode("utf-8")
+            await send_response(writer, 400, "application/json; charset=utf-8", resp)
+            return
+        resp = json.dumps(saved, ensure_ascii=False).encode("utf-8")
         await send_response(writer, 200, "application/json; charset=utf-8", resp)
         return
     elif path == "/api/skills/delete":

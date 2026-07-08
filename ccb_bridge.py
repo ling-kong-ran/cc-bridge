@@ -15,6 +15,8 @@ from pathlib import Path
 
 import shutil
 
+from config_manager import list_tools
+
 
 def _controlled_npm_claude_candidates() -> list[Path]:
     """受控 npm prefix 中 Claude Code CLI 可能生成的可执行文件。"""
@@ -328,51 +330,75 @@ class CCBSession:
         self._prefer_persistent = True
         self.is_running = True
 
-    def _build_remote_mcp(self) -> tuple[Optional[str], Optional[str]]:
-        """为绑定了远程目标的会话写出 MCP 配置文件，返回 (配置文件路径, 追加系统提示)。"""
-        if not self.remote_target:
+    def _build_mcp_config(self) -> tuple[Optional[str], Optional[str]]:
+        """为会话写出合并后的 MCP 配置文件，返回 (配置文件路径, 追加系统提示)。"""
+        servers: dict[str, dict[str, Any]] = {}
+        prompts: list[str] = []
+
+        if self.remote_target:
+            bridge_path = str(Path(__file__).parent / "remote_bridge.py")
+            audit_path = str((Path.home() / ".ccb" / "remote_audit.log"))
+            servers["remote"] = {
+                "command": sys.executable,
+                "args": [bridge_path],
+                "env": {
+                    "CCB_REMOTE_TARGET": json.dumps(self.remote_target, ensure_ascii=False),
+                    "CCB_REMOTE_ALLOW_MUTATE": "1" if self.allow_mutate else "0",
+                    "CCB_REMOTE_AUDIT": audit_path,
+                },
+            }
+            t = self.remote_target
+            label = t.get("name") or t.get("host", "")
+            mutate_line = (
+                "用户已开启「允许远程写入」，必要时可用 mcp__remote__remote_exec 执行变更类命令，执行前先说明将要做的改动。"
+                if self.allow_mutate else
+                "当前为只读模式，只能查看；如需变更系统请提示用户在 GUI 开启「允许远程写入」。"
+            )
+            prompts.append(
+                f"本会话用于ssh远程 操作目标机器（{label}，{t.get('user','')}@{t.get('host','')}）。"
+                "请优先使用名称以 mcp__remote__ 开头的远程工具（remote_run/remote_tail/remote_read_file/"
+                "remote_grep/remote_list/remote_sysinfo）在目标机上查看日志、跑只读命令。"
+                + mutate_line
+            )
+
+        enabled_tools = {tool.get("name"): tool for tool in list_tools() if tool.get("enabled")}
+        computer_tool = enabled_tools.get("computer_use")
+        if computer_tool:
+            args = computer_tool.get("mcp_args") if isinstance(computer_tool.get("mcp_args"), list) else []
+            command = str(computer_tool.get("mcp_command") or sys.executable)
+            server_name = str(computer_tool.get("mcp_server") or "computer_use")
+            audit_path = str((Path.home() / ".ccb" / "computer_use_audit.log"))
+            servers[server_name] = {
+                "command": command,
+                "args": [str(arg) for arg in args],
+                "env": {
+                    "CCB_COMPUTER_USE_AUDIT": audit_path,
+                },
+            }
+            prompts.append(
+                "本会话已启用 Computer Use 自定义 MCP 工具。需要观察或操作受控后台目标/明确目标应用窗口时，"
+                "可使用名称以 mcp__computer_use__ 开头的工具（computer_list_targets/computer_get_target/"
+                "computer_screenshot/computer_click/computer_type_text/computer_key/computer_launch_app/"
+                "computer_list_windows/computer_find_window/computer_list_controls/computer_click_control/"
+                "computer_set_text/computer_get_text/computer_wait_for）。"
+                "这些工具只允许作用于隔离后台目标、虚拟会话、无头上下文或用户明确指定的目标应用窗口；"
+                "不得尝试控制用户当前正在使用的真实键盘或鼠标，不得绕过登录、支付、权限弹窗或高风险确认流程。"
+            )
+
+        if not servers:
             return None, None
 
-        bridge_path = str(Path(__file__).parent / "remote_bridge.py")
-        audit_path = str((Path.home() / ".ccb" / "remote_audit.log"))
-        config = {
-            "mcpServers": {
-                "remote": {
-                    "command": sys.executable,
-                    "args": [bridge_path],
-                    "env": {
-                        "CCB_REMOTE_TARGET": json.dumps(self.remote_target, ensure_ascii=False),
-                        "CCB_REMOTE_ALLOW_MUTATE": "1" if self.allow_mutate else "0",
-                        "CCB_REMOTE_AUDIT": audit_path,
-                    },
-                }
-            }
-        }
+        config = {"mcpServers": servers}
         mcp_dir = Path.home() / ".ccb" / "mcp"
         mcp_dir.mkdir(parents=True, exist_ok=True)
         if not self._mcp_config_path:
-            self._mcp_config_path = mcp_dir / f"remote_{uuid.uuid4().hex[:8]}.json"
+            self._mcp_config_path = mcp_dir / f"session_{uuid.uuid4().hex[:8]}.json"
         self._mcp_config_path.write_text(json.dumps(config, ensure_ascii=False, indent=2), encoding="utf-8")
-        # 配置内含目标密码/密钥环境变量，收紧文件权限
         try:
             os.chmod(self._mcp_config_path, 0o600)
         except OSError:
             pass
-
-        t = self.remote_target
-        label = t.get("name") or t.get("host", "")
-        mutate_line = (
-            "用户已开启「允许远程写入」，必要时可用 mcp__remote__remote_exec 执行变更类命令，执行前先说明将要做的改动。"
-            if self.allow_mutate else
-            "当前为只读模式，只能查看；如需变更系统请提示用户在 GUI 开启「允许远程写入」。"
-        )
-        prompt = (
-            f"本会话用于ssh远程 操作目标机器（{label}，{t.get('user','')}@{t.get('host','')}"
-            "请优先使用名称以 mcp__remote__ 开头的远程工具（remote_run/remote_tail/remote_read_file/"
-            "remote_grep/remote_list/remote_sysinfo）在目标机上查看日志、跑只读命令"
-            + mutate_line
-        )
-        return str(self._mcp_config_path), prompt
+        return str(self._mcp_config_path), "\n".join(prompts) if prompts else None
 
     def current_generation_state(self) -> dict:
         """返回当前消息生成状态，供 SSE 重连/刷新恢复 UI。"""
@@ -446,7 +472,11 @@ class CCBSession:
             except (TypeError, ValueError):
                 remote_key = str(self.remote_target)
         agents_key = json.dumps(self.agent_configs, ensure_ascii=False, sort_keys=True) if self.agent_configs else ""
-        return (self.cli or get_current_cli(), self.cwd, self.model, self.skip_permissions, remote_key, self.allow_mutate, agents_key)
+        mcp_tools_key = json.dumps(
+            sorted(tool.get("name", "") for tool in list_tools() if tool.get("enabled") and tool.get("custom")),
+            ensure_ascii=False,
+        )
+        return (self.cli or get_current_cli(), self.cwd, self.model, self.skip_permissions, remote_key, self.allow_mutate, agents_key, mcp_tools_key)
 
     async def _send_persistent_message(self, content: str):
         proc_key = self._persistent_proc_key()
@@ -501,11 +531,11 @@ class CCBSession:
             "--model", self.model,
         ]
 
-        mcp_config, remote_prompt = self._build_remote_mcp()
+        mcp_config, mcp_prompt = self._build_mcp_config()
         if mcp_config:
             cmd += ["--mcp-config", mcp_config]
-        if remote_prompt:
-            cmd += ["--append-system-prompt", remote_prompt]
+        if mcp_prompt:
+            cmd += ["--append-system-prompt", mcp_prompt]
 
         if self.skip_permissions:
             cmd += ["--dangerously-skip-permissions"]
@@ -546,11 +576,11 @@ class CCBSession:
             "--model", self.model,
         ]
 
-        mcp_config, remote_prompt = self._build_remote_mcp()
+        mcp_config, mcp_prompt = self._build_mcp_config()
         if mcp_config:
             cmd += ["--mcp-config", mcp_config]
-        if remote_prompt:
-            cmd += ["--append-system-prompt", remote_prompt]
+        if mcp_prompt:
+            cmd += ["--append-system-prompt", mcp_prompt]
 
         if self.skip_permissions:
             cmd += ["--dangerously-skip-permissions"]

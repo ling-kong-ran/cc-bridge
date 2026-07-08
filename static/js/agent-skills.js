@@ -2,6 +2,7 @@
   const root = window.CCBridge = window.CCBridge || {};
 
   let skillsCache = [];
+  let toolsCache = [];
   let currentSkillDir = '';
   let agentModalEditingName = null;
 
@@ -13,6 +14,9 @@
   function initSkillsUI() {
     document.getElementById('btn-skills-refresh')?.addEventListener('click', () => {
       loadSkills().catch((e) => console.warn('Load skills failed:', e));
+    });
+    document.getElementById('btn-tools-refresh')?.addEventListener('click', () => {
+      loadTools().catch((e) => console.warn('Load tools failed:', e));
     });
     document.getElementById('skill-modal-close')?.addEventListener('click', closeSkillModal);
     document.getElementById('btn-skill-close')?.addEventListener('click', closeSkillModal);
@@ -105,6 +109,117 @@
     }
   }
 
+  async function loadTools() {
+    const el = document.getElementById('tools-list');
+    try {
+      const data = await root.api.json('/api/tools');
+      toolsCache = Array.isArray(data?.tools) ? data.tools : (Array.isArray(data) ? data : []);
+      renderTools(toolsCache);
+      renderAgentToolPicker(getSelectedAgentTools());
+      return toolsCache;
+    } catch (e) {
+      console.error('工具加载失败:', e);
+      if (el) el.innerHTML = `<p class="empty-state">${esc(t('requestFailed', { message: e.message || e }))}</p>`;
+      return [];
+    }
+  }
+
+  function toolStatusText(tool) {
+    return tool?.enabled ? t('toolEnabled') : t('toolDisabled');
+  }
+
+  function renderTools(tools) {
+    const el = document.getElementById('tools-list');
+    const countEl = document.getElementById('tools-count');
+    if (!el) return;
+    const list = Array.isArray(tools) ? tools : [];
+    const enabledCount = list.filter(tool => tool.enabled).length;
+    if (countEl) countEl.textContent = t('toolsCount', { enabled: enabledCount, count: list.length });
+    if (!list.length) {
+      el.innerHTML = `<p class="empty-state">${esc(t('noTools'))}</p>`;
+      return;
+    }
+    el.innerHTML = list.map(tool => {
+      const name = tool.name || '';
+      const sourceKey = tool.source === 'custom' ? 'toolSourceCustom' : 'toolSourceClaude';
+      const riskKey = `toolRisk${String(tool.risk || 'medium').replace(/^./, c => c.toUpperCase())}`;
+      return `
+        <article class="tools-card ${tool.enabled ? 'enabled' : 'disabled'}" data-tool="${esc(name)}">
+          <div class="tools-card-main">
+            <div class="tools-card-head">
+              <div>
+                <div class="tools-card-title">${esc(tool.label || name)}</div>
+                <div class="tools-card-name">${esc(name)}</div>
+              </div>
+              <label class="tool-switch" aria-label="${esc(t('toggleTool', { name: tool.label || name }))}">
+                <input type="checkbox" data-tool-toggle="${esc(name)}" ${tool.enabled ? 'checked' : ''}>
+                <span class="tool-switch-track"><span class="tool-switch-thumb"></span></span>
+                <span class="tool-switch-text">${esc(toolStatusText(tool))}</span>
+              </label>
+            </div>
+            <p class="tools-card-desc">${esc(tool.description || t('noDescription'))}</p>
+            <div class="tools-card-meta">
+              <span>${esc(t(sourceKey))}</span>
+              <span>${esc(tool.category || 'general')}</span>
+              <span>${esc(t(riskKey) || tool.risk || 'medium')}</span>
+            </div>
+          </div>
+        </article>
+      `;
+    }).join('');
+    el.querySelectorAll('[data-tool-toggle]').forEach(input => {
+      input.addEventListener('change', () => toggleTool(input.dataset.toolToggle, input.checked));
+    });
+  }
+
+  async function toggleTool(name, enabled) {
+    try {
+      await root.api.postJson('/api/tools/toggle', { name, enabled });
+      await loadTools();
+      showToast(t(enabled ? 'toolEnabledToast' : 'toolDisabledToast', { name }), 'success');
+    } catch (e) {
+      showToast(t('toolToggleFailed', { message: e.message || e }), 'error');
+      await loadTools();
+    }
+  }
+
+  function getSelectedAgentTools() {
+    const box = document.getElementById('agent-form-tools');
+    if (!box) return [];
+    return Array.from(box.querySelectorAll('input[type="checkbox"]:checked')).map(input => input.value).filter(Boolean);
+  }
+
+  function renderAgentToolPicker(selectedTools = []) {
+    const box = document.getElementById('agent-form-tools');
+    if (!box) return;
+    const selected = new Set(Array.isArray(selectedTools) ? selectedTools : []);
+    const list = toolsCache.filter(tool => tool.enabled);
+    if (!list.length) {
+      box.innerHTML = `<p class="empty-state">${esc(t('noTools'))}</p>`;
+      return;
+    }
+    box.innerHTML = list.map(tool => {
+      const name = tool.name || '';
+      return `
+        <label class="agent-tool-option">
+          <input type="checkbox" value="${esc(name)}" ${selected.has(name) ? 'checked' : ''}>
+          <span>
+            <span class="agent-tool-name">${esc(tool.label || name)}</span>
+            <span class="agent-tool-desc">${esc(tool.description || name)}</span>
+          </span>
+        </label>
+      `;
+    }).join('');
+  }
+
+  async function ensureToolsLoaded() {
+    if (!toolsCache.length) await loadTools();
+  }
+
+  function setAgentToolSelection(tools) {
+    const selected = Array.isArray(tools) ? tools : (typeof tools === 'string' ? tools.replace(/,/g, ' ').split(/\s+/).filter(Boolean) : []);
+    renderAgentToolPicker(selected);
+  }
   function renderAgents(agents) {
     const el = document.getElementById('agents-list');
     if (!el) return;
@@ -136,14 +251,16 @@
     }).join('');
 
     el.querySelectorAll('.agent-edit-btn').forEach(btn => {
-      btn.addEventListener('click', () => openAgentModal(btn.dataset.name));
+      btn.addEventListener('click', () => {
+        openAgentModal(btn.dataset.name).catch((e) => console.warn('Open agent modal failed:', e));
+      });
     });
     el.querySelectorAll('.agent-del-btn').forEach(btn => {
       btn.addEventListener('click', () => deleteAgentPrompt(btn.dataset.name));
     });
   }
 
-  function openAgentModal(name = null) {
+  async function openAgentModal(name = null) {
     agentModalEditingName = name;
     const overlay = document.getElementById('agent-modal-overlay');
     const title = document.getElementById('agent-modal-title');
@@ -161,6 +278,7 @@
     overlay.style.display = 'flex';
     status.style.display = 'none';
     status.textContent = '';
+    await ensureToolsLoaded();
 
     if (name) {
       title.textContent = t('editAgent') + ': ' + name;
@@ -173,7 +291,7 @@
           formDesc.value = agent.description || '';
           formScope.value = agent.scope || 'user';
           formModel.value = agent.model || '';
-          formTools.value = Array.isArray(agent.tools) ? agent.tools.join(', ') : (agent.tools || '');
+          setAgentToolSelection(agent.tools || []);
           formColor.value = agent.color || '';
           formMemory.value = agent.memory || '';
           formPrompt.value = agent.body || '';
@@ -189,7 +307,7 @@
       formDesc.value = '';
       formScope.value = 'user';
       formModel.value = '';
-      formTools.value = '';
+      setAgentToolSelection([]);
       formColor.value = '';
       formMemory.value = '';
       formPrompt.value = '';
@@ -209,7 +327,7 @@
       description: document.getElementById('agent-form-desc').value.trim(),
       scope: document.getElementById('agent-form-scope').value,
       model: document.getElementById('agent-form-model').value,
-      tools: document.getElementById('agent-form-tools').value,
+      tools: getSelectedAgentTools(),
       color: document.getElementById('agent-form-color').value,
       memory: document.getElementById('agent-form-memory').value,
       body: document.getElementById('agent-form-prompt').value.trim(),
@@ -246,7 +364,9 @@
   }
 
   function initAgentModal() {
-    document.getElementById('btn-agent-add')?.addEventListener('click', () => openAgentModal());
+    document.getElementById('btn-agent-add')?.addEventListener('click', () => {
+      openAgentModal().catch((e) => console.warn('Open agent modal failed:', e));
+    });
     document.getElementById('btn-agent-save')?.addEventListener('click', () => {
       saveAgent().catch((e) => console.warn('Save agent failed:', e));
     });
@@ -264,6 +384,7 @@
   root.agentSkills = {
     init,
     loadSkills,
+    loadTools,
     renderAgents,
     openAgentModal,
     closeAgentModal,
