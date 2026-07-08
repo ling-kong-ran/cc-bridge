@@ -128,6 +128,11 @@
     return tool?.enabled ? t('toolEnabled') : t('toolDisabled');
   }
 
+  function toolDescriptionText(tool, fallback = t('noDescription')) {
+    if (tool?.description_i18n_key) return t(tool.description_i18n_key);
+    return tool?.description || fallback;
+  }
+
   function renderTools(tools) {
     const el = document.getElementById('tools-list');
     if (!el) return;
@@ -154,7 +159,7 @@
                 <span class="tool-switch-text">${esc(toolStatusText(tool))}</span>
               </label>
             </div>
-            <p class="tools-card-desc">${esc(tool.description || t('noDescription'))}</p>
+            <p class="tools-card-desc">${esc(toolDescriptionText(tool))}</p>
             <div class="tools-card-meta">
               <span>${esc(t(sourceKey))}</span>
               <span>${esc(tool.category || 'general')}</span>
@@ -202,7 +207,7 @@
           <input type="checkbox" value="${esc(name)}" ${selected.has(name) ? 'checked' : ''}>
           <span>
             <span class="agent-tool-name">${esc(tool.label || name)}</span>
-            <span class="agent-tool-desc">${esc(tool.description || name)}</span>
+            <span class="agent-tool-desc">${esc(toolDescriptionText(tool, name))}</span>
           </span>
         </label>
       `;

@@ -350,14 +350,13 @@ class CCBSession:
             t = self.remote_target
             label = t.get("name") or t.get("host", "")
             mutate_line = (
-                "用户已开启「允许远程写入」，必要时可用 mcp__remote__remote_exec 执行变更类命令，执行前先说明将要做的改动。"
+                "Remote writes are allowed. Use mcp__remote__remote_exec for changes when needed; state the change before running it."
                 if self.allow_mutate else
-                "当前为只读模式，只能查看；如需变更系统请提示用户在 GUI 开启「允许远程写入」。"
+                "Read-only mode. Ask the user to enable remote writes in the GUI before making changes."
             )
             prompts.append(
-                f"本会话用于ssh远程 操作目标机器（{label}，{t.get('user','')}@{t.get('host','')}）。"
-                "请优先使用名称以 mcp__remote__ 开头的远程工具（remote_run/remote_tail/remote_read_file/"
-                "remote_grep/remote_list/remote_sysinfo）在目标机上查看日志、跑只读命令。"
+                f"This session targets a remote SSH host ({label}, {t.get('user','')}@{t.get('host','')}). "
+                "Prefer mcp__remote__ tools for logs, read-only commands, and file inspection. "
                 + mutate_line
             )
 
@@ -375,14 +374,10 @@ class CCBSession:
                     "CCB_COMPUTER_USE_AUDIT": audit_path,
                 },
             }
+            # 中文：Computer Use 仅用于受控目标或用户明确指定的窗口。
             prompts.append(
-                "本会话已启用 Computer Use 自定义 MCP 工具。需要观察或操作受控后台目标/明确目标应用窗口时，"
-                "可使用名称以 mcp__computer_use__ 开头的工具（computer_list_targets/computer_get_target/"
-                "computer_screenshot/computer_click/computer_type_text/computer_key/computer_launch_app/"
-                "computer_list_windows/computer_find_window/computer_list_controls/computer_click_control/"
-                "computer_set_text/computer_get_text/computer_wait_for）。"
-                "这些工具只允许作用于隔离后台目标、虚拟会话、无头上下文或用户明确指定的目标应用窗口；"
-                "不得尝试控制用户当前正在使用的真实键盘或鼠标，不得绕过登录、支付、权限弹窗或高风险确认流程。"
+                "Computer Use is available via mcp__computer_use__ tools. Use it only for controlled targets or user-specified app windows. "
+                "Do not bypass login, payment, permission, or high-risk confirmations."
             )
 
         if not servers:

@@ -226,6 +226,7 @@
   "toolEnabledToast": "Tool {name} enabled",
   "toolDisabledToast": "Tool {name} disabled",
   "toolToggleFailed": "Failed to toggle tool: {message}",
+  "toolDescComputerUse": "Control the computer.",
   "skillContent": "SKILL.md",
   "skillOpen": "View skill details",
   "uninstallSkill": "Uninstall Skill",

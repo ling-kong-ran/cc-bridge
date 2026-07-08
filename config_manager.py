@@ -286,7 +286,8 @@ DEFAULT_TOOLS: list[dict[str, Any]] = [
     {
         "name": "computer_use",
         "label": "Computer Use",
-        "description": "Computer Use 自定义 MCP 工具：让 Agent 感知并操作受控后台目标、虚拟会话或无头上下文；不会接管用户当前真实键盘鼠标。",
+        "description": "",
+        "description_i18n_key": "toolDescComputerUse",
         "source": "custom",
         "category": "automation",
         "risk": "high",

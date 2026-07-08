@@ -29,7 +29,7 @@ class Driver(BaseDriver):
         return {
             "performed": False,
             "available": False,
-            "note": "Linux 桌面自动化需要 AT-SPI 和 python3-pyatspi，并需运行在图形桌面会话中。当前已回退为安全占位驱动。",
+            "note": "AT-SPI and python3-pyatspi are required.",
         }
 
     def _desktop(self) -> Any:
@@ -96,13 +96,13 @@ class Driver(BaseDriver):
                 if title_l and title_l not in str(info.get("name", "")).lower():
                     continue
                 return node, path
-        raise RuntimeError("未找到匹配控件")
+        raise RuntimeError("No matching control")
 
     def launch_app(self, command: str, args: list[str] | None = None, cwd: str = "") -> dict[str, Any]:
         if not command:
             raise ValueError("command required")
         if not self.allow_launch:
-            return {"performed": False, "note": "当前配置禁止启动真实应用。"}
+            return {"performed": False, "note": "App launch is disabled."}
         cmd = [command] + [str(arg) for arg in (args or [])]
         self._audit("launch_app", {"command": command, "args": args or [], "cwd": cwd})
         try:
@@ -110,7 +110,7 @@ class Driver(BaseDriver):
             time.sleep(0.5)
             return {"performed": True, "process_id": proc.pid, "windows": self.find_window(process=command).get("windows", [])}
         except Exception as exc:
-            return {"performed": False, "note": f"启动应用失败：{exc}"}
+            return {"performed": False, "note": f"Launch failed: {exc}"}
 
     def list_windows(self) -> dict[str, Any]:
         if not self.available:
@@ -171,9 +171,9 @@ class Driver(BaseDriver):
                 if name in {"click", "press", "activate", "toggle"}:
                     action.doAction(idx)
                     return {"performed": True, "control": info, "action": name}
-            return {"performed": False, "control": info, "note": "控件没有可用的 AT-SPI click/press/activate 动作。"}
+            return {"performed": False, "control": info, "note": "No click action available."}
         except Exception as exc:
-            return {"performed": False, "control": info, "note": f"Linux AT-SPI 语义点击失败：{exc}"}
+            return {"performed": False, "control": info, "note": f"Click failed: {exc}"}
 
     def set_text(self, window_id: str = "", control_id: str = "", text: str = "", title: str = "") -> dict[str, Any]:
         if not self.available:
@@ -188,7 +188,7 @@ class Driver(BaseDriver):
             editable.insertText(0, text, len(text))
             return {"performed": True, "control": info}
         except Exception as exc:
-            return {"performed": False, "control": info, "note": f"Linux AT-SPI 写入文本失败：{exc}"}
+            return {"performed": False, "control": info, "note": f"Set text failed: {exc}"}
 
     def get_text(self, window_id: str = "", control_id: str = "", title: str = "") -> dict[str, Any]:
         if not self.available:

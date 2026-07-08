@@ -26,7 +26,7 @@ class Driver:
     def __init__(self):
         self.audit_path = Path(os.environ.get("CCB_COMPUTER_USE_AUDIT") or Path.home() / ".ccb" / "computer_use_audit.log")
         self.target_id = os.environ.get("CCB_COMPUTER_USE_TARGET", "background").strip() or "background"
-        self.target_label = os.environ.get("CCB_COMPUTER_USE_TARGET_LABEL", "受控后台目标").strip() or "受控后台目标"
+        self.target_label = os.environ.get("CCB_COMPUTER_USE_TARGET_LABEL", "Background target").strip() or "Background target"
 
     def _audit(self, action: str, data: dict[str, Any]):
         try:
@@ -54,7 +54,7 @@ class Driver:
 
     def get_target(self, target_id: str) -> dict[str, Any]:
         if target_id and target_id != self.target_id:
-            raise ValueError(f"未知受控目标: {target_id}")
+            raise ValueError(f"Unknown target: {target_id}")
         return self.list_targets()["targets"][0]
 
     def screenshot(self, target_id: str = "") -> dict[str, Any]:
@@ -64,52 +64,52 @@ class Driver:
             "target": target,
             "mime_type": "image/png",
             "image_base64": base64.b64encode(PNG_1X1).decode("ascii"),
-            "note": "当前安全驱动返回受控后台目标占位截图；未读取或控制用户当前屏幕。",
+            "note": "Placeholder screenshot from the safe driver.",
         }
 
     def click(self, target_id: str, x: int, y: int, button: str = "left") -> dict[str, Any]:
         target = self.get_target(target_id or self.target_id)
         self._audit("click", {"target_id": target["id"], "x": x, "y": y, "button": button})
-        return {"target": target, "performed": True, "note": "已记录后台点击意图；安全驱动不会注入到用户当前真实鼠标。"}
+        return {"target": target, "performed": True, "note": "Click recorded by the safe driver."}
 
     def type_text(self, target_id: str, text: str) -> dict[str, Any]:
         target = self.get_target(target_id or self.target_id)
         self._audit("type_text", {"target_id": target["id"], "text_length": len(text or "")})
-        return {"target": target, "performed": True, "note": "已记录后台输入意图；安全驱动不会注入到用户当前真实键盘。"}
+        return {"target": target, "performed": True, "note": "Text input recorded by the safe driver."}
 
     def key(self, target_id: str, key: str) -> dict[str, Any]:
         target = self.get_target(target_id or self.target_id)
         self._audit("key", {"target_id": target["id"], "key": key})
-        return {"target": target, "performed": True, "note": "已记录后台按键意图；安全驱动不会注入到用户当前真实键盘。"}
+        return {"target": target, "performed": True, "note": "Key input recorded by the safe driver."}
 
     def launch_app(self, command: str, args: list[str] | None = None, cwd: str = "") -> dict[str, Any]:
         self._audit("launch_app", {"command": command, "args": args or [], "cwd": cwd})
-        return {"performed": False, "note": "当前安全驱动不启动真实应用。Windows 可安装 pywinauto 后使用真实桌面自动化驱动。"}
+        return {"performed": False, "note": "Safe driver cannot launch apps."}
 
     def list_windows(self) -> dict[str, Any]:
         self._audit("list_windows", {})
-        return {"windows": [], "note": "当前安全驱动不枚举真实窗口。"}
+        return {"windows": [], "note": "Safe driver cannot list windows."}
 
     def find_window(self, title: str = "", process: str = "") -> dict[str, Any]:
         self._audit("find_window", {"title": title, "process": process})
-        return {"windows": [], "note": "当前安全驱动不查找真实窗口。"}
+        return {"windows": [], "note": "Safe driver cannot find windows."}
 
     def list_controls(self, window_id: str = "", title: str = "", limit: int = 80) -> dict[str, Any]:
         self._audit("list_controls", {"window_id": window_id, "title": title, "limit": limit})
-        return {"controls": [], "note": "当前安全驱动不读取真实控件树。"}
+        return {"controls": [], "note": "Safe driver cannot list controls."}
 
     def click_control(self, window_id: str = "", control_id: str = "", title: str = "", control_type: str = "") -> dict[str, Any]:
         self._audit("click_control", {"window_id": window_id, "control_id": control_id, "title": title, "control_type": control_type})
-        return {"performed": False, "note": "当前安全驱动不点击真实控件。"}
+        return {"performed": False, "note": "Safe driver cannot click controls."}
 
     def set_text(self, window_id: str = "", control_id: str = "", text: str = "", title: str = "") -> dict[str, Any]:
         self._audit("set_text", {"window_id": window_id, "control_id": control_id, "text_length": len(text or ""), "title": title})
-        return {"performed": False, "note": "当前安全驱动不写入真实控件。"}
+        return {"performed": False, "note": "Safe driver cannot set control text."}
 
     def get_text(self, window_id: str = "", control_id: str = "", title: str = "") -> dict[str, Any]:
         self._audit("get_text", {"window_id": window_id, "control_id": control_id, "title": title})
-        return {"text": "", "note": "当前安全驱动不读取真实控件文本。"}
+        return {"text": "", "note": "Safe driver cannot read control text."}
 
     def wait_for(self, title: str = "", process: str = "", timeout: float = 10.0) -> dict[str, Any]:
         self._audit("wait_for", {"title": title, "process": process, "timeout": timeout})
-        return {"found": False, "note": "当前安全驱动不等待真实窗口。"}
+        return {"found": False, "note": "Safe driver cannot wait for windows."}

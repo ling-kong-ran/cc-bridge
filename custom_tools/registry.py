@@ -13,7 +13,8 @@ CUSTOM_TOOL_MANIFESTS: dict[str, dict[str, Any]] = {
     "computer_use": {
         "name": "computer_use",
         "label": "Computer Use",
-        "description": "后台计算机控制工具：面向受控窗口、虚拟会话或无头上下文执行键盘鼠标类操作，不接管用户当前真实输入设备。",
+        "description": "",
+        "description_i18n_key": "toolDescComputerUse",
         "source": "custom",
         "category": "automation",
         "risk": "high",

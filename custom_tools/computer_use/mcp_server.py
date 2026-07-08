@@ -140,162 +140,176 @@ def tool_wait_for(args: dict[str, Any]) -> dict[str, Any]:
 
 
 TOOLS: list[tuple[str, str, dict[str, Any], Callable[[dict[str, Any]], dict[str, Any]]]] = [
+    # 中文：列出 Computer Use 可操作的受控后台目标；不会读取或控制用户当前真实键盘鼠标。
     (
         "computer_list_targets",
-        "列出 Computer Use 可操作的受控后台目标。不会读取或控制用户当前真实键盘鼠标。",
+        "List available computer targets.",
         {"type": "object", "properties": {}},
         tool_list_targets,
     ),
+    # 中文：获取指定受控后台目标的信息。
     (
         "computer_get_target",
-        "获取指定受控后台目标的信息。",
-        {"type": "object", "properties": {"target_id": {"type": "string", "description": "目标 ID，留空使用默认后台目标"}}},
+        "Get target information.",
+        {"type": "object", "properties": {"target_id": {"type": "string", "description": "Target ID."}}},
         tool_get_target,
     ),
+    # 中文：获取受控后台目标截图；安全默认驱动不会读取用户当前屏幕。
     (
         "computer_screenshot",
-        "获取受控后台目标截图。安全默认驱动不会读取用户当前屏幕。",
-        {"type": "object", "properties": {"target_id": {"type": "string", "description": "目标 ID，留空使用默认后台目标"}}},
+        "Take a screenshot of a target.",
+        {"type": "object", "properties": {"target_id": {"type": "string", "description": "Target ID."}}},
         tool_screenshot,
     ),
+    # 中文：在受控后台目标内点击坐标；不会注入到用户当前真实鼠标。
     (
         "computer_click",
-        "在受控后台目标内点击坐标。不会注入到用户当前真实鼠标。",
+        "Click a target coordinate.",
         {
             "type": "object",
             "properties": {
-                "target_id": {"type": "string", "description": "目标 ID，留空使用默认后台目标"},
-                "x": {"type": "integer", "description": "目标内 X 坐标"},
-                "y": {"type": "integer", "description": "目标内 Y 坐标"},
-                "button": {"type": "string", "enum": ["left", "right", "middle"], "description": "鼠标按钮"},
+                "target_id": {"type": "string", "description": "Target ID."},
+                "x": {"type": "integer", "description": "X coordinate inside the target."},
+                "y": {"type": "integer", "description": "Y coordinate inside the target."},
+                "button": {"type": "string", "enum": ["left", "right", "middle"], "description": "Mouse button to click."},
             },
             "required": ["x", "y"],
         },
         tool_click,
     ),
+    # 中文：向受控后台目标输入文本；不会注入到用户当前真实键盘。
     (
         "computer_type_text",
-        "向受控后台目标输入文本。不会注入到用户当前真实键盘。",
+        "Type text into a target.",
         {
             "type": "object",
             "properties": {
-                "target_id": {"type": "string", "description": "目标 ID，留空使用默认后台目标"},
-                "text": {"type": "string", "description": "要输入的文本"},
+                "target_id": {"type": "string", "description": "Target ID."},
+                "text": {"type": "string", "description": "Text to type."},
             },
             "required": ["text"],
         },
         tool_type_text,
     ),
+    # 中文：向受控后台目标发送单个按键或组合键描述；不会注入到用户当前真实键盘。
     (
         "computer_key",
-        "向受控后台目标发送单个按键或组合键描述。不会注入到用户当前真实键盘。",
+        "Send a key or key combination to a target.",
         {
             "type": "object",
             "properties": {
-                "target_id": {"type": "string", "description": "目标 ID，留空使用默认后台目标"},
-                "key": {"type": "string", "description": "按键名或组合键，例如 Enter、Escape、Ctrl+S"},
+                "target_id": {"type": "string", "description": "Target ID."},
+                "key": {"type": "string", "description": "Key, e.g. Enter or Ctrl+S."},
             },
             "required": ["key"],
         },
         tool_key,
     ),
+    # 中文：启动桌面应用并返回进程与窗口信息；仅用于用户明确要求操作的目标应用。
     (
         "computer_launch_app",
-        "启动桌面应用并返回进程与窗口信息。仅用于用户明确要求操作的目标应用。",
+        "Launch an app.",
         {
             "type": "object",
             "properties": {
-                "command": {"type": "string", "description": "可执行文件路径或命令"},
-                "args": {"type": "array", "items": {"type": "string"}, "description": "启动参数"},
-                "cwd": {"type": "string", "description": "工作目录，可留空"},
+                "command": {"type": "string", "description": "Executable path or command."},
+                "args": {"type": "array", "items": {"type": "string"}, "description": "Launch arguments."},
+                "cwd": {"type": "string", "description": "Working directory."},
             },
             "required": ["command"],
         },
         tool_launch_app,
     ),
+    # 中文：列出当前可见桌面窗口摘要，用于选择明确目标窗口。
     (
         "computer_list_windows",
-        "列出当前可见桌面窗口摘要，用于选择明确目标窗口。",
+        "List visible windows.",
         {"type": "object", "properties": {}},
         tool_list_windows,
     ),
+    # 中文：按窗口标题或进程信息查找目标窗口。
     (
         "computer_find_window",
-        "按窗口标题或进程信息查找目标窗口。",
+        "Find windows by title or process.",
         {
             "type": "object",
             "properties": {
-                "title": {"type": "string", "description": "窗口标题关键字"},
-                "process": {"type": "string", "description": "进程名、类名或进程 ID 关键字"},
+                "title": {"type": "string", "description": "Window title keyword."},
+                "process": {"type": "string", "description": "Process name, class, or PID."},
             },
         },
         tool_find_window,
     ),
+    # 中文：列出目标窗口内控件树摘要，便于按控件 ID、标题或类型执行语义操作。
     (
         "computer_list_controls",
-        "列出目标窗口内控件树摘要，便于按控件 ID、标题或类型执行语义操作。",
+        "List controls in a window.",
         {
             "type": "object",
             "properties": {
-                "window_id": {"type": "string", "description": "目标窗口 ID"},
-                "title": {"type": "string", "description": "窗口标题关键字，window_id 为空时使用"},
-                "limit": {"type": "integer", "description": "最多返回控件数，默认 80，最大 300"},
+                "window_id": {"type": "string", "description": "Target window ID."},
+                "title": {"type": "string", "description": "Window title keyword."},
+                "limit": {"type": "integer", "description": "Control limit."},
             },
         },
         tool_list_controls,
     ),
+    # 中文：对目标窗口内控件执行 UIA 语义点击；默认不会回退到前台真实鼠标点击。
     (
         "computer_click_control",
-        "对目标窗口内控件执行 UIA 语义点击。默认不会回退到前台真实鼠标点击。",
+        "Click a control in a window.",
         {
             "type": "object",
             "properties": {
-                "window_id": {"type": "string", "description": "目标窗口 ID"},
-                "control_id": {"type": "string", "description": "控件 ID、automation_id 或 index"},
-                "title": {"type": "string", "description": "控件标题关键字"},
-                "control_type": {"type": "string", "description": "控件类型，例如 Button、Edit"},
+                "window_id": {"type": "string", "description": "Target window ID."},
+                "control_id": {"type": "string", "description": "Control ID, automation_id, or index."},
+                "title": {"type": "string", "description": "Control title keyword."},
+                "control_type": {"type": "string", "description": "Control type, such as Button or Edit."},
             },
             "required": ["window_id"],
         },
         tool_click_control,
     ),
+    # 中文：对目标窗口内文本控件执行 UIA 语义写入；默认不会回退到前台真实键盘输入。
     (
         "computer_set_text",
-        "对目标窗口内文本控件执行 UIA 语义写入。默认不会回退到前台真实键盘输入。",
+        "Set text in a control.",
         {
             "type": "object",
             "properties": {
-                "window_id": {"type": "string", "description": "目标窗口 ID"},
-                "control_id": {"type": "string", "description": "控件 ID、automation_id 或 index"},
-                "title": {"type": "string", "description": "控件标题关键字"},
-                "text": {"type": "string", "description": "要写入的文本"},
+                "window_id": {"type": "string", "description": "Target window ID."},
+                "control_id": {"type": "string", "description": "Control ID, automation_id, or index."},
+                "title": {"type": "string", "description": "Control title keyword."},
+                "text": {"type": "string", "description": "Text to write."},
             },
             "required": ["window_id", "text"],
         },
         tool_set_text,
     ),
+    # 中文：读取目标窗口或控件文本。
     (
         "computer_get_text",
-        "读取目标窗口或控件文本。",
+        "Read text from a window or control.",
         {
             "type": "object",
             "properties": {
-                "window_id": {"type": "string", "description": "目标窗口 ID"},
-                "control_id": {"type": "string", "description": "控件 ID、automation_id 或 index"},
-                "title": {"type": "string", "description": "窗口标题关键字，window_id 为空时使用"},
+                "window_id": {"type": "string", "description": "Target window ID."},
+                "control_id": {"type": "string", "description": "Control ID, automation_id, or index."},
+                "title": {"type": "string", "description": "Window title keyword."},
             },
         },
         tool_get_text,
     ),
+    # 中文：等待匹配标题或进程信息的窗口出现。
     (
         "computer_wait_for",
-        "等待匹配标题或进程信息的窗口出现。",
+        "Wait for a window.",
         {
             "type": "object",
             "properties": {
-                "title": {"type": "string", "description": "窗口标题关键字"},
-                "process": {"type": "string", "description": "进程名、类名或进程 ID 关键字"},
-                "timeout": {"type": "number", "description": "等待秒数，默认 10"},
+                "title": {"type": "string", "description": "Window title keyword."},
+                "process": {"type": "string", "description": "Process name, class, or PID."},
+                "timeout": {"type": "number", "description": "Seconds to wait. Defaults to 10."},
             },
         },
         tool_wait_for,
@@ -328,18 +342,18 @@ def _handle(msg: dict[str, Any]):
         arguments = params.get("arguments") or {}
         handler = TOOL_HANDLERS.get(name)
         if not handler:
-            _error(req_id, -32602, f"未知工具: {name}")
+            _error(req_id, -32602, f"Unknown tool: {name}")
             return
         try:
             outcome = handler(arguments if isinstance(arguments, dict) else {})
         except Exception as exc:
-            _result(req_id, {"content": [{"type": "text", "text": f"工具执行异常: {exc}"}], "isError": True})
+            _result(req_id, {"content": [{"type": "text", "text": f"Tool execution error: {exc}"}], "isError": True})
             return
         _result(req_id, {"content": outcome.get("content") or [{"type": "text", "text": ""}], "isError": not outcome.get("ok", False)})
     elif method == "ping":
         _result(req_id, {})
     elif is_request:
-        _error(req_id, -32601, f"未实现的方法: {method}")
+        _error(req_id, -32601, f"Method not implemented: {method}")
 
 
 def main():

@@ -35,7 +35,7 @@ class Driver(BaseDriver):
         return {
             "performed": False,
             "available": False,
-            "note": "Windows 桌面自动化需要安装 pywinauto：pip install pywinauto。当前已回退为安全占位驱动。",
+            "note": "Install pywinauto to enable Windows automation.",
         }
 
     def _window_id(self, wrapper: Any) -> str:
@@ -102,7 +102,7 @@ class Driver(BaseDriver):
             if process_l and process_l not in str(info.get("class_name", "")).lower() and process_l not in str(info.get("process_id", "")).lower():
                 continue
             return win
-        raise RuntimeError("未找到匹配窗口")
+        raise RuntimeError("No matching window")
 
     def _find_control_wrapper(self, window: Any, control_id: str = "", title: str = "", control_type: str = "") -> Any:
         title_l = (title or "").lower()
@@ -117,7 +117,7 @@ class Driver(BaseDriver):
             if type_l and type_l != str(info.get("control_type", "")).lower():
                 continue
             return ctrl
-        raise RuntimeError("未找到匹配控件")
+        raise RuntimeError("No matching control")
 
     def launch_app(self, command: str, args: list[str] | None = None, cwd: str = "") -> dict[str, Any]:
         if not self.available:
@@ -186,7 +186,7 @@ class Driver(BaseDriver):
                 return {
                     "performed": False,
                     "control": info,
-                    "note": f"控件不支持后台 invoke，已阻止前台鼠标点击回退：{exc}",
+                    "note": f"Control invoke failed; foreground click fallback is disabled: {exc}",
                 }
             control.click_input()
         return {"performed": True, "control": info}
@@ -205,7 +205,7 @@ class Driver(BaseDriver):
                 return {
                     "performed": False,
                     "control": info,
-                    "note": f"控件不支持后台 set_edit_text，已阻止前台键盘输入回退：{exc}",
+                    "note": f"Set text failed; foreground typing fallback is disabled: {exc}",
                 }
             control.type_keys("^a{BACKSPACE}", set_foreground=False)
             control.type_keys(text, with_spaces=True, set_foreground=False)

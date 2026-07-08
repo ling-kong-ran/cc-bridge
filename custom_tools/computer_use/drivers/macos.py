@@ -23,11 +23,11 @@ class Driver(BaseDriver):
     def _run_osascript(self, script: str) -> str:
         proc = subprocess.run(["osascript", "-e", script], capture_output=True, text=True, encoding="utf-8", timeout=20)
         if proc.returncode != 0:
-            raise RuntimeError((proc.stderr or proc.stdout or "osascript 执行失败").strip())
+            raise RuntimeError((proc.stderr or proc.stdout or "osascript failed").strip())
         return proc.stdout.strip()
 
     def _note(self) -> str:
-        return "macOS 需要在 系统设置 > 隐私与安全性 > 辅助功能 中允许当前终端/应用控制电脑。"
+        return "Grant Accessibility permission to the current terminal or app."
 
     def _app_from_window_id(self, window_id: str) -> str:
         return str(window_id or "").split(":", 1)[0]
@@ -36,17 +36,17 @@ class Driver(BaseDriver):
         if not command:
             raise ValueError("command required")
         if not self.allow_launch:
-            return {"performed": False, "note": "当前配置禁止启动真实应用。"}
+            return {"performed": False, "note": "App launch is disabled."}
         self._audit("launch_app", {"command": command, "args": args or [], "cwd": cwd})
         app_args = [str(arg) for arg in (args or [])]
         try:
             if not app_args and not cwd and "/" not in command:
                 self._run_osascript(f'tell application {json.dumps(command)} to activate')
-                return {"performed": True, "application": command, "note": "已通过 AppleScript 启动/激活应用。"}
+                return {"performed": True, "application": command, "note": "App activated."}
             proc = subprocess.Popen([command] + app_args, cwd=cwd or None)
             return {"performed": True, "process_id": proc.pid}
         except Exception as exc:
-            return {"performed": False, "note": f"启动应用失败：{exc}"}
+            return {"performed": False, "note": f"Launch failed: {exc}"}
 
     def list_windows(self) -> dict[str, Any]:
         self._audit("list_windows", {})
@@ -87,7 +87,7 @@ class Driver(BaseDriver):
                 })
             return {"windows": windows, "note": self._note()}
         except Exception as exc:
-            return {"windows": [], "available": False, "note": f"读取 macOS 窗口失败：{exc}。{self._note()}"}
+            return {"windows": [], "available": False, "note": f"List windows failed: {exc}. {self._note()}"}
 
     def find_window(self, title: str = "", process: str = "") -> dict[str, Any]:
         self._audit("find_window", {"title": title, "process": process})
@@ -105,7 +105,7 @@ class Driver(BaseDriver):
     def list_controls(self, window_id: str = "", title: str = "", limit: int = 80) -> dict[str, Any]:
         app_name = self._app_from_window_id(window_id) or title
         if not app_name:
-            return {"controls": [], "note": "macOS 读取控件需要 window_id 或应用名。"}
+            return {"controls": [], "note": "window_id or app name required."}
         max_items = max(1, min(int(limit or 80), 300))
         self._audit("list_controls", {"window_id": window_id, "title": title, "limit": max_items})
         script = f'''
@@ -141,12 +141,12 @@ class Driver(BaseDriver):
                 controls.append({"id": index, "index": int(index) if index.isdigit() else index, "name": name, "control_type": role})
             return {"controls": controls, "note": self._note()}
         except Exception as exc:
-            return {"controls": [], "available": False, "note": f"读取 macOS 控件失败：{exc}。{self._note()}"}
+            return {"controls": [], "available": False, "note": f"List controls failed: {exc}. {self._note()}"}
 
     def click_control(self, window_id: str = "", control_id: str = "", title: str = "", control_type: str = "") -> dict[str, Any]:
         app_name = self._app_from_window_id(window_id)
         if not app_name or not str(control_id).isdigit():
-            return {"performed": False, "note": "macOS 语义点击需要 window_id 和数字 control_id。"}
+            return {"performed": False, "note": "window_id and numeric control_id required."}
         self._audit("click_control", {"window_id": window_id, "control_id": control_id, "title": title, "control_type": control_type})
         script = f'''
         tell application "System Events"
@@ -160,12 +160,12 @@ class Driver(BaseDriver):
             self._run_osascript(script)
             return {"performed": True}
         except Exception as exc:
-            return {"performed": False, "note": f"macOS 语义点击失败：{exc}。{self._note()}"}
+            return {"performed": False, "note": f"Click failed: {exc}. {self._note()}"}
 
     def set_text(self, window_id: str = "", control_id: str = "", text: str = "", title: str = "") -> dict[str, Any]:
         app_name = self._app_from_window_id(window_id)
         if not app_name or not str(control_id).isdigit():
-            return {"performed": False, "note": "macOS 写入文本需要 window_id 和数字 control_id。"}
+            return {"performed": False, "note": "window_id and numeric control_id required."}
         self._audit("set_text", {"window_id": window_id, "control_id": control_id, "text_length": len(text or ""), "title": title})
         script = f'''
         tell application "System Events"
@@ -179,12 +179,12 @@ class Driver(BaseDriver):
             self._run_osascript(script)
             return {"performed": True}
         except Exception as exc:
-            return {"performed": False, "note": f"macOS 写入文本失败：{exc}。{self._note()}"}
+            return {"performed": False, "note": f"Set text failed: {exc}. {self._note()}"}
 
     def get_text(self, window_id: str = "", control_id: str = "", title: str = "") -> dict[str, Any]:
         app_name = self._app_from_window_id(window_id) or title
         if not app_name:
-            return {"text": "", "note": "macOS 读取文本需要 window_id 或应用名。"}
+            return {"text": "", "note": "window_id or app name required."}
         self._audit("get_text", {"window_id": window_id, "control_id": control_id, "title": title})
         if str(control_id).isdigit():
             script = f'''
@@ -204,7 +204,7 @@ class Driver(BaseDriver):
         try:
             return {"text": self._run_osascript(script)}
         except Exception as exc:
-            return {"text": "", "note": f"macOS 读取文本失败：{exc}。{self._note()}"}
+            return {"text": "", "note": f"Read text failed: {exc}. {self._note()}"}
 
     def wait_for(self, title: str = "", process: str = "", timeout: float = 10.0) -> dict[str, Any]:
         deadline = time.time() + max(0.1, float(timeout or 10.0))

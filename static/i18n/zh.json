@@ -226,6 +226,7 @@
   "toolEnabledToast": "已启用工具 {name}",
   "toolDisabledToast": "已禁用工具 {name}",
   "toolToggleFailed": "工具状态切换失败: {message}",
+  "toolDescComputerUse": "控制电脑。",
   "skillContent": "SKILL.md",
   "skillOpen": "查看技能详情",
   "uninstallSkill": "卸载技能",
