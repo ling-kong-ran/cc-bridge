@@ -95,7 +95,7 @@ jobs:
           python-version: '3.12'
 
       - name: Check Python entry syntax
-        run: python -m py_compile server.py bootstrap.py bootstrap/launcher.py
+        run: python -m py_compile server.py bootstrap.py bootstrap/launcher.py custom_tools/computer_use/mcp_server.py custom_tools/computer_use/driver.py custom_tools/computer_use/drivers/base.py custom_tools/computer_use/drivers/windows.py custom_tools/computer_use/drivers/macos.py custom_tools/computer_use/drivers/linux.py
 
       - name: Install npm dependencies
         run: npm ci
