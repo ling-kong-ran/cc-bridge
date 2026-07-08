@@ -23,6 +23,15 @@ def ws_log(msg: str) -> None:
         pass
 
 try:
+    import truststore
+    truststore.inject_into_ssl()
+    ws_log("已启用系统证书信任库")
+except ImportError:
+    pass
+except Exception as exc:
+    ws_log(f"启用系统证书信任库失败: {exc}")
+
+try:
     import lark_oapi as lark
     from lark_oapi.api.im.v1 import CreateMessageRequest, CreateMessageRequestBody
 except ImportError:

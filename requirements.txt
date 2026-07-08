@@ -1,2 +1,3 @@
 qrcode
 pywinauto; platform_system == "Windows"
+truststore
