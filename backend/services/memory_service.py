@@ -4,6 +4,7 @@ from typing import Any
 
 from config_manager import get_available_models, get_gui_settings
 from memory_index import (
+    apply_memory_link_pair,
     delete_memory_file,
     get_memory_file,
     get_memory_graph,
@@ -12,6 +13,7 @@ from memory_index import (
     index_memory,
     list_memory_files,
     organize_memory_links,
+    preview_memory_links,
     save_memory_file,
     search_memory,
 )
@@ -116,7 +118,7 @@ def _normalize_memory_organize_actions(raw_actions: Any, existing_names: set[str
         return []
 
     normalized: list[dict[str, Any]] = []
-    valid_actions = {"keep", "merge", "delete", "rewrite", "refine"}
+    valid_actions = {"keep", "merge", "delete", "rewrite", "refine", "link"}
     for item in raw_actions:
         if not isinstance(item, dict):
             continue
@@ -143,6 +145,11 @@ def _normalize_memory_organize_actions(raw_actions: Any, existing_names: set[str
             new_content = ""
         elif action == "delete":
             if len(clean_targets) != 1:
+                continue
+            new_filename = ""
+            new_content = ""
+        elif action == "link":
+            if len(clean_targets) != 2:
                 continue
             new_filename = ""
             new_content = ""
@@ -180,13 +187,14 @@ def _normalize_memory_organize_actions(raw_actions: Any, existing_names: set[str
 
 
 async def preview_memory_organize(cwd: str) -> dict[str, Any]:
-    """先执行 wikilink 整理，再调用 LLM 生成待用户复核的整理方案。"""
-    link_result = organize_memory_links(cwd)
+    """生成待用户复核的记忆整理方案；双链只作为建议，不在预览阶段写文件。"""
+    link_result = preview_memory_links(cwd)
     files = list_memory_files(cwd)
     if not files:
         return {
             "actions": [],
-            "linked": link_result.get("linked", 0),
+            "linked": 0,
+            "link_candidates": 0,
             "skipped": link_result.get("skipped", 0),
             "pairs": link_result.get("pairs", []),
             "message": "没有可整理的记忆文件",
@@ -198,25 +206,49 @@ async def preview_memory_organize(cwd: str) -> dict[str, Any]:
     memories = _build_organize_memories(files, cwd)
     existing_names = {str(item.get("name") or "") for item in files if item.get("name")}
 
+    link_actions: list[dict[str, Any]] = []
+    for pair in link_result.get("pairs", [])[:20]:
+        source = str(pair.get("source") or "")
+        target = str(pair.get("target") or "")
+        if source not in existing_names or target not in existing_names:
+            continue
+        shared = "、".join(str(term) for term in pair.get("shared_terms", [])[:5])
+        reason = f"建议建立双链：相似度 {pair.get('similarity', 0)}"
+        if shared:
+            reason += f"，共同关键词：{shared}"
+        link_actions.append({
+            "id": len(link_actions),
+            "action": "link",
+            "targets": [source, target],
+            "new_filename": "",
+            "new_content": "",
+            "reason": reason,
+        })
+
     try:
         import memory_llm
     except ImportError:
         return {
-            "actions": [],
-            "linked": link_result.get("linked", 0),
+            "actions": link_actions,
+            "linked": 0,
+            "link_candidates": len(link_actions),
             "skipped": link_result.get("skipped", 0),
             "pairs": link_result.get("pairs", []),
-            "message": "LLM 模块不可用，仅完成 wikilink 链接",
+            "message": "LLM 模块不可用，仅生成双链候选",
             "model": model,
         }
 
     prompt = memory_llm._ORGANIZE_PROMPT.replace("{memories}", memories)
     raw_actions = await memory_llm.llm_json(prompt, model, cwd, timeout=120.0)
-    actions = _normalize_memory_organize_actions(raw_actions, existing_names)
-    message = "" if isinstance(raw_actions, list) else "LLM 未返回有效整理方案，仅完成 wikilink 链接"
+    organize_actions = _normalize_memory_organize_actions(raw_actions, existing_names)
+    actions = organize_actions + link_actions
+    for index, action in enumerate(actions):
+        action["id"] = index
+    message = "" if isinstance(raw_actions, list) else "LLM 未返回有效整理方案，仅生成双链候选"
     return {
         "actions": actions,
-        "linked": link_result.get("linked", 0),
+        "linked": 0,
+        "link_candidates": len(link_actions),
         "skipped": link_result.get("skipped", 0),
         "pairs": link_result.get("pairs", []),
         "message": message,
@@ -230,6 +262,7 @@ def apply_memory_organize(cwd: str, actions: list[dict[str, Any]]) -> dict[str, 
     deleted = 0
     rewritten = 0
     refined = 0
+    linked = 0
     errors: list[dict[str, Any]] = []
 
     if not isinstance(actions, list):
@@ -283,6 +316,11 @@ def apply_memory_organize(cwd: str, actions: list[dict[str, Any]]) -> dict[str, 
                     if source != new_filename:
                         delete_memory_file(source, cwd)
                 refined += 1
+            elif action == "link":
+                if len(targets) != 2:
+                    raise ValueError("link requires two targets")
+                if apply_memory_link_pair(cwd, targets[0], targets[1]):
+                    linked += 1
             elif action == "delete":
                 if len(targets) != 1:
                     raise ValueError("delete requires one target")
@@ -297,4 +335,4 @@ def apply_memory_organize(cwd: str, actions: list[dict[str, Any]]) -> dict[str, 
             })
 
     index_memory(cwd, force=True)
-    return {"merged": merged, "deleted": deleted, "rewritten": rewritten, "refined": refined, "errors": errors}
+    return {"merged": merged, "deleted": deleted, "rewritten": rewritten, "refined": refined, "linked": linked, "errors": errors}

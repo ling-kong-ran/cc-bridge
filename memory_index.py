@@ -499,43 +499,52 @@ def _indexable_content(parsed: dict[str, Any]) -> str:
 
 
 def _extract_memory_terms(title: str, body: str, stem: str) -> set[str]:
-    """提取用于记忆整理的轻量关键词，兼顾中文文件名。"""
+    """提取用于记忆整理的保守关键词，避免宽泛双链误连。"""
     text = f"{title} {body} {stem}".lower()
     terms = set()
+    stopwords = {
+        "the", "and", "for", "with", "from", "this", "that", "have", "will", "your", "into",
+        "用户", "项目", "功能", "问题", "当前", "相关", "内容", "文件", "需要", "可以", "已经", "进行",
+        "这个", "那个", "如果", "时候", "默认", "使用", "实现", "优化", "记录", "说明", "记忆",
+    }
 
-    # 英文/数字词（2+ 字符）
-    for word in re.findall(r"[a-zA-Z0-9_]{2,}", text):
-        terms.add(word)
+    # 英文/数字词要求 3+ 字符，减少短词造成的弱关联。
+    for word in re.findall(r"[a-zA-Z0-9_]{3,}", text):
+        if word not in stopwords:
+            terms.add(word)
 
-    # 中文字符切词：jieba 可用时按真实词切分（"飞书消息"→{"飞书","消息"}），
-    # 不可用时退回 bigram 滑窗（"飞书消息"→{"飞书","书消","消息"}）。
+    # 中文字符切词：jieba 可用时按真实词切分；不可用时只保留 chunk 内 bigram，不加入单字。
     if _has_jieba:
         for word in jieba.cut(text):
             word = word.strip()
-            if len(word) >= 2:
+            if len(word) >= 2 and word not in stopwords:
                 terms.add(word)
     else:
-        cjk_chars = re.findall(r"[一-鿿]", text)
-        for k in range(len(cjk_chars) - 1):
-            terms.add(cjk_chars[k] + cjk_chars[k + 1])
-        for ch in cjk_chars:
-            terms.add(ch)
-    # 文件名分段：中文前缀/编号后缀常靠 - _ 空格分隔
+        for chunk in re.findall(r"[一-鿿]{2,}", text):
+            if 2 <= len(chunk) <= 6 and chunk not in stopwords:
+                terms.add(chunk)
+            for k in range(len(chunk) - 1):
+                term = chunk[k:k + 2]
+                if term not in stopwords:
+                    terms.add(term)
+
+    # 文件名分段：只提取可解释的较长片段，避免编号/短前缀误导。
     for part in re.split(r"[-_\s.]+", stem):
         part = part.strip().lower()
-        if len(part) < 2:
+        if len(part) < 3 or part in stopwords:
             continue
         terms.add(part)
-        # 同样的 CJK 分词策略（jieba 优先），避免 stem 路径的 bigram 污染顶掉上层 jieba 的效果
         if _has_jieba:
             for word in jieba.cut(part):
                 word = word.strip()
-                if len(word) >= 2:
+                if len(word) >= 2 and word not in stopwords:
                     terms.add(word)
         else:
-            part_cjk = re.findall(r"[一-鿿]", part)
-            for k in range(len(part_cjk) - 1):
-                terms.add(part_cjk[k] + part_cjk[k + 1])
+            for chunk in re.findall(r"[一-鿿]{2,}", part):
+                for k in range(len(chunk) - 1):
+                    term = chunk[k:k + 2]
+                    if term not in stopwords:
+                        terms.add(term)
 
     return terms
 
@@ -570,24 +579,19 @@ def _append_memory_link(file_data: dict[str, Any], target_stem: str) -> None:
     file_data["existing_links"].add(target_stem)
 
 
-def organize_memory_links(cwd: str) -> dict:
-    """分析 memory 文件内容相似度，自动为相关文件添加 [[wikilink]] 双向链接。
-
-    返回 {linked: N, skipped: M, pairs: [[source, target], ...]}
-    """
+def _collect_memory_link_candidates(cwd: str) -> tuple[dict[str, dict[str, Any]], list[dict[str, Any]], int]:
+    """保守分析 memory 文件相关性，返回可复核的 wikilink 候选。"""
     memory_dir = _get_memory_dir(cwd)
     if not memory_dir.exists():
-        return {"linked": 0, "skipped": 0, "pairs": []}
+        return {}, [], 0
 
-    # 读取所有文件，提取关键短语
-    files_data = {}
+    files_data: dict[str, dict[str, Any]] = {}
     for md_file in sorted(memory_dir.rglob("*.md")):
         parsed = _parse_memory_file(md_file)
         if not parsed:
             continue
         title = parsed["title"]
         body = parsed.get("body", "")
-        # 提取已有 wikilinks 的 target stems
         existing_links = set()
         for match in re.finditer(r"\[\[([^\[\]]+?)(?:\|[^\[\]]*?)?\]\]", body):
             existing_links.add(Path(match.group(1).strip()).stem)
@@ -599,17 +603,16 @@ def organize_memory_links(cwd: str) -> dict:
             "content": parsed.get("content", ""),
             "body": body,
             "terms": _extract_memory_terms(title, body, stem),
+            "title_terms": _extract_memory_terms(title, "", stem),
             "existing_links": existing_links,
         }
 
     if len(files_data) < 2:
-        return {"linked": 0, "skipped": 0, "pairs": []}
+        return files_data, [], 0
 
-    # 计算文件对之间的相似度；中文文件名前缀相同也视为强关联
     file_names = list(files_data.keys())
-    linked = 0
+    candidates: list[dict[str, Any]] = []
     skipped = 0
-    pairs = []
 
     for i in range(len(file_names)):
         for j in range(i + 1, len(file_names)):
@@ -617,11 +620,9 @@ def organize_memory_links(cwd: str) -> dict:
             name_b = file_names[j]
             data_a = files_data[name_a]
             data_b = files_data[name_b]
-
             stem_a = Path(name_a).stem
             stem_b = Path(name_b).stem
 
-            # 已存在双向链接则跳过
             if stem_b in data_a["existing_links"] and stem_a in data_b["existing_links"]:
                 skipped += 1
                 continue
@@ -631,27 +632,85 @@ def organize_memory_links(cwd: str) -> dict:
             if not terms_a or not terms_b:
                 continue
             intersection = terms_a & terms_b
-            union = terms_a | terms_b
-            similarity = len(intersection) / len(union) if union else 0
-            prefix_score = _memory_prefix_score(stem_a, stem_b)
-
-            # 阈值：中文 bigram 粒度细，用较低阈值；同名前缀文件直接建立关联
-            if similarity < 0.06 and prefix_score < 0.35:
+            if len(intersection) < 3:
                 continue
 
-            # 添加双向链接
-            modified = False
-            if stem_b not in data_a["existing_links"]:
-                _append_memory_link(data_a, stem_b)
-                modified = True
+            union = terms_a | terms_b
+            similarity = len(intersection) / len(union) if union else 0
+            title_overlap = (data_a["title_terms"] & terms_b) | (data_b["title_terms"] & terms_a)
+            prefix_score = _memory_prefix_score(stem_a, stem_b)
 
-            if stem_a not in data_b["existing_links"]:
-                _append_memory_link(data_b, stem_a)
-                modified = True
+            # 只接受强证据：较高内容相似度 + 标题/文件名命中，或非常强的同名前缀。
+            if not ((similarity >= 0.12 and title_overlap) or (similarity >= 0.18) or prefix_score >= 0.55):
+                continue
 
-            if modified:
-                linked += 1
-                pairs.append([name_a, name_b])
+            candidates.append({
+                "source": name_a,
+                "target": name_b,
+                "source_stem": stem_a,
+                "target_stem": stem_b,
+                "similarity": round(similarity, 3),
+                "prefix_score": round(prefix_score, 3),
+                "shared_terms": sorted(intersection)[:8],
+            })
+
+    candidates.sort(key=lambda item: (item["similarity"], item["prefix_score"], len(item["shared_terms"])), reverse=True)
+    return files_data, candidates, skipped
+
+
+def preview_memory_links(cwd: str) -> dict:
+    """仅生成 wikilink 候选，不写入文件。"""
+    _, candidates, skipped = _collect_memory_link_candidates(cwd)
+    return {"linked": 0, "skipped": skipped, "pairs": candidates}
+
+
+def apply_memory_link_pair(cwd: str, source: str, target: str) -> bool:
+    """应用一组经用户确认的双向 wikilink。"""
+    files_data, _, _ = _collect_memory_link_candidates(cwd)
+    data_a = files_data.get(Path(str(source or "")).name)
+    data_b = files_data.get(Path(str(target or "")).name)
+    if not data_a or not data_b:
+        return False
+    stem_a = Path(str(source)).stem
+    stem_b = Path(str(target)).stem
+    modified = False
+    if stem_b not in data_a["existing_links"]:
+        _append_memory_link(data_a, stem_b)
+        modified = True
+    if stem_a not in data_b["existing_links"]:
+        _append_memory_link(data_b, stem_a)
+        modified = True
+    return modified
+
+
+def organize_memory_links(cwd: str) -> dict:
+    """分析 memory 文件内容相似度，自动为相关文件添加 [[wikilink]] 双向链接。
+
+    返回 {linked: N, skipped: M, pairs: [[source, target], ...]}
+    """
+    files_data, candidates, skipped = _collect_memory_link_candidates(cwd)
+    if len(files_data) < 2:
+        return {"linked": 0, "skipped": skipped, "pairs": []}
+
+    linked = 0
+    pairs = []
+    for candidate in candidates:
+        source = candidate["source"]
+        target = candidate["target"]
+        data_a = files_data.get(source)
+        data_b = files_data.get(target)
+        if not data_a or not data_b:
+            continue
+        modified = False
+        if candidate["target_stem"] not in data_a["existing_links"]:
+            _append_memory_link(data_a, candidate["target_stem"])
+            modified = True
+        if candidate["source_stem"] not in data_b["existing_links"]:
+            _append_memory_link(data_b, candidate["source_stem"])
+            modified = True
+        if modified:
+            linked += 1
+            pairs.append([source, target])
 
     if linked:
         index_memory(cwd, force=True)

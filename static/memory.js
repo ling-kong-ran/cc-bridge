@@ -372,7 +372,7 @@ function openMemoryOrganizeReview(data) {
   if (applyBtn) applyBtn.disabled = false;
   summaryEl.textContent = t('memoryOrganizeSummary', {
     count: actions.length,
-    linked: data.linked || 0,
+    links: data.link_candidates || data.linked || 0,
     model: data.model || '-',
   });
   listEl.innerHTML = actions.map(action => {
@@ -443,6 +443,7 @@ async function applySelectedMemoryOrganizeActions() {
       showToast(t('memoryOrganizeApplied', {
         merged: data.merged || 0,
         refined: data.refined || 0,
+        linked: data.linked || 0,
         deleted: data.deleted || 0,
         rewritten: data.rewritten || 0,
       }), 'success');
