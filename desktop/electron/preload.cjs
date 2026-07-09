@@ -16,4 +16,16 @@ contextBridge.exposeInMainWorld('ccBridgeDesktop', {
     ipcRenderer.on('desktop:bootstrap-progress', listener)
     return () => ipcRenderer.removeListener('desktop:bootstrap-progress', listener)
   },
+  onUpdateAvailable: (callback) => {
+    if (typeof callback !== 'function') return () => {}
+    const listener = (_event, payload) => callback(payload)
+    ipcRenderer.on('desktop:update-available', listener)
+    return () => ipcRenderer.removeListener('desktop:update-available', listener)
+  },
+  onUpdateDownloaded: (callback) => {
+    if (typeof callback !== 'function') return () => {}
+    const listener = (_event, payload) => callback(payload)
+    ipcRenderer.on('desktop:update-downloaded', listener)
+    return () => ipcRenderer.removeListener('desktop:update-downloaded', listener)
+  },
 })

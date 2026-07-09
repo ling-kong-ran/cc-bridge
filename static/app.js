@@ -1111,7 +1111,21 @@ async function waitForServerAndReload(attempt = 0) {
 }
 
 function initUpdateModal() {
-  return window.CCBridge.cliUpdate?.initUpdateModal?.(getCliUpdateOptions());
+  window.CCBridge.cliUpdate?.initUpdateModal?.(getCliUpdateOptions());
+
+  // 桌面端：监听更新事件，立即更新左下角 badge
+  if (window.ccBridgeDesktop?.onUpdateAvailable) {
+    window.ccBridgeDesktop.onUpdateAvailable(info => {
+      updateInfo = { ok: true, has_update: true, local: '', remote: info.version || '', commits: info.commits || '' };
+      window.CCBridge.cliUpdate?.renderNavVersionBadge?.(updateInfo);
+    });
+  }
+  if (window.ccBridgeDesktop?.onUpdateDownloaded) {
+    window.ccBridgeDesktop.onUpdateDownloaded(info => {
+      updateInfo = { ok: true, has_update: true, local: '', remote: info.version || '', downloaded: true };
+      window.CCBridge.cliUpdate?.renderNavVersionBadge?.(updateInfo);
+    });
+  }
 }
 
 async function loadModels() {

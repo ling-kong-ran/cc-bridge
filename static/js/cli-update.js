@@ -222,16 +222,18 @@
       }
 
       if (data.has_update && (manual || data.remote !== ctx.getSkipUpdateVersion())) {
-        const changelog = document.getElementById('update-changelog');
-        if (changelog) {
-          if (data.commits) { changelog.style.display = ''; changelog.textContent = data.commits; }
-          else { changelog.style.display = 'none'; changelog.textContent = ''; }
+        if (manual) {
+          const changelog = document.getElementById('update-changelog');
+          if (changelog) {
+            if (data.commits) { changelog.style.display = ''; changelog.textContent = data.commits; }
+            else { changelog.style.display = 'none'; changelog.textContent = ''; }
+          }
+          if (checkHint) checkHint.textContent = '';
+          setUpdateStatus('', '');
+          const runBtn = document.getElementById('update-run');
+          if (runBtn) runBtn.disabled = false;
+          openUpdateModal();
         }
-        if (manual && checkHint) checkHint.textContent = '';
-        setUpdateStatus('', '');
-        const runBtn = document.getElementById('update-run');
-        if (runBtn) runBtn.disabled = false;
-        openUpdateModal();
       } else if (data.needs_restart) {
         const changelog = document.getElementById('update-changelog');
         if (changelog) {

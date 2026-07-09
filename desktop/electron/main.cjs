@@ -425,6 +425,24 @@ function configureAutoUpdater() {
   autoUpdater.autoDownload = true
   autoUpdater.autoInstallOnAppQuit = true
   autoUpdater.on('error', error => console.error('自动更新检查失败', error))
+  autoUpdater.on('update-available', info => {
+    console.log('发现新版本', info?.version)
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('desktop:update-available', {
+        version: info?.version || '',
+        release_name: info?.releaseName || '',
+        commits: normalizeReleaseNotes(info?.releaseNotes),
+      })
+    }
+  })
+  autoUpdater.on('update-downloaded', info => {
+    console.log('更新已下载', info?.version)
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('desktop:update-downloaded', {
+        version: info?.version || '',
+      })
+    }
+  })
   autoUpdater.checkForUpdatesAndNotify()
 }
 
