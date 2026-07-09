@@ -60,6 +60,9 @@ jobs:
     name: Build ${{ matrix.platform }}
     needs: prepare
     runs-on: ${{ matrix.os }}
+    env:
+      ELECTRON_CACHE: ${{ runner.temp }}/electron-cache
+      ELECTRON_BUILDER_CACHE: ${{ runner.temp }}/electron-builder-cache
     strategy:
       fail-fast: false
       matrix:
@@ -97,11 +100,47 @@ jobs:
       - name: Check Python entry syntax
         run: python -m py_compile server.py bootstrap.py bootstrap/launcher.py custom_tools/computer_use/mcp_server.py custom_tools/computer_use/driver.py custom_tools/computer_use/drivers/base.py custom_tools/computer_use/drivers/windows.py custom_tools/computer_use/drivers/macos.py custom_tools/computer_use/drivers/linux.py
 
+      - name: Cache Electron downloads
+        uses: actions/cache@v4
+        with:
+          path: |
+            ${{ env.ELECTRON_CACHE }}
+            ${{ env.ELECTRON_BUILDER_CACHE }}
+          key: ${{ runner.os }}-electron-${{ hashFiles('package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-electron-
+
       - name: Install npm dependencies
-        run: npm ci
+        run: npm ci --ignore-scripts
+
+      - name: Install Electron binary
+        shell: bash
+        run: |
+          for attempt in 1 2 3; do
+            if node node_modules/electron/install.js; then
+              npm exec electron -- --version
+              exit 0
+            fi
+            if [[ "$attempt" -lt 3 ]]; then
+              echo "Electron download failed, retrying in $((attempt * 10))s..."
+              sleep $((attempt * 10))
+            fi
+          done
+          exit 1
 
       - name: Build desktop package
-        run: ${{ matrix.command }}
+        shell: bash
+        run: |
+          for attempt in 1 2 3; do
+            if ${{ matrix.command }}; then
+              exit 0
+            fi
+            if [[ "$attempt" -lt 3 ]]; then
+              echo "Desktop packaging failed, retrying in $((attempt * 15))s..."
+              sleep $((attempt * 15))
+            fi
+          done
+          exit 1
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           CSC_IDENTITY_AUTO_DISCOVERY: false
