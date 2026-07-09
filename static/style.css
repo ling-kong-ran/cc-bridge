@@ -9461,6 +9461,28 @@ body[data-variant] .workspace-tabs-shell {
 
 body[data-variant] .workspace-tabs {
   min-width: 0;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(138,162,255,.34) transparent;
+}
+
+body[data-variant] .workspace-tabs::-webkit-scrollbar {
+  height: 8px;
+}
+
+body[data-variant] .workspace-tabs::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+body[data-variant] .workspace-tabs::-webkit-scrollbar-thumb {
+  border: 2px solid transparent;
+  border-radius: 999px;
+  background: rgba(138,162,255,.34);
+  background-clip: padding-box;
+}
+
+body[data-variant] .workspace-tabs::-webkit-scrollbar-thumb:hover {
+  background: rgba(138,162,255,.52);
+  background-clip: padding-box;
 }
 
 body[data-variant] .workspace-mode,
@@ -9826,7 +9848,7 @@ html.light-theme .nav-gateway-status-main { color: var(--text-2); }
   body .nav-btn span { display: inline; }
   body #page-chat.active,
   body .chat-main { min-width: 0; grid-template-columns: minmax(0, 1fr); }
-  body .workspace-tabs-shell { min-height: 58px; padding: 0 10px; overflow-x: auto; }
+  body .workspace-tabs-shell { min-height: 58px; padding: 0 10px; overflow-x: hidden; }
   body .session-workspace { min-width: 0; padding: 0; }
   body .messages { padding: 12px 10px; }
   body .input-area { padding: 8px 8px calc(8px + env(safe-area-inset-bottom)); }
