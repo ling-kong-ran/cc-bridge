@@ -173,6 +173,7 @@ const sessionSearchInput = document.getElementById('session-search');
 const sessionsCountEl = document.getElementById('sessions-count');
 const sessionsNewSessionBtn = document.getElementById('sessions-new-session');
 const btnThemeToggle = document.getElementById('btn-theme-toggle');
+const btnDesktopMinimize = document.getElementById('btn-desktop-minimize');
 const btnDesktopClose = document.getElementById('btn-desktop-close');
 const btnShortcuts = document.getElementById('btn-shortcuts');
 const shortcutsOverlay = document.getElementById('shortcuts-overlay');
@@ -184,7 +185,7 @@ const topbarCost = document.getElementById('topbar-cost');
 const topbarCostValue = document.getElementById('topbar-cost-value');
 const topbarTokens = document.getElementById('topbar-tokens');
 const topbarTokenValue = document.getElementById('topbar-token-value');
-const topbarModel = document.getElementById('topbar-model');
+const modelPill = document.getElementById('model-pill');
 const btnSessionPin = document.getElementById('btn-session-pin');
 const btnSessionCwd = document.getElementById('btn-session-cwd');
 const btnSessionRename = document.getElementById('btn-session-rename');
@@ -215,7 +216,7 @@ function getDesktopWindowModule() {
 }
 
 function initDesktopWindowControls() {
-  return getDesktopWindowModule()?.initDesktopWindowControls?.({ btnDesktopClose, desktop: window.ccBridgeDesktop });
+  return getDesktopWindowModule()?.initDesktopWindowControls?.({ btnDesktopMinimize, btnDesktopClose, desktop: window.ccBridgeDesktop });
 }
 
 // ─── 初始化 ──────────────────────────────────────────────────
@@ -968,7 +969,7 @@ function getRuntimeOptions() {
     openCliInstallModal,
     getCurrentSessionId: () => currentSessionId,
     modelSelect,
-    topbarModel,
+    topbarModel: modelPill,
     costDisplay,
     costValue,
     tokenDisplay,

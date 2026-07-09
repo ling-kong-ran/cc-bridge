@@ -380,12 +380,25 @@
     });
   }
 
+  function positionModelPillPopover() {
+    if (!modelPill || !modelPillPopover) return;
+    const rect = modelPill.getBoundingClientRect();
+    modelPillPopover.style.position = 'fixed';
+    modelPillPopover.style.top = `${Math.round(rect.bottom + 8)}px`;
+    modelPillPopover.style.left = `${Math.round(rect.left)}px`;
+    modelPillPopover.style.bottom = 'auto';
+    modelPillPopover.style.transform = 'none';
+    modelPillPopover.style.zIndex = '1000';
+  }
+
   function openModelPillPopover() {
     if (!modelPillPopover) return;
     if (isDisplay(modelPillPopover, 'block')) { closeModelPillPopover(); return; }
     closeSlashCommandPanel();
+    if (modelPillPopover.parentElement !== document.body) document.body.appendChild(modelPillPopover);
     renderModelPillPopoverOptions();
     setVisible(modelPillPopover, true, 'block');
+    positionModelPillPopover();
     modelPill.classList.add('open');
     modelPill.setAttribute('aria-expanded', 'true');
   }
@@ -393,6 +406,12 @@
   function closeModelPillPopover() {
     if (!modelPillPopover) return;
     setVisible(modelPillPopover, false);
+    modelPillPopover.style.position = '';
+    modelPillPopover.style.top = '';
+    modelPillPopover.style.left = '';
+    modelPillPopover.style.bottom = '';
+    modelPillPopover.style.transform = '';
+    modelPillPopover.style.zIndex = '';
     modelPill.classList.remove('open');
     modelPill.setAttribute('aria-expanded', 'false');
   }

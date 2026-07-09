@@ -35,6 +35,7 @@
       remoteTargetSelect: options.remoteTargetSelect || document.getElementById('remote-target-select'),
       inputCliStatus: options.inputCliStatus || document.getElementById('input-cli-status'),
       inputCwdStatus: options.inputCwdStatus || document.getElementById('input-cwd-status'),
+      pageLabel: options.pageLabel || document.getElementById('titlebar-page-label'),
     };
   }
 
@@ -133,8 +134,15 @@
 
   function renderTopbarMeta(modelOverride = '', options = {}) {
     const ctx = getContext(options);
-    const modelLabel = ctx.getDisplayModelName(modelOverride || ctx.modelSelect?.value || '') || ctx.t('noSession');
+    const modelLabel = ctx.getDisplayModelName(modelOverride || ctx.modelSelect?.value || '') || 'Sonnet 4.6';
     if (ctx.topbarModel) ctx.topbarModel.textContent = modelLabel;
+    if (ctx.pageLabel && ctx.getCurrentSessionId()) {
+      const cwd = ctx.cwdInput?.value?.trim() || '';
+      const cwdText = ctx.shortenPlainPath(cwd, 4) || ctx.t('cwd');
+      const localLabel = ctx.t('localMode') === 'localMode' ? 'Local' : ctx.t('localMode');
+      ctx.pageLabel.textContent = `${cwdText} · ${localLabel} CLI`;
+      ctx.pageLabel.title = cwd ? `${cwd} · ${localLabel} CLI` : '';
+    }
     ctx.renderTopbarSessionActions();
   }
 

@@ -3,6 +3,7 @@ const { contextBridge, ipcRenderer } = require('electron')
 contextBridge.exposeInMainWorld('ccBridgeDesktop', {
   platform: process.platform,
   openLogs: () => ipcRenderer.invoke('desktop:open-logs'),
+  minimizeWindow: () => ipcRenderer.invoke('desktop:minimize-window'),
   closeWindow: () => ipcRenderer.invoke('desktop:close-window'),
   getVersion: () => ipcRenderer.invoke('desktop:get-version'),
   checkUpdate: () => ipcRenderer.invoke('desktop:check-update'),

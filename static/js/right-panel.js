@@ -121,18 +121,34 @@ function initRightPanel() {
   const toggleBtn = document.getElementById('btn-toggle-right-panel');
   const closeBtn = document.getElementById('btn-chat-sidebar-close');
   const resizer = document.getElementById('chat-sidebar-resizer');
-  const addBtn = document.getElementById('btn-session-agent-add');
-  const popover = document.getElementById('agent-add-popover');
 
   const isMobile = () => window.matchMedia('(max-width: 760px)').matches;
+  const leftNav = document.querySelector('.sidebar');
+  const backdrop = document.getElementById('mobile-sidebar-backdrop');
+  const mobileMenuToggles = Array.from(document.querySelectorAll('.mobile-menu-toggle'));
+
+  const syncMobileBackdrop = () => {
+    const leftOpen = !!leftNav?.classList.contains('mobile-open');
+    const rightOpen = sidebar.classList.contains('open') || document.body.classList.contains('pane-right-open');
+    const shouldShow = isMobile() && (leftOpen || rightOpen);
+    backdrop?.classList.toggle('visible', shouldShow);
+    document.body.classList.toggle('mobile-overlay', shouldShow);
+  };
+
+  const closeMobileNav = () => {
+    leftNav?.classList.remove('mobile-open');
+    mobileMenuToggles.forEach(btn => btn.setAttribute('aria-expanded', 'false'));
+  };
 
   const syncDesktopState = () => {
     if (!isMobile()) {
       sidebar.classList.remove('open');
       document.body.classList.remove('mobile-overlay', 'pane-right-open');
-      document.getElementById('mobile-sidebar-backdrop')?.classList.remove('visible');
+      backdrop?.classList.remove('visible');
       applyRightPaneWidth(getCurrentRightPaneWidth());
       if (toggleBtn) toggleBtn.classList.toggle('active', !document.body.classList.contains('pane-right-collapsed'));
+    } else {
+      syncMobileBackdrop();
     }
   };
 
@@ -141,8 +157,8 @@ function initRightPanel() {
     saveGuiSettings({ right_panel_collapsed: document.body.classList.contains('pane-right-collapsed') });
   };
 
-  const ensurePaneContent = (resetTab = false) => {
-    if (resetTab) switchToSidebarTab('files');
+  const ensurePaneContent = () => {
+    switchToSidebarTab('files');
     refreshRightPaneFiles();
   };
 
@@ -180,27 +196,31 @@ function initRightPanel() {
 
   const openPanel = () => {
     if (isMobile()) {
+      closeMobileNav();
       sidebar.classList.add('open');
-      document.body.classList.add('mobile-overlay');
-      document.getElementById('mobile-sidebar-backdrop')?.classList.add('visible');
+      document.body.classList.remove('pane-right-collapsed');
+      document.body.classList.add('pane-right-open');
+      syncMobileBackdrop();
       if (toggleBtn) toggleBtn.classList.add('active');
-      ensurePaneContent(true);
+      ensurePaneContent();
       return;
     }
     document.body.classList.remove('pane-right-collapsed');
     if (toggleBtn) toggleBtn.classList.add('active');
     persistDesktopState();
-    ensurePaneContent(false);
+    ensurePaneContent();
   };
 
   const closePanel = (force = false) => {
     if (!force && !isMobile()) return;
     sidebar.classList.remove('open');
-    document.body.classList.remove('mobile-overlay', 'pane-right-open');
-    document.getElementById('mobile-sidebar-backdrop')?.classList.remove('visible');
+    document.body.classList.remove('pane-right-open');
     if (isMobile()) {
+      syncMobileBackdrop();
       if (toggleBtn) toggleBtn.classList.remove('active');
     } else {
+      document.body.classList.remove('mobile-overlay');
+      backdrop?.classList.remove('visible');
       document.body.classList.add('pane-right-collapsed');
       if (toggleBtn) toggleBtn.classList.remove('active');
       persistDesktopState();
@@ -223,29 +243,6 @@ function initRightPanel() {
     closeBtn.addEventListener('click', () => closePanel(true));
   }
 
-  // 标签切换
-  document.querySelectorAll('.chat-sidebar-tab').forEach(tab => {
-    tab.addEventListener('click', () => {
-      const tabName = tab.dataset.tab;
-      switchToSidebarTab(tabName);
-      const cwd = (cwdInput?.value || '').trim();
-      if (tabName === 'files' && cwd) loadFileTree(cwd);
-      if (tabName === 'review' && cwd) loadReview(cwd);
-    });
-  });
-
-  // review panel 文件点击 → 弹出 diff 预览浮动面板
-  const reviewPanel = document.getElementById('review-panel');
-  if (reviewPanel) {
-    reviewPanel.addEventListener('click', (e) => {
-      const item = e.target.closest('.review-file-item');
-      if (!item) return;
-      const file = item.dataset.file;
-      const staged = item.dataset.staged === '1';
-      if (file) loadReviewDiff(file, staged);
-    });
-  }
-
   // 文件树刷新按钮
   document.getElementById('btn-file-tree-refresh')?.addEventListener('click', () => {
     const cwd = (cwdInput?.value || '').trim();
@@ -253,42 +250,20 @@ function initRightPanel() {
   });
   document.getElementById('file-tree-filter')?.addEventListener('input', applyFileTreeFilter);
 
-  // 添加 agent 按钮
-  if (addBtn) {
-    addBtn.addEventListener('click', () => {
-      if (popover && isDisplay(popover, 'block')) {
-        hideAgentAddPopover();
-      } else {
-        renderAgentAddPopover();
-      }
-    });
-  }
-
-  // 弹窗内点击 agent → 拉入
-  if (popover) {
-    popover.addEventListener('click', (e) => {
-      const item = e.target.closest('.agent-add-popover-item');
-      if (!item || !item.dataset.agent) return;
-      e.stopPropagation();
-      addSessionAgent(item.dataset.agent);
-    });
-  }
-
   // 点击面板外侧关闭（仅移动端浮层）
   document.addEventListener('click', (e) => {
     if (!isMobile() || !panelOpen()) return;
+    if (e.target === backdrop) return;
     if (!sidebar.contains(e.target) && e.target !== toggleBtn && !toggleBtn?.contains(e.target)) {
       closePanel();
     }
   });
 
-  // 点击面板外关闭 agent 弹窗
-  document.addEventListener('click', (e) => {
-    const pv = document.getElementById('agent-add-popover');
-    if (!isDisplay(pv, 'block')) return;
-    if (!pv.contains(e.target) && e.target.id !== 'btn-session-agent-add') {
-      hideAgentAddPopover();
-    }
+  backdrop?.addEventListener('click', () => {
+    if (!isMobile()) return;
+    closePanel();
+    closeMobileNav();
+    syncMobileBackdrop();
   });
 
   // Escape 关闭移动端浮层；桌面端保持常驻 Pane
@@ -312,44 +287,24 @@ function initRightPanel() {
   loadSessionAgents();
 }
 
-function getWorkspaceSubtitle(tab) {
-  if (tab === 'files') {
-    return (fileTreePath || cwdInput?.value || '').replace(/\\/g, '/') || '-';
-  }
-  if (tab === 'review') {
-    const branch = document.querySelector('#review-panel .review-branch-name')?.textContent?.trim();
-    const count = document.querySelector('#review-panel .review-branch-count')?.textContent?.trim();
-    return [branch, count].filter(Boolean).join(' · ') || ((cwdInput?.value || '').trim() ? t('reviewLoading') : '-');
-  }
-  if (tab === 'members') {
-    const sessionAgents = getSessionAgents();
-    return sessionAgents.length ? t('itemCount', { count: sessionAgents.length }) : t('workspaceMembersHint');
-  }
-  return '';
+function getWorkspaceSubtitle() {
+  return (fileTreePath || cwdInput?.value || '').replace(/\\/g, '/') || '-';
 }
 
-function updateWorkspaceHeader(tab = document.querySelector('.chat-sidebar-tab.active')?.dataset.tab || 'files') {
+function updateWorkspaceHeader() {
   const titleEl = document.getElementById('chat-sidebar-title');
   const subtitleEl = document.getElementById('chat-sidebar-subtitle');
-  const titleKey = tab === 'review' ? 'reviewTab' : tab === 'members' ? 'sessionMembers' : 'filesTab';
-  if (titleEl) titleEl.textContent = t(titleKey);
+  if (titleEl) titleEl.textContent = t('filesTab');
   if (subtitleEl) {
-    const subtitle = getWorkspaceSubtitle(tab);
+    const subtitle = getWorkspaceSubtitle();
     subtitleEl.textContent = subtitle || '-';
     subtitleEl.title = subtitle || '';
   }
 }
 
-function switchToSidebarTab(tab) {
-  document.querySelectorAll('.chat-sidebar-tab').forEach(t => {
-    const active = t.dataset.tab === tab;
-    t.classList.toggle('active', active);
-    t.setAttribute('aria-selected', active ? 'true' : 'false');
-  });
-  setVisible(document.getElementById('file-tree-panel'), tab === 'files');
-  setVisible(document.getElementById('review-panel'), tab === 'review');
-  setVisible(document.getElementById('group-member-panel'), tab === 'members');
-  updateWorkspaceHeader(tab);
+function switchToSidebarTab() {
+  setVisible(document.getElementById('file-tree-panel'), true);
+  updateWorkspaceHeader();
 }
 
 let fileTreePath = '';

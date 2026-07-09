@@ -19,6 +19,7 @@
     document.getElementById('btn-feishu-platform-config')?.addEventListener('click', () => {
       document.getElementById('gateway-platform-detail-feishu')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
     });
+    loadConfig();
   }
 
   async function loadGateway() {
@@ -303,10 +304,13 @@
       document.getElementById('feishu-gateway-status-dot'),
       document.getElementById('feishu-quick-status-dot'),
       document.getElementById('message-gateway-overall-dot'),
+      document.getElementById('nav-gateway-status-dot'),
     ].filter(Boolean);
     const label = document.getElementById('feishu-gateway-status-label');
     const quickLabel = document.getElementById('feishu-quick-status-label');
     const overallLabel = document.getElementById('message-gateway-overall-label');
+    const navGatewayStatus = document.getElementById('nav-gateway-status');
+    const navGatewayText = document.getElementById('nav-gateway-status-text');
     const detail = document.getElementById('feishu-gateway-status-detail');
     const overallDetail = document.getElementById('message-gateway-overall-detail');
     const card = document.getElementById('gateway-platform-card-feishu');
@@ -327,9 +331,14 @@
     card?.classList.toggle('configured', configured);
     card?.classList.toggle('enabled', enabled && !error);
     card?.classList.toggle('error', !!error);
+    navGatewayStatus?.classList.toggle('configured', configured);
+    navGatewayStatus?.classList.toggle('enabled', enabled && !error);
+    navGatewayStatus?.classList.toggle('error', !!error);
+    navGatewayStatus?.classList.toggle('ready', configured && !enabled && !error);
     if (label) label.textContent = t(statusKey);
     if (quickLabel) quickLabel.textContent = t(enabled ? 'connected' : 'gatewayQuickConnect');
     if (overallLabel) overallLabel.textContent = t(statusKey);
+    if (navGatewayText) navGatewayText.textContent = t(statusKey);
     const qrcodeAvailable = !!config?.qrcode_available;
     const qrBox = document.querySelector('.feishu-qr-box');
     const scanTitle = document.querySelector('.feishu-scan-card h3');

@@ -10,6 +10,14 @@ import sys
 from pathlib import Path
 from typing import Any, Callable
 
+# 中文：Windows 控制台默认可能是 GBK，窗口标题里的零宽字符等会导致 stdout 编码失败。
+# MCP 走 stdio，优先切到 UTF-8；同时 JSON 输出使用 ASCII 转义作为兜底。
+try:
+    sys.stdout.reconfigure(encoding="utf-8", errors="backslashreplace")
+    sys.stderr.reconfigure(encoding="utf-8", errors="backslashreplace")
+except Exception:
+    pass
+
 ROOT = Path(__file__).resolve().parents[2]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
@@ -24,7 +32,7 @@ DRIVER = load_driver()
 
 
 def _write(payload: dict[str, Any]):
-    sys.stdout.write(json.dumps(payload, ensure_ascii=False, separators=(",", ":")) + "\n")
+    sys.stdout.write(json.dumps(payload, ensure_ascii=True, separators=(",", ":")) + "\n")
     sys.stdout.flush()
 
 

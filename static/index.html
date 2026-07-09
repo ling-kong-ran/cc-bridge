@@ -21,112 +21,150 @@
   <link rel="stylesheet" href="/static/artifacts.css" media="print" onload="this.onload=null;this.media='all'">
   <noscript><link rel="stylesheet" href="/static/artifacts.css"></noscript>
 </head>
-<body>
-  <div id="mobile-sidebar-backdrop" class="mobile-sidebar-backdrop" aria-hidden="true"></div>
+<body data-variant="calm">
+  <div class="stage">
+    <section class="window" aria-label="CC Bridge desktop workspace">
 
   <header class="titlebar">
-    <div class="titlebar-left">
+    <div class="brand">
       <button class="mobile-menu-toggle" type="button" aria-label="Open menu" aria-expanded="false">
         <span></span><span></span><span></span>
       </button>
-      <div class="nav-brand titlebar-nav-brand" aria-hidden="true">CC Bridge</div>
+      <div class="mark" aria-hidden="true">CC</div>
+      <div class="brand-text">
+        <div class="brand-title">CC Bridge</div>
+        <div class="brand-sub" data-i18n="appSubtitleShort">Claude Code workspace</div>
+      </div>
       <button id="btn-titlebar-back" class="titlebar-back" type="button" data-i18n="backToChat" style="display:none">← 返回对话</button>
     </div>
-    <div id="titlebar-meta" class="titlebar-meta" aria-live="polite" style="display:none">
-      <span id="topbar-status-summary" class="topbar-status-summary" style="display:none" aria-live="polite">
-        <span id="topbar-connection" class="topbar-status-item">-</span>
-        <span id="topbar-cost" class="topbar-status-item" style="display:none"><span data-i18n="totalCost">Total Cost</span> $<span id="topbar-cost-value">0.0000</span></span>
-        <span id="topbar-tokens" class="topbar-status-item" style="display:none"><span data-i18n="tokenUsage">Tokens</span> <span id="topbar-token-value">0</span></span>
-      </span>
+    <div class="session-strip" aria-live="polite">
+      <span id="topbar-connection" class="topbar-status-item pill"><span class="dot" aria-hidden="true"></span><span data-i18n="connecting">Connecting</span></span>
+      <button id="model-pill" class="model-pill" type="button" title="Switch Model" data-i18n-title="switchModel" aria-haspopup="listbox" aria-expanded="false">Sonnet 4.6</button>
+      <div id="model-pill-popover" class="model-pill-popover" role="listbox" aria-label="Models" style="display:none"></div>
+      <span id="titlebar-page-label" class="titlebar-page-label crumb" data-i18n="home">Home</span>
+      <div id="titlebar-meta" class="titlebar-meta" aria-live="polite" style="display:none">
+        <span id="topbar-status-summary" class="topbar-status-summary" style="display:none" aria-live="polite">
+          <span id="topbar-cost" class="topbar-status-item pill" style="display:none"><span data-i18n="totalCost">Total Cost</span> $<span id="topbar-cost-value">0.0000</span></span>
+          <span id="topbar-tokens" class="topbar-status-item pill" style="display:none"><span data-i18n="tokenUsage">Tokens</span> <span id="topbar-token-value">0</span></span>
+        </span>
+      </div>
     </div>
-    <div class="titlebar-right">
-      <button id="btn-toggle-right-panel" class="titlebar-btn" type="button" title="Toggle panel" aria-label="Toggle panel" style="display:none">◧</button>
-      <button id="btn-session-pin" class="titlebar-btn titlebar-session-action" type="button" title="Pin session" data-i18n-title="pinSession" aria-label="Pin session" style="display:none">PIN</button>
-      <button id="btn-session-cwd" class="titlebar-btn titlebar-session-action" type="button" title="Change working directory" data-i18n-title="changeCwd" aria-label="Change working directory" style="display:none">DIR</button>
-      <button id="btn-session-rename" class="titlebar-btn titlebar-session-action" type="button" title="Rename session" data-i18n-title="rename" aria-label="Rename session" style="display:none">EDIT</button>
-      <button id="btn-session-delete" class="titlebar-btn titlebar-session-action" type="button" title="Delete session" data-i18n-title="delete" aria-label="Delete session" style="display:none">×</button>
+    <div class="actions">
+      <button id="btn-desktop-minimize" class="titlebar-btn titlebar-minimize-btn" type="button" title="Minimize" aria-label="Minimize" style="display:none">−</button>
+      <button id="btn-toggle-right-panel" class="titlebar-btn" type="button" title="Toggle panel" aria-label="Toggle panel" style="display:none">
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="16" rx="2"></rect><path d="M15 4v16"></path></svg>
+      </button>
+      <button id="btn-session-pin" class="titlebar-btn titlebar-session-action" type="button" title="Pin session" data-i18n-title="pinSession" aria-label="Pin session" style="display:none">
+        <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 17v5"></path><path d="M5 17h14"></path><path d="M8 3h8l-1 7 3 4H6l3-4-1-7z"></path></svg>
+      </button>
+      <button id="btn-session-cwd" class="titlebar-btn titlebar-session-action" type="button" title="Change working directory" data-i18n-title="changeCwd" aria-label="Change working directory" style="display:none">
+        <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h7l2 2h9v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path></svg>
+      </button>
+      <button id="btn-session-rename" class="titlebar-btn titlebar-session-action" type="button" title="Rename session" data-i18n-title="rename" aria-label="Rename session" style="display:none">
+        <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"></path><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"></path></svg>
+      </button>
+      <button id="btn-session-delete" class="titlebar-btn titlebar-session-action" type="button" title="Delete session" data-i18n-title="delete" aria-label="Delete session" style="display:none">
+        <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18"></path><path d="M8 6V4h8v2"></path><path d="M19 6l-1 14H6L5 6"></path></svg>
+      </button>
       <button id="btn-export-chat" class="titlebar-btn" type="button" title="Copy as Markdown" data-i18n-title="copyMarkdown" aria-label="Copy as Markdown">MD</button>
       <button id="btn-shortcuts" class="titlebar-btn" type="button" title="Help" data-i18n-title="shortcutsTitle" aria-label="Help">?</button>
       <button id="btn-theme-toggle" class="titlebar-btn" type="button" title="Switch Theme" aria-label="Switch theme">
         <svg class="theme-icon-moon" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.8A8.5 8.5 0 1 1 11.2 3a6.7 6.7 0 0 0 9.8 9.8z"></path></svg>
         <svg class="theme-icon-sun" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="4"></circle><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"></path></svg>
       </button>
-      <button id="btn-nav-settings" class="titlebar-btn" type="button" title="Settings" data-i18n-title="settings">⚙</button>
+      <button id="btn-nav-settings" class="titlebar-btn" type="button" title="Settings" data-i18n-title="settings" aria-label="Settings">
+        <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06A1.65 1.65 0 0 0 15 19.4a1.65 1.65 0 0 0-3 1.1V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 6.6 19.4a1.65 1.65 0 0 0-1.82-.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.6 15a1.65 1.65 0 0 0-1.1-3H3a2 2 0 0 1 0-4h.5A1.65 1.65 0 0 0 5 6.6a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.6a1.65 1.65 0 0 0 3-1.1V3a2 2 0 0 1 4 0v.5a1.65 1.65 0 0 0 1.4 1.5 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9c.14.31.36.58.6.8.31.28.7.4 1.1.4H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
+      </button>
       <button id="btn-desktop-close" class="titlebar-btn titlebar-close-btn" type="button" title="Close" data-i18n-title="close" aria-label="Close" style="display:none">×</button>
     </div>
   </header>
 
   <div class="app">
-    <!-- 侧边栏 -->
     <aside class="sidebar">
-      <!-- 垂直导航 -->
       <nav class="nav" aria-label="Primary navigation">
-        <div class="nav-stack">
-          <button class="nav-btn active" data-page="home" title="Home" data-i18n-title="home">
+        <button id="btn-new-session" class="new-session nav-new-session" type="button">
+          <span class="new-session-icon" aria-hidden="true">+</span>
+          <span data-i18n="newSession">New Session</span>
+        </button>
+
+        <div class="nav-group" aria-label="Workspace">
+          <div class="nav-group-label" data-i18n="navWorkspace">Workspace</div>
+          <button class="nav-btn active" data-page="home" title="Home" data-i18n-title="home" aria-label="Home">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 11l9-8 9 8"></path><path d="M5 10v10h14V10"></path><path d="M9 20v-6h6v6"></path></svg>
             <span data-i18n="home">Home</span>
           </button>
-          <button class="nav-btn" data-page="chat" title="Chat" data-i18n-title="navChat">
+          <button class="nav-btn" data-page="chat" title="Chat" data-i18n-title="navChat" aria-label="Chat">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>
             <span data-i18n="navChat">Chat</span>
           </button>
-          <button class="nav-btn" data-page="sessions" title="Sessions" data-i18n-title="navSessions">
+          <button class="nav-btn" data-page="sessions" title="Sessions" data-i18n-title="navSessions" aria-label="Sessions">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h16"></path><path d="M4 12h16"></path><path d="M4 18h10"></path></svg>
             <span data-i18n="navSessions">History</span>
           </button>
-          <button class="nav-btn" data-page="artifacts" title="Artifacts" data-i18n-title="artifacts">
+          <button class="nav-btn" data-page="artifacts" title="Artifacts" data-i18n-title="artifacts" aria-label="Artifacts">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path><path d="M3.27 6.96 12 12.01l8.73-5.05"></path><path d="M12 22.08V12"></path></svg>
             <span data-i18n="artifacts">Artifacts</span>
           </button>
-          <button class="nav-btn" data-page="skills" title="Skills" data-i18n-title="skills">
+        </div>
+
+        <div class="nav-group" aria-label="Extensions">
+          <div class="nav-group-label" data-i18n="navExtensions">Extensions</div>
+          <button class="nav-btn" data-page="skills" title="Skills" data-i18n-title="skills" aria-label="Skills">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2l2.4 6.8L21 11l-6.6 2.2L12 20l-2.4-6.8L3 11l6.6-2.2L12 2z"></path><path d="M5 3v4"></path><path d="M3 5h4"></path><path d="M19 17v4"></path><path d="M17 19h4"></path></svg>
             <span data-i18n="skills">Skills</span>
           </button>
-          <button class="nav-btn" data-page="tools" title="Tools" data-i18n-title="tools">
+          <button class="nav-btn" data-page="tools" title="Tools" data-i18n-title="tools" aria-label="Tools">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.3-3.3a5 5 0 0 1-6.6 6.6L7.4 19.6a2 2 0 0 1-2.8-2.8l7-7a5 5 0 0 1 6.6-6.6l-3.5 3.1z"></path></svg>
             <span data-i18n="tools">Tools</span>
           </button>
-          <button class="nav-btn" data-page="integrations" title="Integrations" data-i18n-title="integrations">
+          <button class="nav-btn" data-page="integrations" title="Integrations" data-i18n-title="integrations" aria-label="Integrations">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 7H5a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-4"></path><path d="M15 3h6v6"></path><path d="M10 14 21 3"></path></svg>
             <span data-i18n="integrations">Integrations</span>
           </button>
-          <button class="nav-btn" data-page="feishu-gateway" title="Message Gateway" data-i18n-title="messageGateway">
+        </div>
+
+        <div class="nav-group" aria-label="System">
+          <div class="nav-group-label" data-i18n="navSystem">System</div>
+          <button class="nav-btn" data-page="feishu-gateway" title="Message Gateway" data-i18n-title="messageGateway" aria-label="Message Gateway">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v4"></path><path d="M12 17v4"></path><path d="M4.2 7.5l3.5 2"></path><path d="M16.3 14.5l3.5 2"></path><path d="M19.8 7.5l-3.5 2"></path><path d="M7.7 14.5l-3.5 2"></path><circle cx="12" cy="12" r="5"></circle><path d="M9.8 11h4.4"></path><path d="M9.8 13h2.6"></path></svg>
             <span data-i18n="messageGatewayShort">Gateway</span>
           </button>
-          <button class="nav-btn" data-page="memory" title="Memory" data-i18n-title="memory">
+          <button class="nav-btn" data-page="memory" title="Memory" data-i18n-title="memory" aria-label="Memory">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path><path d="M8 7h8"></path><path d="M8 11h7"></path></svg>
             <span data-i18n="memory">Memory</span>
           </button>
-          <button class="nav-btn" data-page="scheduled" title="Scheduled Tasks" data-i18n-title="scheduledTasks">
+          <button class="nav-btn" data-page="scheduled" title="Scheduled Tasks" data-i18n-title="scheduledTasks" aria-label="Scheduled Tasks">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"></circle><path d="M12 7v5l3 2"></path></svg>
             <span data-i18n="scheduledTasks">Scheduled</span>
           </button>
+          <button class="nav-btn nav-settings" data-page="config" title="Settings" data-i18n-title="settings" aria-label="Settings">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06A1.65 1.65 0 0 0 15 19.4a1.65 1.65 0 0 0-1 .6 1.65 1.65 0 0 0-.4 1.1V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82-.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.6 15a1.65 1.65 0 0 0-.6-1 1.65 1.65 0 0 0-1.1-.4H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.6a1.65 1.65 0 0 0 1-.6 1.65 1.65 0 0 0 .4-1.1V3a2 2 0 0 1 4 0v.09A1.65 1.65 0 0 0 15 4.6a1.65 1.65 0 0 0 1.82.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9c.14.31.36.58.6.8.31.28.7.4 1.1.4H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
+            <span data-i18n="settings">Settings</span>
+          </button>
         </div>
-        <button id="nav-version-badge" class="nav-version-badge" type="button" title="Version" data-i18n-title="version" aria-label="Version" style="display:none">
-          <span id="nav-version-text">—</span>
-          <span id="nav-update-dot" class="nav-update-dot" style="display:none"></span>
-        </button>
-        <button class="nav-btn nav-settings" data-page="config" title="Settings" data-i18n-title="settings">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06A1.65 1.65 0 0 0 15 19.4a1.65 1.65 0 0 0-1 .6 1.65 1.65 0 0 0-.4 1.1V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82-.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.6 15a1.65 1.65 0 0 0-.6-1 1.65 1.65 0 0 0-1.1-.4H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.6a1.65 1.65 0 0 0 1-.6 1.65 1.65 0 0 0 .4-1.1V3a2 2 0 0 1 4 0v.09A1.65 1.65 0 0 0 15 4.6a1.65 1.65 0 0 0 1.82.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9c.14.31.36.58.6.8.31.28.7.4 1.1.4H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
-          <span data-i18n="settings">Settings</span>
-        </button>
-      </nav>
 
-      <div class="sidebar-status" aria-hidden="false">
-        <div id="connection-status" class="conn-status">
-          <span class="status-dot offline"></span>
-          <span class="status-text" data-i18n="connecting">Connecting...</span>
+        <div class="sidebar-status" aria-hidden="false">
+          <div id="nav-gateway-status" class="nav-gateway-status">
+            <div class="nav-gateway-status-main">
+              <span id="nav-gateway-status-dot" class="feishu-status-dot" aria-hidden="true"></span>
+              <span class="nav-gateway-status-label" data-i18n="messageGatewayShort">Gateway</span>
+            </div>
+            <span id="nav-gateway-status-text" class="nav-gateway-status-text" data-i18n="gatewayUnconfigured">Unconfigured</span>
+          </div>
+          <div id="cost-display" style="display:none" class="cost-row">
+            <span class="cost-label" data-i18n="totalCost">Total Cost</span>
+            <span class="cost-value">$<span id="cost-value">0.0000</span></span>
+          </div>
+          <div id="token-display" style="display:none" class="cost-row token-row">
+            <span class="cost-label" data-i18n="tokenUsage">Tokens</span>
+            <span class="cost-value" id="token-value">0</span>
+          </div>
+          <button id="nav-version-badge" class="nav-version-badge" type="button" title="Version" data-i18n-title="version" aria-label="Version" style="display:none">
+            <span id="nav-version-text">—</span>
+            <span id="nav-update-dot" class="nav-update-dot" style="display:none"></span>
+          </button>
         </div>
-        <div id="cost-display" style="display:none" class="cost-row">
-          <span class="cost-label" data-i18n="totalCost">Total Cost</span>
-          <span class="cost-value">$<span id="cost-value">0.0000</span></span>
-        </div>
-        <div id="token-display" style="display:none" class="cost-row token-row">
-          <span class="cost-label" data-i18n="tokenUsage">Tokens</span>
-          <span class="cost-value" id="token-value">0</span>
-        </div>
-      </div>
+      </nav>
     </aside>
 
     <!-- model-select 隐藏，由 model-pill 替代 UI，JS 仍需引用 -->
@@ -136,29 +174,39 @@
     <main class="main">
       <!-- 欢迎页 -->
       <div id="page-home" class="page active">
-        <div id="home-welcome" class="messages">
-          <div class="welcome-msg">
-            <div class="welcome-panel">
-              <div class="welcome-hero">
-                <div class="welcome-kicker" data-i18n="appSubtitleShort">Claude Code Bridge</div>
-                <div class="welcome-title" data-text="Claude Code Bridge">Claude Code Bridge</div>
-                <div class="welcome-sub" data-i18n="welcomeWorkflowHint">Start from runtime context, then resume or create a session.</div>
-              </div>
-              <div class="welcome-grid">
-                <section class="welcome-card welcome-start-card">
-                  <div class="welcome-card-label" data-i18n="welcomeStart">Start</div>
-                  <button type="button" id="welcome-new-session" class="welcome-action">
-                    <span class="btn-prefix">&gt;</span> <span data-i18n="newSession">New Session</span>
-                  </button>
-                  <div class="welcome-card-label welcome-runtime-inline-label" data-i18n="welcomeRuntime">Runtime</div>
-                  <div id="welcome-runtime" class="welcome-runtime"></div>
-                </section>
-                <section class="welcome-card welcome-recent-card">
-                  <div class="welcome-card-label" data-i18n="recentSessions">Recent</div>
-                  <div id="welcome-sessions" class="welcome-sessions"></div>
-                </section>
-              </div>
+        <div id="home-welcome" class="home-dashboard">
+          <section class="home-hero-panel">
+            <div class="home-hero-copy">
+              <div class="welcome-kicker" data-i18n="appSubtitleShort">Claude Code Bridge</div>
+              <h1 class="welcome-title" data-text="Calm Developer Console" data-i18n="calmDeveloperConsole">Calm Developer Console</h1>
+              <p class="welcome-sub" data-i18n="welcomeWorkflowHint">Start from runtime context, then resume or create a session.</p>
             </div>
+            <button type="button" id="welcome-new-session" class="welcome-action">
+              <span class="btn-prefix">+</span>
+              <span data-i18n="newSession">New Session</span>
+            </button>
+          </section>
+
+          <div class="welcome-grid">
+            <section class="welcome-card welcome-start-card">
+              <div class="welcome-card-head">
+                <div>
+                  <div class="welcome-card-label" data-i18n="welcomeRuntime">Runtime</div>
+                  <h2 data-i18n="runtimeSettings">Runtime Settings</h2>
+                </div>
+                <span class="welcome-card-badge" data-i18n="localMode">Local</span>
+              </div>
+              <div id="welcome-runtime" class="welcome-runtime"></div>
+            </section>
+            <section class="welcome-card welcome-recent-card">
+              <div class="welcome-card-head">
+                <div>
+                  <div class="welcome-card-label" data-i18n="recentSessions">Recent</div>
+                  <h2 data-i18n="sessions">Sessions</h2>
+                </div>
+              </div>
+              <div id="welcome-sessions" class="welcome-sessions"></div>
+            </section>
           </div>
         </div>
       </div>
@@ -218,62 +266,16 @@
           </div>
           <div class="input-area">
             <div id="agent-status-bar" class="agent-status-bar" style="display:none"></div>
-            <div class="chat-runtime-section">
-              <details class="runtime-panel">
-                <summary class="runtime-summary">
-                  <span data-i18n="runtimeSettings">Runtime Settings</span>
-                  <span class="runtime-summary-value" data-i18n="runtimeSummary">CWD / Remote</span>
-                </summary>
-                <div class="runtime-panel-body">
-                  <label class="field-label" data-i18n="cwd">Working Directory</label>
-                  <div class="cwd-wrapper">
-                    <input id="cwd-input" type="text" class="input cwd-input" placeholder="C:\project-path" data-i18n-placeholder="cwdPlaceholder">
-                    <button id="btn-browse" class="btn-browse" title="Browse Directory" data-i18n-title="browseDir">
-                      <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path></svg>
-                    </button>
-                  </div>
-
-                  <label class="field-label" for="remote-target-select" data-i18n="remoteTarget">Remote Target</label>
-                  <select id="remote-target-select" class="select">
-                    <option value="" data-i18n="remoteTargetNone">Local (no remote)</option>
-                  </select>
-                  <label class="toggle-label runtime-toggle" id="remote-mutate-row" style="display:none">
-                    <span class="toggle-track">
-                      <input type="checkbox" id="remote-allow-mutate">
-                      <span class="toggle-indicator danger"></span>
-                    </span>
-                    <span class="toggle-text" data-i18n="allowRemoteFix">Allow remote writes</span>
-                  </label>
-
-                  <div class="field-label" data-i18n="gatewayNotify">网关通知</div>
-                  <label class="toggle-label runtime-toggle" id="notify-feishu-row">
-                    <span class="toggle-track">
-                      <input type="checkbox" id="notify-feishu">
-                      <span class="toggle-indicator"></span>
-                    </span>
-                    <span class="toggle-text">飞书</span>
-                  </label>
-
-                  <div class="field-label" data-i18n="memoryAutoContext">自动记忆上下文</div>
-                  <label class="toggle-label runtime-toggle" id="memory-auto-inject-row">
-                    <span class="toggle-track">
-                      <input type="checkbox" id="memory-auto-inject">
-                      <span class="toggle-indicator"></span>
-                    </span>
-                    <span class="toggle-text" data-i18n="memoryAutoContextDesc">发送前自动召回 Memory / Wiki</span>
-                  </label>
-                </div>
-              </details>
-            </div>
             <div id="attachments-bar" class="attachments-bar" style="display:none" aria-live="polite"></div>
             <div id="quote-preview-bar" class="quote-preview-bar" style="display:none" aria-live="polite"></div>
             <div id="slash-command-panel" class="slash-command-panel" role="listbox" aria-label="Slash commands" style="display:none"></div>
-            <div id="model-pill-popover" class="model-pill-popover" role="listbox" aria-label="Models" style="display:none"></div>
             <div class="input-shell">
               <div class="input-wrapper">
-                <button id="btn-attach" class="btn-attach" type="button" title="Add File" data-i18n-title="addFile" aria-label="Add File">
-                  <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"></path></svg>
-                </button>
+                <div class="composer-tool-row" aria-label="Composer tools">
+                  <button id="btn-attach" class="btn-attach composer-tool-btn" type="button" title="Add File" data-i18n-title="addFile" aria-label="Add File">
+                    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"></path></svg>
+                  </button>
+                </div>
                 <textarea id="message-input" placeholder="Type a message... (Enter to send, Shift+Enter for newline)" data-i18n-placeholder="messagePlaceholder" rows="2"></textarea>
                 <div class="input-actions">
                   <button id="btn-send" class="btn-send" type="button" disabled data-i18n="send">Send</button>
@@ -282,7 +284,6 @@
               </div>
               <div class="input-status-row">
                 <span class="drag-hint" data-i18n="dragDropHint">支持拖拽文件上传</span>
-                <button id="model-pill" class="model-pill" type="button" title="Switch Model" data-i18n-title="switchModel" aria-haspopup="listbox" aria-expanded="false"></button>
               </div>
             </div>
             <input type="file" id="file-input" multiple style="display:none">
@@ -290,44 +291,67 @@
         </div>
         <div class="chat-sidebar" id="chat-sidebar">
           <div id="chat-sidebar-resizer" class="chat-sidebar-resizer" role="separator" aria-orientation="vertical" aria-label="Resize workspace panel"></div>
-          <div class="chat-sidebar-header">
-            <div class="chat-sidebar-title-row">
-              <div class="chat-sidebar-heading">
-                <span id="chat-sidebar-title" class="chat-sidebar-title" data-i18n="filesTab">Files</span>
-                <span id="chat-sidebar-subtitle" class="chat-sidebar-subtitle">-</span>
-              </div>
-              <div class="chat-sidebar-header-actions">
-                <button id="btn-chat-sidebar-close" class="btn-icon-mini btn-close-sidebar" type="button" title="收起面板" data-i18n-title="collapsePanel" aria-label="Collapse panel">›</button>
-              </div>
-            </div>
-            <div class="chat-sidebar-tabs" role="tablist" aria-label="Workspace side panel">
-              <button class="chat-sidebar-tab active" data-tab="files" type="button" role="tab" aria-selected="true" title="Files" data-i18n-title="filesTab"><span data-i18n="filesTab">Files</span></button>
-              <button class="chat-sidebar-tab" data-tab="review" type="button" role="tab" aria-selected="false" title="Changes" data-i18n-title="reviewTab"><span data-i18n="reviewTab">Changes</span></button>
-              <button class="chat-sidebar-tab" data-tab="members" type="button" role="tab" aria-selected="false" title="Members" data-i18n-title="sessionMembers"><span data-i18n="sessionMembers">Members</span></button>
-            </div>
-          </div>
           <div class="chat-sidebar-content">
             <div class="chat-sidebar-body">
-            <div id="file-tree-panel" class="file-tree-panel">
-              <div class="file-tree-toolbar">
-                <div class="file-tree-context">
-                  <div id="file-tree-path" class="file-tree-path">-</div>
+              <section class="right-runtime-panel" aria-label="Runtime settings">
+                <details class="runtime-panel" open>
+                  <summary class="runtime-summary">
+                    <span data-i18n="runtimeSettings">Runtime Settings</span>
+                    <span class="runtime-summary-value" data-i18n="runtimeSummary">CWD / Remote</span>
+                  </summary>
+                  <div class="runtime-panel-body">
+                    <label class="field-label" data-i18n="cwd">Working Directory</label>
+                    <div class="cwd-wrapper">
+                      <input id="cwd-input" type="text" class="input cwd-input" placeholder="C:\project-path" data-i18n-placeholder="cwdPlaceholder">
+                      <button id="btn-browse" class="btn-browse" title="Browse Directory" data-i18n-title="browseDir">
+                        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path></svg>
+                      </button>
+                    </div>
+
+                    <label class="field-label" for="remote-target-select" data-i18n="remoteTarget">Remote Target</label>
+                    <select id="remote-target-select" class="select">
+                      <option value="" data-i18n="remoteTargetNone">Local (no remote)</option>
+                    </select>
+                    <label class="toggle-label runtime-toggle" id="remote-mutate-row" style="display:none">
+                      <span class="toggle-track">
+                        <input type="checkbox" id="remote-allow-mutate">
+                        <span class="toggle-indicator danger"></span>
+                      </span>
+                      <span class="toggle-text" data-i18n="allowRemoteFix">Allow remote writes</span>
+                    </label>
+
+                    <div class="field-label" data-i18n="gatewayNotify">网关通知</div>
+                    <label class="toggle-label runtime-toggle" id="notify-feishu-row">
+                      <span class="toggle-track">
+                        <input type="checkbox" id="notify-feishu">
+                        <span class="toggle-indicator"></span>
+                      </span>
+                      <span class="toggle-text">飞书</span>
+                    </label>
+
+                    <div class="field-label" data-i18n="memoryAutoContext">自动记忆上下文</div>
+                    <label class="toggle-label runtime-toggle" id="memory-auto-inject-row">
+                      <span class="toggle-track">
+                        <input type="checkbox" id="memory-auto-inject">
+                        <span class="toggle-indicator"></span>
+                      </span>
+                      <span class="toggle-text" data-i18n="memoryAutoContextDesc">发送前自动召回 Memory / Wiki</span>
+                    </label>
+                  </div>
+                </details>
+              </section>
+              <section id="file-tree-panel" class="file-tree-panel">
+                <div class="file-tree-toolbar">
+                  <div class="file-tree-context">
+                    <div id="file-tree-path" class="file-tree-path">-</div>
+                  </div>
+                  <button id="btn-file-tree-refresh" class="btn-icon-mini" title="Refresh">↻</button>
                 </div>
-                <button id="btn-file-tree-refresh" class="btn-icon-mini" title="Refresh">↻</button>
-              </div>
-              <div class="file-tree-filter-row">
-                <input id="file-tree-filter" class="file-tree-filter" type="search" placeholder="Filter files...">
-              </div>
-              <div id="file-tree-content" class="file-tree-content"></div>
-            </div>
-            <div id="review-panel" class="review-panel" style="display:none"></div>
-            <div id="group-member-panel" class="group-member-panel" style="display:none">
-              <div class="member-panel-actions">
-                <button id="btn-session-agent-add" class="btn-mini" title="拉入成员" data-i18n-title="pullMember" type="button">+ <span data-i18n="pullMember">Add member</span></button>
-              </div>
-              <div id="group-member-list" class="group-member-list"></div>
-            </div>
-            <div id="agent-add-popover" class="agent-add-popover" style="display:none"></div>
+                <div class="file-tree-filter-row">
+                  <input id="file-tree-filter" class="file-tree-filter" type="search" placeholder="Filter files...">
+                </div>
+                <div id="file-tree-content" class="file-tree-content"></div>
+              </section>
             </div>
           </div>
         </div>
@@ -1011,6 +1035,9 @@
 
     </main>
   </div>
+    </section>
+  </div>
+  <div id="mobile-sidebar-backdrop" class="mobile-sidebar-backdrop" aria-hidden="true"></div>
 
   <!-- Memory 查看模态框 -->
   <div id="memory-modal-overlay" class="modal-overlay" style="display:none">

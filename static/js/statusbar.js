@@ -5,8 +5,7 @@
     const topbarStatusSummary = options.topbarStatusSummary || document.getElementById('topbar-status-summary');
     if (!topbarStatusSummary) return;
     const sidebarCollapsed = !!options.sidebarCollapsed;
-    topbarStatusSummary.style.display = sidebarCollapsed ? '' : 'none';
-    if (!sidebarCollapsed) return;
+    topbarStatusSummary.style.display = '';
 
     const t = options.t || ((key) => key);
     const topbarConnection = options.topbarConnection || document.getElementById('topbar-connection');
@@ -15,7 +14,13 @@
     const topbarTokens = options.topbarTokens || document.getElementById('topbar-tokens');
     const topbarTokenValue = options.topbarTokenValue || document.getElementById('topbar-token-value');
 
-    if (topbarConnection) topbarConnection.textContent = options.connectionOnline ? t('connected') : t('connecting');
+    if (topbarConnection) {
+      const label = options.connectionOnline ? t('connected') : t('connecting');
+      const textEl = topbarConnection.querySelector('[data-i18n], .topbar-connection-text');
+      if (textEl) textEl.textContent = label;
+      else topbarConnection.textContent = label;
+      topbarConnection.classList.toggle('is-offline', !options.connectionOnline);
+    }
     if (topbarCost && topbarCostValue) {
       topbarCost.style.display = '';
       topbarCostValue.textContent = options.costText || Number(options.totalCost || 0).toFixed(4);

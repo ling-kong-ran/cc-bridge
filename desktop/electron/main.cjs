@@ -481,6 +481,9 @@ function showMainWindow() {
 
 function registerIpcHandlers() {
   ipcMain.handle('desktop:open-logs', () => shell.openPath(path.join(os.homedir(), '.ccb')))
+  ipcMain.handle('desktop:minimize-window', () => {
+    if (mainWindow && !mainWindow.isDestroyed()) mainWindow.minimize()
+  })
   ipcMain.handle('desktop:close-window', () => {
     if (mainWindow && !mainWindow.isDestroyed()) mainWindow.close()
   })

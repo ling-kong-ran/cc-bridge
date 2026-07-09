@@ -39,7 +39,6 @@ module.exports = {
   win: {
     icon: 'desktop/assets/icon.ico',
     target: ['nsis'],
-    signAndEditExecutable: false,
   },
   mac: {
     icon: 'desktop/assets/icon.icns',

@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import os
+import shutil
 import subprocess
 import time
 from pathlib import Path
@@ -61,6 +62,7 @@ class Driver(BaseDriver):
             "id": self._window_id(wrapper),
             "title": wrapper.window_text(),
             "process_id": getattr(info, "process_id", None),
+            "process_name": self._process_name(getattr(info, "process_id", None)),
             "class_name": getattr(info, "class_name", "") or "",
             "control_type": getattr(info, "control_type", "") or "",
             "visible": wrapper.is_visible(),
@@ -83,6 +85,56 @@ class Driver(BaseDriver):
             "rect": {"left": rect.left, "top": rect.top, "right": rect.right, "bottom": rect.bottom},
         }
 
+    def _process_name(self, pid: Any) -> str:
+        if not pid:
+            return ""
+        try:
+            output = subprocess.check_output(
+                ["tasklist", "/FI", f"PID eq {int(pid)}", "/FO", "CSV", "/NH"],
+                text=True,
+                encoding="utf-8",
+                errors="replace",
+                stderr=subprocess.DEVNULL,
+            ).strip()
+            if output and not output.startswith("INFO:"):
+                return output.split('","', 1)[0].strip('"')
+        except Exception:
+            pass
+        return ""
+
+    def _resolve_command(self, command: str) -> str:
+        command = str(command or "").strip().strip('"')
+        if not command:
+            raise ValueError("command required")
+        expanded = os.path.expandvars(os.path.expanduser(command))
+        if Path(expanded).exists():
+            return expanded
+        found = shutil.which(expanded)
+        if found:
+            return found
+        aliases = {
+            "msedge": [
+                r"%ProgramFiles(x86)%\Microsoft\Edge\Application\msedge.exe",
+                r"%ProgramFiles%\Microsoft\Edge\Application\msedge.exe",
+                r"%LocalAppData%\Microsoft\Edge\Application\msedge.exe",
+            ],
+            "edge": [
+                r"%ProgramFiles(x86)%\Microsoft\Edge\Application\msedge.exe",
+                r"%ProgramFiles%\Microsoft\Edge\Application\msedge.exe",
+                r"%LocalAppData%\Microsoft\Edge\Application\msedge.exe",
+            ],
+            "chrome": [
+                r"%ProgramFiles%\Google\Chrome\Application\chrome.exe",
+                r"%ProgramFiles(x86)%\Google\Chrome\Application\chrome.exe",
+                r"%LocalAppData%\Google\Chrome\Application\chrome.exe",
+            ],
+        }
+        for candidate in aliases.get(expanded.lower(), []):
+            path = os.path.expandvars(candidate)
+            if Path(path).exists():
+                return path
+        return expanded
+
     def _windows(self) -> list[Any]:
         if not self.available or not self.desktop:
             return []
@@ -99,7 +151,7 @@ class Driver(BaseDriver):
                 continue
             if title_l and title_l not in str(info.get("title", "")).lower():
                 continue
-            if process_l and process_l not in str(info.get("class_name", "")).lower() and process_l not in str(info.get("process_id", "")).lower():
+            if process_l and process_l not in str(info.get("class_name", "")).lower() and process_l not in str(info.get("process_name", "")).lower() and process_l not in str(info.get("process_id", "")).lower():
                 continue
             return win
         raise RuntimeError("No matching window")
@@ -124,20 +176,25 @@ class Driver(BaseDriver):
             return self._missing()
         if not command:
             raise ValueError("command required")
-        cmd = [command] + [str(arg) for arg in (args or [])]
-        self._audit("launch_app", {"command": command, "args": args or [], "cwd": cwd})
+        cmd = [self._resolve_command(command)] + [str(arg) for arg in (args or [])]
+        self._audit("launch_app", {"command": command, "resolved_command": cmd[0], "args": args or [], "cwd": cwd})
         try:
             app = Application(backend=self.backend).start(cmd, work_dir=cwd or None)
             pid = app.process
         except Exception:
             proc = subprocess.Popen(cmd, cwd=cwd or None)
             pid = proc.pid
-        time.sleep(0.5)
+        deadline = time.time() + 5.0
+        expected_process = Path(cmd[0]).name.lower()
         windows = []
-        for win in self._windows():
-            info = self._window_info(win)
-            if str(info.get("process_id")) == str(pid):
-                windows.append(info)
+        while time.time() < deadline:
+            all_windows = [self._window_info(win) for win in self._windows()]
+            windows = [info for info in all_windows if str(info.get("process_id")) == str(pid)]
+            if not windows and expected_process:
+                windows = [info for info in all_windows if str(info.get("process_name", "")).lower() == expected_process]
+            if windows:
+                break
+            time.sleep(0.2)
         return {"performed": True, "process_id": pid, "windows": windows}
 
     def list_windows(self) -> dict[str, Any]:
@@ -157,7 +214,7 @@ class Driver(BaseDriver):
             info = self._window_info(win)
             if title_l and title_l not in str(info.get("title", "")).lower():
                 continue
-            if process_l and process_l not in str(info.get("class_name", "")).lower() and process_l not in str(info.get("process_id", "")).lower():
+            if process_l and process_l not in str(info.get("class_name", "")).lower() and process_l not in str(info.get("process_name", "")).lower() and process_l not in str(info.get("process_id", "")).lower():
                 continue
             matches.append(info)
         return {"windows": matches}

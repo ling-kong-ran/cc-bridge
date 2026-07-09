@@ -33,7 +33,10 @@
       ctx.btnStop.classList.toggle('visible', !!state.isResponding);
       ctx.btnStop.disabled = !!state.isViewer;
     }
-    if (ctx.btnNewSession) ctx.btnNewSession.innerHTML = `<span class="btn-prefix">&gt;</span> ${state.sessionActive ? ctx.t('restartSession') : ctx.t('newSession')}`;
+    if (ctx.btnNewSession) {
+      const label = state.sessionActive ? ctx.t('restartSession') : ctx.t('newSession');
+      ctx.btnNewSession.innerHTML = `<span class="new-session-icon" aria-hidden="true">+</span><span>${label}</span>`;
+    }
     ctx.body?.classList.toggle('has-active-session', !!state.sessionActive);
     if (!state.sessionActive && sidebarCollapsed) {
       sidebarCollapsed = false;
@@ -53,7 +56,33 @@
     }
   }
 
+  function initVariantTweaks(options = {}) {
+    const doc = options.document || document;
+    const body = options.body || doc.body;
+    const buttons = Array.from(doc.querySelectorAll('[data-set-variant]'));
+    if (!body || !buttons.length) return;
+
+    const applyVariant = (variant) => {
+      body.dataset.variant = variant || 'calm';
+      buttons.forEach((button) => {
+        button.classList.toggle('active', button.dataset.setVariant === body.dataset.variant);
+      });
+    };
+
+    buttons.forEach((button) => {
+      button.addEventListener('click', () => applyVariant(button.dataset.setVariant));
+    });
+    applyVariant(body.dataset.variant || 'calm');
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', () => initVariantTweaks(), { once: true });
+  } else {
+    initVariantTweaks();
+  }
+
   root.mainUi = {
     updateUI,
+    initVariantTweaks,
   };
 })();

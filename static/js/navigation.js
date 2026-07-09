@@ -97,18 +97,40 @@
     };
 
     const chatSidebar = document.getElementById('chat-sidebar');
+    const rightPanelToggle = document.getElementById('btn-toggle-right-panel');
+
+    const syncBackdrop = () => {
+      const leftOpen = sidebar.classList.contains('mobile-open');
+      const rightOpen = !!chatSidebar?.classList.contains('open') || document.body.classList.contains('pane-right-open');
+      const shouldShow = mobileQuery.matches && (leftOpen || rightOpen);
+      backdrop.classList.toggle('visible', shouldShow);
+      document.body.classList.toggle('mobile-overlay', shouldShow);
+    };
+
+    const closeRightPanel = () => {
+      chatSidebar?.classList.remove('open');
+      document.body.classList.remove('pane-right-open');
+      rightPanelToggle?.classList.remove('active');
+    };
+
     const closeMenu = () => {
       sidebar.classList.remove('mobile-open');
-      if (chatSidebar) chatSidebar.classList.remove('open');
-      backdrop.classList.remove('visible');
-      document.body.classList.remove('mobile-overlay');
       setExpanded(false);
+      syncBackdrop();
+    };
+
+    const closeAllMobilePanels = () => {
+      sidebar.classList.remove('mobile-open');
+      closeRightPanel();
+      setExpanded(false);
+      syncBackdrop();
     };
 
     const openMenu = () => {
+      closeRightPanel();
       sidebar.classList.add('mobile-open');
-      backdrop.classList.add('visible');
       setExpanded(true);
+      syncBackdrop();
     };
 
     toggles.forEach(toggle => {
@@ -121,9 +143,9 @@
       });
     });
 
-    backdrop.addEventListener('click', closeMenu);
+    backdrop.addEventListener('click', closeAllMobilePanels);
     document.addEventListener('keydown', (e) => {
-      if (e.key === 'Escape') closeMenu();
+      if (e.key === 'Escape') closeAllMobilePanels();
     });
 
     sidebar.addEventListener('click', (e) => {
