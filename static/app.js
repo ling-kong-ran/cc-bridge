@@ -225,6 +225,9 @@ document.addEventListener('DOMContentLoaded', async () => {
   initInterfaceSettings();
   initNotifications();
   initMemoryAutoInjectControl();
+  initMemoryAssistantModelControl();
+  initMemoryAutoConsolidateControl();
+  initSkipPermissionsControl();
   initLanAccessControl();
   await loadThemePreference();
   initNavigation();
@@ -693,6 +696,30 @@ function initMemoryAutoInjectControl() {
 
 function applyMemoryAutoInjectPreference(enabled) {
   window.CCBridge.settings?.applyMemoryAutoInjectPreference?.(enabled);
+}
+
+function initMemoryAssistantModelControl() {
+  window.CCBridge.settings?.initMemoryAssistantModelControl?.();
+}
+
+function applyMemoryAssistantModelPreference(value) {
+  window.CCBridge.settings?.applyMemoryAssistantModelPreference?.(value);
+}
+
+function initMemoryAutoConsolidateControl() {
+  window.CCBridge.settings?.initMemoryAutoConsolidateControl?.();
+}
+
+function applyMemoryAutoConsolidatePreference(value) {
+  window.CCBridge.settings?.applyMemoryAutoConsolidatePreference?.(value);
+}
+
+function initSkipPermissionsControl() {
+  window.CCBridge.settings?.initSkipPermissionsControl?.();
+}
+
+function applySkipPermissionsPreference(value) {
+  window.CCBridge.settings?.applySkipPermissionsPreference?.(value);
 }
 
 function loadContextSettings() {

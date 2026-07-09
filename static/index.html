@@ -322,6 +322,19 @@
                       </span>
                       <span class="toggle-text" data-i18n="memoryAutoContextDesc">发送前自动召回 Memory / Wiki</span>
                     </label>
+
+                    <div class="field-label" data-i18n="memoryAssistantModel">记忆辅助模型</div>
+                    <select id="memory-assistant-model-select" class="select" style="width:100%">
+                      <option value="" data-i18n="memoryAssistantModelFollow">跟随当前会话模型</option>
+                    </select>
+
+                    <label class="toggle-label runtime-toggle" id="memory-auto-consolidate-row">
+                      <span class="toggle-track">
+                        <input type="checkbox" id="memory-auto-consolidate" checked>
+                        <span class="toggle-indicator"></span>
+                      </span>
+                      <span class="toggle-text" data-i18n="memoryAutoConsolidateDesc">每轮对话后自动归纳长期记忆</span>
+                    </label>
                   </div>
                 </details>
               </section>

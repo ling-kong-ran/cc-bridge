@@ -54,6 +54,7 @@ from memory_index import save_memory_file, index_memory
 import wiki_store
 import context_orchestrator
 import memory_consolidator
+import memory_llm
 from backend.routes.settings_routes import handle_settings_get, handle_settings_post
 from backend.routes.context_routes import handle_context_get, handle_context_post
 from backend.routes.scheduled_tasks_routes import handle_scheduled_tasks_get, handle_scheduled_tasks_post
@@ -736,6 +737,15 @@ def get_default_model() -> str:
     return models[0] if models else "claude-sonnet-4-6"
 
 
+def resolve_memory_assistant_model(settings: dict, client_id: str) -> str:
+    """解析记忆辅助模型：配置为空则跟随当前会话模型，否则用配置值。"""
+    configured = (settings.get("memory_assistant_model") or "").strip() if isinstance(settings, dict) else ""
+    if configured:
+        return configured
+    meta = client_meta.get(client_id, {}) or {}
+    return meta.get("model") or get_default_model()
+
+
 def get_feishu_gateway():
     global feishu_gateway
     if feishu_gateway is None:
@@ -1396,18 +1406,38 @@ async def schedule_memory_consolidation(client_id: str, session_id: str = "", ru
             return
         meta = client_meta.get(client_id, {}) or {}
         cwd = meta.get("cwd") or DEFAULT_CWD
+        # 提前捕获本轮助手回复，避免 _notify_summary pop 缓冲区后读到空值
+        assistant_summary = client_response_buf.get(client_id, "")[:1200]
         job_id = memory_consolidator.enqueue_consolidation(
             session_id=session_id,
             cwd=cwd,
             run_id=run_id,
             client_id=client_id,
             user_message=prompt,
-            assistant_summary=client_response_buf.get(client_id, "")[:1200],
+            assistant_summary=assistant_summary,
         )
         await push_event(client_id, "memory_consolidation_started", {"job_id": job_id, "session_id": session_id, "run_id": run_id})
 
         async def _run():
-            result = await asyncio.to_thread(memory_consolidator.run_consolidation_job, job_id, settings)
+            # 先用记忆辅助模型抽取候选；失败退回 None（consolidator 内部纯正则兜底）
+            candidates: list[dict] | None = None
+            try:
+                mem_model = resolve_memory_assistant_model(settings, client_id)
+                candidates = await asyncio.wait_for(
+                    memory_llm.extract_memories_via_llm(
+                        user_message=prompt,
+                        assistant_summary=assistant_summary,
+                        model=mem_model,
+                        cwd=cwd,
+                        cli=meta.get("cli") or None,
+                        skip_permissions=settings.get("skip_permissions", True),
+                    ),
+                    timeout=60.0,
+                )
+            except Exception as exc:
+                _notify_log.info("memory LLM extraction failed cid=%s sid=%s run=%s error=%s, falling back to regex", client_id, session_id or "-", run_id or "-", exc)
+                candidates = None
+            result = await asyncio.to_thread(memory_consolidator.run_consolidation_job, job_id, settings, candidates)
             event = "memory_consolidation_failed" if result.get("status") == "failed" else "memory_consolidation_completed"
             _notify_log.info(
                 "memory consolidation %s cid=%s sid=%s run=%s written=%s skipped=%s files=%s error=%s",

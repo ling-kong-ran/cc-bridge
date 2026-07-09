@@ -52,8 +52,18 @@ def enqueue_consolidation(session_id: str, cwd: str, run_id: str, client_id: str
     return job_id
 
 
-def run_consolidation_job(job_id: str, settings: dict[str, Any] | None = None) -> dict[str, Any]:
-    """执行沉淀任务。失败只记录到 job，不抛到主链路。"""
+def run_consolidation_job(
+    job_id: str,
+    settings: dict[str, Any] | None = None,
+    candidates: list[dict[str, Any]] | None = None,
+) -> dict[str, Any]:
+    """执行沉淀任务。失败只记录到 job，不抛到主链路。
+
+    candidates 语义：
+    - None：调用方未提供 LLM 抽取结果，退回纯正则 extract_candidates（兜底）。
+    - []   ：LLM 成功但无可抽取内容，什么都不写。
+    - [...]：使用 LLM 抽取的候选记忆。
+    """
     settings = settings or {}
     jobs = _load_jobs()
     job = jobs.get(job_id)
@@ -74,7 +84,14 @@ def run_consolidation_job(job_id: str, settings: dict[str, Any] | None = None) -
             _save_jobs(jobs)
             return job
 
-        candidates = extract_candidates(job, settings)
+        # candidates=None → 纯正则兜底；否则用调用方传入的 LLM 候选
+        if candidates is None:
+            candidates = extract_candidates(job, settings)
+            job["extraction_source"] = "regex"
+        else:
+            job["extraction_source"] = "llm"
+
+        candidates = filter_sensitive(candidates)
         job["candidates"] = len(candidates)
         written: list[dict[str, Any]] = []
         skipped = 0
@@ -99,6 +116,17 @@ def run_consolidation_job(job_id: str, settings: dict[str, Any] | None = None) -
     jobs[job_id] = job
     _save_jobs(jobs)
     return job
+
+
+def filter_sensitive(candidates: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """过滤掉命中敏感内容正则的候选（无论来自正则还是 LLM）。"""
+    result: list[dict[str, Any]] = []
+    for candidate in candidates:
+        blob = f"{candidate.get('title', '')} {candidate.get('content', '')}"
+        if _SENSITIVE_RE.search(blob):
+            continue
+        result.append(candidate)
+    return result
 
 
 def extract_candidates(job: dict[str, Any], settings: dict[str, Any] | None = None) -> list[dict[str, Any]]:

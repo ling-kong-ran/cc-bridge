@@ -89,6 +89,18 @@
     });
   }
 
+  function initSkipPermissionsControl() {
+    const toggle = document.getElementById('skip-permissions');
+    toggle?.addEventListener('change', () => {
+      saveGuiSettings({ skip_permissions: toggle.checked });
+    });
+  }
+
+  function applySkipPermissionsPreference(value) {
+    const toggle = document.getElementById('skip-permissions');
+    if (toggle) toggle.checked = value !== false;
+  }
+
   function applyLanAccessPreference(settings) {
     if (!lanAccessRow || !lanAccessToggle) return;
     const isLocalhost = Boolean(settings.is_localhost);
@@ -123,6 +135,59 @@
 
   function applyMemoryAutoInjectPreference(enabled) {
     if (memoryAutoInject) memoryAutoInject.checked = enabled !== false;
+  }
+
+  function initMemoryAssistantModelControl() {
+    const sel = document.getElementById('memory-assistant-model-select');
+    if (!sel) return;
+    _populateMemoryAssistantModels(sel);
+    sel.addEventListener('change', () => {
+      saveGuiSettings({ memory_assistant_model: sel.value || '' });
+    });
+  }
+
+  async function _populateMemoryAssistantModels(sel) {
+    try {
+      const data = await root.api.json('/api/models');
+      // 保留默认「跟随会话模型」选项，追加每个可用模型
+      const models = Array.isArray(data) ? data : [];
+      for (const m of models) {
+        const value = typeof m === 'string' ? m : (m && m.value);
+        if (!value) continue;
+        const label = (m && m.label) || value;
+        if (Array.from(sel.options).some(o => o.value === value)) continue;
+        const opt = document.createElement('option');
+        opt.value = value;
+        opt.textContent = label;
+        sel.appendChild(opt);
+      }
+    } catch (e) { /* 拉取失败时仅保留默认选项 */ }
+  }
+
+  function applyMemoryAssistantModelPreference(value) {
+    const sel = document.getElementById('memory-assistant-model-select');
+    if (!sel) return;
+    const v = value || '';
+    // 值不在列表里（异步填充竞态）时临时补一个选项，保证可见
+    if (v && !Array.from(sel.options).some(o => o.value === v)) {
+      const opt = document.createElement('option');
+      opt.value = v;
+      opt.textContent = v;
+      sel.appendChild(opt);
+    }
+    sel.value = v;
+  }
+
+  function initMemoryAutoConsolidateControl() {
+    const toggle = document.getElementById('memory-auto-consolidate');
+    toggle?.addEventListener('change', () => {
+      saveGuiSettings({ memoryAutoConsolidate: toggle.checked ? 'auto' : 'off' });
+    });
+  }
+
+  function applyMemoryAutoConsolidatePreference(value) {
+    const toggle = document.getElementById('memory-auto-consolidate');
+    if (toggle) toggle.checked = value !== 'off';
   }
 
   async function loadContextSettings() {
@@ -166,6 +231,9 @@
       applyNotifyFeishuPreference(false);
       applyMemoryAutoInjectPreference(true);
       applyLanAccessPreference({ is_localhost: false, lan_access_enabled: false });
+      applySkipPermissionsPreference(true);
+      applyMemoryAssistantModelPreference('');
+      applyMemoryAutoConsolidatePreference('auto');
       return;
     }
 
@@ -203,6 +271,9 @@
       console.warn('Apply right pane width failed:', e);
     }
     applyLanAccessPreference(data);
+    applySkipPermissionsPreference(data.skip_permissions);
+    applyMemoryAssistantModelPreference(data.memory_assistant_model);
+    applyMemoryAutoConsolidatePreference(data.memoryAutoConsolidate);
 
     if (data.language !== language || Number(data.font_size_percent) !== size) {
       saveGuiSettings({ language, font_size_percent: size });
@@ -235,10 +306,16 @@
     initNotifications,
     initLanAccessControl,
     applyLanAccessPreference,
+    initSkipPermissionsControl,
+    applySkipPermissionsPreference,
     applyNotificationPreference,
     applyNotifyFeishuPreference,
     initMemoryAutoInjectControl,
     applyMemoryAutoInjectPreference,
+    initMemoryAssistantModelControl,
+    applyMemoryAssistantModelPreference,
+    initMemoryAutoConsolidateControl,
+    applyMemoryAutoConsolidatePreference,
     loadContextSettings,
     saveContextSettings,
     loadThemePreference,
