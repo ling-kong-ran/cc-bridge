@@ -19,6 +19,7 @@
     });
     document.getElementById('btn-scheduled-reset')?.addEventListener('click', resetForm);
     document.getElementById('scheduled-type')?.addEventListener('change', updateScheduleFields);
+    document.getElementById('scheduled-notify-desktop')?.addEventListener('change', ensureDesktopNotificationPermission);
     document.getElementById('scheduled-task-list')?.addEventListener('click', handleTaskAction);
     updateScheduleFields();
   }
@@ -54,6 +55,29 @@
     setVisible(interval, type === 'interval');
     setVisible(daily, type === 'daily');
     setVisible(once, type === 'once');
+  }
+
+  async function ensureDesktopNotificationPermission() {
+    const checkbox = document.getElementById('scheduled-notify-desktop');
+    if (!checkbox?.checked || window.ccBridgeDesktop?.notify) return true;
+    if (!("Notification" in window)) {
+      checkbox.checked = false;
+      showToast(t('notifyUnsupported'), 'warning');
+      return false;
+    }
+    if (Notification.permission === 'granted') return true;
+    if (Notification.permission === 'denied') {
+      checkbox.checked = false;
+      showToast(t('notifyPermissionDenied'), 'warning');
+      return false;
+    }
+    const permission = await Notification.requestPermission();
+    if (permission !== 'granted') {
+      checkbox.checked = false;
+      showToast(t('notifyPermissionDenied'), 'warning');
+      return false;
+    }
+    return true;
   }
 
   async function loadTasks() {
@@ -221,6 +245,10 @@
   }
 
   async function saveTask() {
+    if (document.getElementById('scheduled-notify-desktop')?.checked) {
+      const allowed = await ensureDesktopNotificationPermission();
+      if (!allowed) return;
+    }
     const payload = readForm();
     if (!payload.prompt.trim()) {
       showToast(t('scheduledPromptRequired'), 'warning');
