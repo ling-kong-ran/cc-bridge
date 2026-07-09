@@ -530,7 +530,9 @@ body::before {
 /* ─── Layout ────────────────────────────────────────────────── */
 .app {
   display: grid;
-  grid-template-columns: auto 1fr;
+  /* minmax(0,1fr)：grid 的 1fr 默认 min 是 auto，会被超宽内容撑大、挤没左边 auto 列(sidebar)。
+     minmax(0,1fr) 让 chat 列可收缩到 0，超宽内容在内部 overflow 而非撑没侧栏。 */
+  grid-template-columns: auto minmax(0, 1fr);
   height: calc(100vh - 38px);
 }
 
@@ -2628,6 +2630,7 @@ body.pane-right-collapsed .chat-sidebar {
 .session-workspace {
   flex: 1;
   min-height: 0;
+  min-width: 0;
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -3496,6 +3499,9 @@ html.light-theme body.resizing-workspace-pane .workspace-pane-resizer::after {
   color: var(--text-muted);
   font-family: var(--font-mono);
   animation: msgIn var(--t-base) var(--ease-out) both;
+  /* 防止内部长内容（路径、; 拼接的 sources 串）把本块撑成一长条超窄列 */
+  min-width: 0;
+  box-sizing: border-box;
 }
 
 .context-trace details {
@@ -3503,6 +3509,7 @@ html.light-theme body.resizing-workspace-pane .workspace-pane-resizer::after {
   border-radius: var(--radius-sm);
   background: rgba(var(--accent-rgb), 0.045);
   overflow: hidden;
+  min-width: 0;
 }
 
 .context-trace summary {
@@ -3513,6 +3520,7 @@ html.light-theme body.resizing-workspace-pane .workspace-pane-resizer::after {
   font-weight: 700;
   letter-spacing: 0.06em;
   user-select: none;
+  overflow-wrap: anywhere;
 }
 
 .context-trace summary:hover {
@@ -3524,6 +3532,7 @@ html.light-theme body.resizing-workspace-pane .workspace-pane-resizer::after {
   display: grid;
   gap: 8px;
   padding: 0 10px 10px;
+  min-width: 0;
 }
 
 .context-trace-item {
@@ -3531,6 +3540,9 @@ html.light-theme body.resizing-workspace-pane .workspace-pane-resizer::after {
   border: 1px solid var(--border-dim);
   border-radius: var(--radius-xs);
   background: rgba(255,255,255,0.025);
+  /* grid 子项默认 min-width:auto，内部长串会反向撑宽列；显式归零让它受容器约束 */
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 
 .context-trace-title {
@@ -3540,6 +3552,7 @@ html.light-theme body.resizing-workspace-pane .workspace-pane-resizer::after {
   color: var(--text-bright);
   font-size: 11px;
   font-weight: 700;
+  min-width: 0;
 }
 
 .context-trace-title span {
@@ -3557,6 +3570,8 @@ html.light-theme body.resizing-workspace-pane .workspace-pane-resizer::after {
   font-size: 10px;
   line-height: 1.45;
   color: var(--text-subtle);
+  /* anywhere 比 break-all 更稳：能在任意点断行，专治超长无空格串撑列宽 */
+  overflow-wrap: anywhere;
   word-break: break-all;
 }
 

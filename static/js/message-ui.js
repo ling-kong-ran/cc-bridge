@@ -83,7 +83,7 @@
     const summaryParts = [ctx.t('contextTraceSummary', { count: injected.length, tokens: usedTokens })];
     if (compressedCount) summaryParts.push(ctx.t('contextTraceCompressedSummary', { count: compressedCount }));
     el.innerHTML = `
-      <details open>
+      <details>
         <summary>${ctx.esc(summaryParts.join(' · '))}</summary>
         <div class="context-trace-body">
           ${injected.map(item => {

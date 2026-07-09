@@ -147,7 +147,16 @@ function renderMemoryHit(el, results) {
   hint.querySelectorAll('.memory-hint-tag').forEach(tag => {
     tag.addEventListener('click', () => viewMemoryFile(tag.dataset.file));
   });
-  el.appendChild(hint);
+  const bubble = el.querySelector('.msg-bubble');
+  if (bubble) {
+    // 插入到 msg-bubble 顶部（在 msg-content 之前），避免作为 .message flex 子项打乱布局
+    const contentEl = bubble.querySelector('.msg-content');
+    if (contentEl) {
+      bubble.insertBefore(hint, contentEl);
+    } else {
+      bubble.appendChild(hint);
+    }
+  }
 }
 
 function openMemoryEditor(filename, preset) {

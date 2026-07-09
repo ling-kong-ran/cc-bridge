@@ -45,7 +45,7 @@
     ctx.setSidebarCollapsed(sidebarCollapsed);
     if (ctx.cliSelect) ctx.cliSelect.disabled = false;
     if (ctx.modelSelect) ctx.modelSelect.disabled = false;
-    if (ctx.skipPermissions) ctx.skipPermissions.disabled = !!state.sessionActive;
+    if (ctx.skipPermissions) ctx.skipPermissions.disabled = !!state.isResponding;
     if (ctx.remoteTargetSelect) ctx.remoteTargetSelect.disabled = false;
     if (ctx.inputEl) {
       ctx.inputEl.disabled = !state.sessionActive;
