@@ -32,12 +32,17 @@
   }
 
   function isEventForSession(data = {}, state = {}) {
-    if (data.run_id && state.currentRunId && data.run_id === state.currentRunId) return true;
+    // session_id 是最强的归属判据：带 session_id 的事件，必须匹配当前 active 或 currentSessionId，
+    // 否则一律视为别的会话（后台）。不能仅凭 run_id 相同就当成当前会话——
+    // 切换页签时 currentRunId 还未更新为新会话的 run_id，老会话的流式事件会借 run_id 误判为当前会话，
+    // 被渲染进刚切到/新建的页签。
     if (data.session_id) {
       if (state.activeWorkspaceSessionId && data.session_id === state.activeWorkspaceSessionId) return true;
       if (state.currentSessionId && data.session_id === state.currentSessionId) return true;
       return false;
     }
+    // 无 session_id 的事件，退而用 run_id 匹配（如早期流式块）。
+    if (data.run_id && state.currentRunId && data.run_id === state.currentRunId) return true;
     return true;
   }
 

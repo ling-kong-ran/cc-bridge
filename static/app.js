@@ -1393,7 +1393,14 @@ function bindSSEEvents(source = eventSource) {
       status: 'running',
       runId: currentRunId || '',
     });
-    activeWorkspaceSessionId = data.session_id;
+    // 仅在 active 还未确定（空或 pending- 前缀）或本就是该会话时才认领 active。
+    // 否则用户已手动切到别的页签，后台会话的 session_id_captured 不应把 active 抢回，
+    // 否则会导致响应中切不动页签、且老会话事件被渲染进新页签。
+    if (!activeWorkspaceSessionId
+        || activeWorkspaceSessionId.startsWith('pending-')
+        || activeWorkspaceSessionId === data.session_id) {
+      activeWorkspaceSessionId = data.session_id;
+    }
     renderTopbarMeta();
     loadSessions();
   });
