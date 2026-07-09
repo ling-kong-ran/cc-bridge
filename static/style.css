@@ -9446,7 +9446,7 @@ body[data-variant] #page-chat.active {
 }
 
 body[data-variant].pane-right-collapsed #page-chat.active {
-  grid-template-columns: minmax(0, 1fr) 330px;
+  grid-template-columns: minmax(0, 1fr) 0;
 }
 
 body[data-variant] .workspace-tabs-shell {
@@ -10081,10 +10081,6 @@ html.light-theme .nav-gateway-status-main { color: var(--text-2); }
 
   body[data-variant].pane-right-open .chat-sidebar {
     z-index: 240 !important;
-  }
-
-  body[data-variant].pane-right-open #btn-toggle-right-panel {
-    display: none !important;
   }
 
   body[data-variant] .chat-sidebar-resizer {
