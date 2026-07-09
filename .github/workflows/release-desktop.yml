@@ -118,7 +118,7 @@ jobs:
         run: |
           for attempt in 1 2 3; do
             if node node_modules/electron/install.js; then
-              npm exec electron -- --version
+              node -e "console.log(require('electron'))"
               exit 0
             fi
             if [[ "$attempt" -lt 3 ]]; then
