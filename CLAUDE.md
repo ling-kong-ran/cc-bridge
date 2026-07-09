@@ -17,6 +17,34 @@ python server.py        # development / already configured environments
 
 The server binds `127.0.0.1:17878` and auto-increments the port if occupied, then opens a browser. There is no build, lint, or test setup — changes are verified by running the server and exercising the UI.
 
+## Desktop packaging and release
+
+Local Windows packaging should use the project script instead of hand-written `electron-builder` commands:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts/package-desktop.ps1              # build Windows installer
+powershell -ExecutionPolicy Bypass -File scripts/package-desktop.ps1 -SkipInstall # reuse current node_modules
+powershell -ExecutionPolicy Bypass -File scripts/package-desktop.ps1 -Target pack # unpacked app only
+```
+
+The script writes output to `release/` and performs Python syntax checks before packaging. By default it uses the version in `package.json`. The script's `-Version` parameter only applies with `-Release`, because release mode bumps `package.json` via `npm version` before packaging.
+
+For GitHub all-platform packaging, use the workflow file name and pass the intended release version explicitly:
+
+```bash
+gh workflow run release-desktop.yml --ref master -f version=0.1.6
+```
+
+If `version` is omitted, the workflow uses the current `package.json` version. Check the run and release with:
+
+```bash
+gh run list --workflow release-desktop.yml --branch master --limit 3
+gh run view <run-id> --json status,conclusion,url,jobs
+gh release view v0.1.6
+```
+
+The release workflow builds Windows, macOS, and Linux artifacts, then publishes/updates the matching GitHub release tag `v<version>`. Electron and electron-builder binary downloads are cached and retried in CI because GitHub-hosted downloads can intermittently return 504.
+
 ### Bootstrap design
 
 Do not put Python / Node / npm / Claude CLI installation logic in `server.py`. `server.py` is the Web/SSE/REST service only. Startup environment preparation belongs in platform launchers plus a separate bootstrap layer:
