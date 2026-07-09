@@ -1482,14 +1482,21 @@ function bindSSEEvents(source = eventSource) {
     loadScheduledTasks();
   });
 
-  source.addEventListener('scheduled_task_finished', () => {
+  source.addEventListener('scheduled_task_finished', (e) => {
+    const data = JSON.parse(e.data || '{}');
     loadScheduledTasks();
     loadSessions();
+    if ((data.task?.notify_platforms || []).includes('desktop')) {
+      window.CCBridge.notifications?.notifyScheduledTask?.(data, getNotificationOptions());
+    }
   });
 
   source.addEventListener('scheduled_task_error', (e) => {
     const data = JSON.parse(e.data || '{}');
     if (data.message) showToast(data.message, 'error');
+    if ((data.task?.notify_platforms || []).includes('desktop')) {
+      window.CCBridge.notifications?.notifyScheduledTask?.({ ...data, error: true }, getNotificationOptions());
+    }
     loadScheduledTasks();
   });
 

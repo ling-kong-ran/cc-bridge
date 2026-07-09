@@ -78,8 +78,41 @@
     } catch (e) { ctx.console.warn('Notification creation failed:', e); }
   }
 
+  function notifyScheduledTask(detail = {}, options = {}) {
+    const ctx = getContext({
+      ...options,
+      getNotificationsEnabled: () => true,
+      pageIsUnfocused: () => true,
+    });
+    const NotificationCtor = ctx.Notification;
+    if (!ctx.desktopNotify && (!NotificationCtor || NotificationCtor.permission !== 'granted')) {
+      return;
+    }
+    const task = detail.task || {};
+    const failed = Boolean(detail.error || detail.message || task.last_error);
+    const title = detail.title || ctx.t(failed ? 'notifyScheduledTaskErrorTitle' : 'notifyScheduledTaskTitle', { name: task.name || ctx.t('scheduledTask') });
+    const lines = [
+      ctx.t('notifyTaskLine', { task: task.name || ctx.t('scheduledTask') }),
+      failed ? ctx.t('notifyScheduledTaskFailed') : ctx.t('notifyScheduledTaskCompleted'),
+      detail.message || task.last_error || '',
+    ].filter(Boolean);
+    try {
+      if (ctx.desktopNotify) {
+        ctx.desktopNotify({ title, body: lines.join('\n') });
+        return;
+      }
+      const notification = new NotificationCtor(title, { body: lines.join('\n'), tag: `cc-bridge-scheduled-${task.id || 'task'}`, renotify: true });
+      notification.onclick = () => {
+        try { ctx.focusWindow(); } catch (e) { /* ignore */ }
+        notification.close();
+      };
+      ctx.setTimeout(() => notification.close(), 8000);
+    } catch (e) { ctx.console.warn('Scheduled notification failed:', e); }
+  }
+
   root.notifications = {
     pageIsUnfocused,
     notifyComplete,
+    notifyScheduledTask,
   };
 })();

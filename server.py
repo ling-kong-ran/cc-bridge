@@ -2604,9 +2604,12 @@ async def publish_scheduled_event(event_type: str, data: dict):
 
 
 async def _notify_scheduled_task_event(event_type: str, data: dict):
-    """定时任务结束时主动推送到已激活的网关会话。"""
+    """定时任务结束时按任务配置主动推送到网关。"""
     try:
         task = data.get("task") if isinstance(data.get("task"), dict) else {}
+        platforms = task.get("notify_platforms") if isinstance(task.get("notify_platforms"), list) else []
+        if "gateway" not in platforms and "feishu" not in platforms:
+            return
         lang = get_gui_settings().get("language", "zh")
         is_en = lang == "en"
         name = str(task.get("name") or data.get("task_id") or "定时任务")

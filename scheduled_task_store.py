@@ -95,6 +95,25 @@ def compute_next_run_at(task: dict, base_ts: float | None = None) -> float | Non
     return None
 
 
+def _normalize_notify_platforms(value) -> list[str]:
+    """规范化定时任务通知方式。"""
+    if isinstance(value, str):
+        raw_items = [value]
+    elif isinstance(value, list):
+        raw_items = value
+    else:
+        raw_items = []
+    platforms: list[str] = []
+    for item in raw_items:
+        name = str(item or "").strip().lower()
+        if name == "feishu":
+            name = "gateway"
+        if name not in {"gateway", "desktop"} or name in platforms:
+            continue
+        platforms.append(name)
+    return platforms
+
+
 def normalize_task(task: dict) -> dict:
     now = _now()
     task = dict(task or {})
@@ -115,6 +134,7 @@ def normalize_task(task: dict) -> dict:
         "allow_remote_mutate": bool(task.get("allow_remote_mutate", False)),
         "skip_permissions": bool(task.get("skip_permissions", True)),
         "reuse_session": bool(task.get("reuse_session", False)),
+        "notify_platforms": _normalize_notify_platforms(task.get("notify_platforms")),
         "last_session_id": str(task.get("last_session_id") or ""),
         "created_at": created_at,
         "updated_at": _as_float(task.get("updated_at"), None) or now,

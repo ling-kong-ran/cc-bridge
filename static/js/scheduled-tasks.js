@@ -81,6 +81,31 @@
     if (actionEl.dataset.act === 'delete') deleteTask(task).catch((err) => console.warn('Delete scheduled task failed:', err));
   }
 
+  function getNotifyPlatforms() {
+    const platforms = [];
+    if (document.getElementById('scheduled-notify-gateway')?.checked) platforms.push('gateway');
+    if (document.getElementById('scheduled-notify-desktop')?.checked) platforms.push('desktop');
+    return platforms;
+  }
+
+  function setNotifyPlatforms(platforms) {
+    const values = Array.isArray(platforms) ? platforms : [];
+    const gatewayEnabled = values.includes('gateway') || values.includes('feishu');
+    const desktopEnabled = values.includes('desktop');
+    const gateway = document.getElementById('scheduled-notify-gateway');
+    const desktop = document.getElementById('scheduled-notify-desktop');
+    if (gateway) gateway.checked = gatewayEnabled;
+    if (desktop) desktop.checked = desktopEnabled;
+  }
+
+  function notificationLabels(task) {
+    const platforms = Array.isArray(task.notify_platforms) ? task.notify_platforms : [];
+    const labels = [];
+    if (platforms.includes('gateway') || platforms.includes('feishu')) labels.push(t('scheduledNotifyGateway'));
+    if (platforms.includes('desktop')) labels.push(t('scheduledNotifyDesktop'));
+    return labels;
+  }
+
   function renderTasks() {
     const list = document.getElementById('scheduled-task-list');
     if (!list) return;
@@ -97,6 +122,7 @@
           </div>
           <div class="scheduled-task-meta">${esc(formatSchedule(task.schedule))} · ${esc(t('nextRun'))}: ${esc(formatTaskTime(task.next_run_at))}</div>
           <div class="scheduled-task-meta">${esc(shortenPath(task.cwd || '', 4))}</div>
+          ${notificationLabels(task).length ? `<div class="scheduled-task-meta">${esc(t('scheduledNotifyMethods'))}: ${esc(notificationLabels(task).join(' / '))}</div>` : ''}
           ${task.last_error ? `<div class="scheduled-task-error">${esc(task.last_error)}</div>` : ''}
         </div>
         <div class="scheduled-task-actions">
@@ -148,6 +174,7 @@
       remote_target_id: document.getElementById('scheduled-remote')?.value || '',
       allow_remote_mutate: document.getElementById('scheduled-allow-remote-mutate')?.checked || false,
       reuse_session: document.getElementById('scheduled-reuse-session')?.checked || false,
+      notify_platforms: getNotifyPlatforms(),
       enabled: document.getElementById('scheduled-enabled')?.checked !== false,
       schedule,
     };
@@ -165,6 +192,7 @@
     document.getElementById('scheduled-remote').value = task.remote_target_id || '';
     document.getElementById('scheduled-allow-remote-mutate').checked = !!task.allow_remote_mutate;
     document.getElementById('scheduled-reuse-session').checked = !!task.reuse_session;
+    setNotifyPlatforms(task.notify_platforms);
     document.getElementById('scheduled-enabled').checked = task.enabled !== false;
     const schedule = task.schedule || { type: 'interval', minutes: 60 };
     document.getElementById('scheduled-type').value = schedule.type || 'interval';
@@ -186,6 +214,7 @@
     document.getElementById('scheduled-run-at').value = toDateTimeLocal();
     document.getElementById('scheduled-allow-remote-mutate').checked = false;
     document.getElementById('scheduled-reuse-session').checked = false;
+    setNotifyPlatforms([]);
     document.getElementById('scheduled-enabled').checked = true;
     populateSelects();
     updateScheduleFields();
