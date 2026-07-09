@@ -353,7 +353,12 @@
         const contentEl = el?.querySelector?.('.msg-content');
         if (!contentEl) continue;
         let html = '';
-        for (const block of (msg.blocks || [])) {
+        const blocks = [...(msg.blocks || [])].sort((a, b) => {
+          const aTool = a.type === 'tool_use' ? 0 : 1;
+          const bTool = b.type === 'tool_use' ? 0 : 1;
+          return aTool - bTool;
+        });
+        for (const block of blocks) {
           if (block.type === 'text') {
             html += `<div class="text-block">${ctx.renderMd(block.text)}</div>`;
           } else if (block.type === 'thinking') {
@@ -382,7 +387,14 @@
     for (const idx of Object.keys(streamBlocks)) {
       blocks.push({ block: streamBlocks[idx], index: Number(idx), streaming: true });
     }
-    blocks.sort((a, b) => a.index - b.index);
+    blocks.sort((a, b) => {
+      if (final) {
+        const aTool = a.block.type === 'tool_use' ? 0 : 1;
+        const bTool = b.block.type === 'tool_use' ? 0 : 1;
+        if (aTool !== bTool) return aTool - bTool;
+      }
+      return a.index - b.index;
+    });
 
     for (const item of blocks) {
       const block = item.block;
