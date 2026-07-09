@@ -75,7 +75,13 @@ if ($Release) {
             Write-Host "[CC Bridge] package files already committed at $Version"
             $Global:LASTEXITCODE = 0
         } else {
-            git commit -m "提升桌面端版本到 $Version"
+            $CommitMessagePath = Join-Path $env:TEMP "cc-bridge-release-commit-message.txt"
+            [System.IO.File]::WriteAllText($CommitMessagePath, "提升桌面端版本到 $Version", [System.Text.UTF8Encoding]::new($false))
+            try {
+                git commit -F $CommitMessagePath
+            } finally {
+                Remove-Item $CommitMessagePath -Force -ErrorAction SilentlyContinue
+            }
         }
     }
 
