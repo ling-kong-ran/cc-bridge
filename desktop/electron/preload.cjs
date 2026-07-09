@@ -9,4 +9,11 @@ contextBridge.exposeInMainWorld('ccBridgeDesktop', {
   checkUpdate: () => ipcRenderer.invoke('desktop:check-update'),
   installUpdate: () => ipcRenderer.invoke('desktop:install-update'),
   notify: (payload) => ipcRenderer.invoke('desktop:notify', payload),
+  getBootstrapLogPath: () => ipcRenderer.invoke('desktop:get-bootstrap-log-path'),
+  onBootstrapProgress: (callback) => {
+    if (typeof callback !== 'function') return () => {}
+    const listener = (_event, payload) => callback(payload)
+    ipcRenderer.on('desktop:bootstrap-progress', listener)
+    return () => ipcRenderer.removeListener('desktop:bootstrap-progress', listener)
+  },
 })

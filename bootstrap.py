@@ -10,7 +10,7 @@ from bootstrap.launcher import launch_server
 from bootstrap.node_setup import ensure_node
 from bootstrap.probe import get_environment_status
 from bootstrap.python_setup import ensure_python_version
-from bootstrap.state import log, write_state
+from bootstrap.state import emit_progress, log, write_state
 from bootstrap.venv_setup import find_server_python
 
 
@@ -33,25 +33,42 @@ def _ensure_claude_runtime(yes: bool = False) -> None:
         ensure_claude_cli(yes)
 
 
+def _run_step(step: str, title: str, func):
+    """执行 bootstrap 步骤并输出桌面启动页可消费的状态。"""
+    emit_progress(step, "running", title)
+    try:
+        result = func()
+    except Exception as exc:
+        emit_progress(step, "error", title, f"{title}失败", str(exc))
+        raise
+    emit_progress(step, "done", title)
+    return result
+
+
 def main() -> int:
     args = parse_args()
     try:
-        ensure_python_version()
-        status = get_environment_status()
+        emit_progress("start", "running", "启动 Bootstrap", "正在准备 CC Bridge 运行环境")
+        _run_step("python", "检查 Python 版本", ensure_python_version)
+        status = _run_step("environment", "检测本机环境", get_environment_status)
         write_state(status)
         if args.status:
             log("环境状态已写入 ~/.ccb/bootstrap_state.json")
+            emit_progress("status", "done", "环境状态已写入", "仅检查模式完成")
             return 0
 
-        python = find_server_python()
-        _ensure_claude_runtime(args.yes)
+        python = _run_step("venv", "准备项目 Python 环境", find_server_python)
+        _run_step("claude", "检查 Claude Code CLI", lambda: _ensure_claude_runtime(args.yes))
         write_state(get_environment_status())
+        emit_progress("server", "running", "启动本地服务", "正在启动 server.py 并等待就绪")
         return launch_server(python, desktop=args.desktop)
     except KeyboardInterrupt:
         log("用户中断 bootstrap")
+        emit_progress("cancelled", "error", "启动已中断", "用户中断 bootstrap")
         return 130
     except Exception as exc:
         log(f"bootstrap 失败：{exc}")
+        emit_progress("failed", "error", "Bootstrap 失败", str(exc), str(exc))
         try:
             write_state(get_environment_status() | {"error": str(exc)})
         except Exception:

@@ -5,20 +5,392 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>CC Bridge</title>
   <style>
-    :root { color-scheme: dark; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
-    body { margin: 0; min-height: 100vh; display: grid; place-items: center; background: #111827; color: #e5e7eb; -webkit-app-region: drag; user-select: none; }
-    .card { width: min(520px, calc(100vw - 48px)); padding: 28px; border: 1px solid #374151; border-radius: 18px; background: #1f2937; box-shadow: 0 20px 60px rgba(0,0,0,.35); }
-    h1 { margin: 0 0 12px; font-size: 22px; }
-    p { margin: 8px 0 0; color: #9ca3af; line-height: 1.6; }
-    .spinner { width: 28px; height: 28px; border: 3px solid #374151; border-top-color: #60a5fa; border-radius: 50%; animation: spin 1s linear infinite; margin-bottom: 18px; }
-    @keyframes spin { to { transform: rotate(360deg); } }
+    :root {
+      color-scheme: dark;
+      font-family: Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      --bg: #080b12;
+      --panel: rgba(16, 23, 38, .86);
+      --panel-strong: rgba(21, 30, 49, .94);
+      --line: rgba(148, 163, 184, .18);
+      --muted: #94a3b8;
+      --text: #e5edf8;
+      --brand-a: #38bdf8;
+      --brand-b: #8b5cf6;
+      --brand-c: #d946ef;
+      --ok: #22c55e;
+      --warn: #f59e0b;
+      --error: #fb7185;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      display: grid;
+      place-items: center;
+      overflow: hidden;
+      background:
+        radial-gradient(circle at 12% 18%, rgba(56, 189, 248, .24), transparent 34%),
+        radial-gradient(circle at 88% 12%, rgba(139, 92, 246, .25), transparent 34%),
+        radial-gradient(circle at 72% 86%, rgba(217, 70, 239, .16), transparent 36%),
+        linear-gradient(135deg, #070a12 0%, #101827 54%, #0b1020 100%);
+      color: var(--text);
+      -webkit-app-region: drag;
+      user-select: none;
+    }
+
+    body::before {
+      content: "";
+      position: fixed;
+      inset: 0;
+      opacity: .12;
+      background-image:
+        linear-gradient(rgba(148, 163, 184, .2) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(148, 163, 184, .2) 1px, transparent 1px);
+      background-size: 44px 44px;
+      mask-image: radial-gradient(circle at center, #000 0, transparent 72%);
+      pointer-events: none;
+    }
+
+    .shell {
+      width: min(860px, calc(100vw - 56px));
+      border: 1px solid var(--line);
+      border-radius: 28px;
+      background: linear-gradient(180deg, rgba(15, 23, 42, .9), rgba(8, 13, 24, .88));
+      box-shadow: 0 34px 120px rgba(0, 0, 0, .48), inset 0 1px 0 rgba(255, 255, 255, .06);
+      overflow: hidden;
+    }
+
+    .hero {
+      position: relative;
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 24px;
+      padding: 34px 36px 28px;
+      background:
+        linear-gradient(135deg, rgba(56, 189, 248, .12), rgba(139, 92, 246, .1) 48%, rgba(217, 70, 239, .08)),
+        var(--panel);
+      border-bottom: 1px solid var(--line);
+    }
+
+    .eyebrow {
+      display: inline-flex;
+      align-items: center;
+      gap: 9px;
+      padding: 7px 12px;
+      border: 1px solid rgba(96, 165, 250, .3);
+      border-radius: 999px;
+      color: #bfdbfe;
+      background: rgba(15, 23, 42, .52);
+      font-size: 12px;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+    }
+
+    .pulse {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--brand-a);
+      box-shadow: 0 0 0 0 rgba(56, 189, 248, .55);
+      animation: pulse 1.6s infinite;
+    }
+
+    h1 {
+      margin: 18px 0 10px;
+      font-size: 32px;
+      line-height: 1.1;
+      letter-spacing: -.04em;
+    }
+
+    .subtitle {
+      margin: 0;
+      color: var(--muted);
+      line-height: 1.7;
+      max-width: 560px;
+      font-size: 15px;
+    }
+
+    .orb {
+      width: 116px;
+      height: 116px;
+      align-self: center;
+      border-radius: 32px;
+      display: grid;
+      place-items: center;
+      background:
+        linear-gradient(135deg, rgba(56, 189, 248, .95), rgba(139, 92, 246, .95) 52%, rgba(217, 70, 239, .9));
+      box-shadow: 0 22px 58px rgba(99, 102, 241, .36);
+    }
+
+    .orb::after {
+      content: "ccb";
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-weight: 800;
+      letter-spacing: -.08em;
+      color: white;
+      font-size: 28px;
+    }
+
+    .content {
+      display: grid;
+      grid-template-columns: 320px 1fr;
+      gap: 18px;
+      padding: 22px;
+    }
+
+    .steps,
+    .console {
+      border: 1px solid var(--line);
+      border-radius: 20px;
+      background: var(--panel-strong);
+      min-height: 292px;
+    }
+
+    .steps { padding: 18px; }
+
+    .step {
+      display: grid;
+      grid-template-columns: 28px 1fr;
+      gap: 12px;
+      position: relative;
+      padding: 0 0 18px;
+    }
+
+    .step:not(:last-child)::after {
+      content: "";
+      position: absolute;
+      left: 13px;
+      top: 31px;
+      bottom: 4px;
+      width: 1px;
+      background: rgba(148, 163, 184, .18);
+    }
+
+    .dot {
+      width: 28px;
+      height: 28px;
+      border-radius: 50%;
+      border: 1px solid rgba(148, 163, 184, .28);
+      background: rgba(15, 23, 42, .86);
+      display: grid;
+      place-items: center;
+      color: var(--muted);
+      font-size: 12px;
+      z-index: 1;
+    }
+
+    .step.running .dot {
+      border-color: rgba(56, 189, 248, .75);
+      color: #dbeafe;
+      box-shadow: 0 0 0 5px rgba(56, 189, 248, .08);
+    }
+
+    .step.done .dot {
+      border-color: rgba(34, 197, 94, .65);
+      color: white;
+      background: rgba(34, 197, 94, .24);
+    }
+
+    .step.error .dot {
+      border-color: rgba(251, 113, 133, .8);
+      color: white;
+      background: rgba(251, 113, 133, .2);
+    }
+
+    .step-title {
+      margin: 2px 0 4px;
+      font-size: 14px;
+      font-weight: 650;
+    }
+
+    .step-detail {
+      margin: 0;
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.5;
+    }
+
+    .console {
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    }
+
+    .console-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 14px 16px;
+      border-bottom: 1px solid var(--line);
+      color: #cbd5e1;
+      font-size: 12px;
+    }
+
+    .traffic { display: flex; gap: 7px; }
+    .traffic span { width: 10px; height: 10px; border-radius: 50%; opacity: .85; }
+    .traffic span:nth-child(1) { background: #fb7185; }
+    .traffic span:nth-child(2) { background: #fbbf24; }
+    .traffic span:nth-child(3) { background: #34d399; }
+
+    .log {
+      flex: 1;
+      margin: 0;
+      padding: 16px;
+      color: #a7f3d0;
+      font-size: 12px;
+      line-height: 1.65;
+      white-space: pre-wrap;
+      overflow: hidden;
+    }
+
+    .log .muted { color: #64748b; }
+    .log .error { color: #fda4af; }
+    .log .ok { color: #86efac; }
+
+    .footer {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 22px 22px;
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .progress {
+      position: relative;
+      width: 220px;
+      height: 8px;
+      overflow: hidden;
+      border-radius: 999px;
+      background: rgba(148, 163, 184, .14);
+    }
+
+    .bar {
+      position: absolute;
+      inset: 0 auto 0 0;
+      width: 18%;
+      border-radius: inherit;
+      background: linear-gradient(90deg, var(--brand-a), var(--brand-b), var(--brand-c));
+      transition: width .35s ease;
+    }
+
+    @keyframes pulse {
+      70% { box-shadow: 0 0 0 10px rgba(56, 189, 248, 0); }
+      100% { box-shadow: 0 0 0 0 rgba(56, 189, 248, 0); }
+    }
   </style>
 </head>
 <body>
-  <main class="card">
-    <div class="spinner"></div>
-    <h1>正在启动 CC Bridge</h1>
-    <p>正在准备本地服务和运行环境，请稍候。</p>
+  <main class="shell">
+    <section class="hero">
+      <div>
+        <div class="eyebrow"><span class="pulse"></span>Desktop Bootstrap</div>
+        <h1>正在启动 CC Bridge</h1>
+        <p class="subtitle" id="headline">正在准备本地服务和运行环境。首次启动可能会创建虚拟环境、检查 Node/npm 与 Claude Code CLI。</p>
+      </div>
+      <div class="orb" aria-hidden="true"></div>
+    </section>
+
+    <section class="content">
+      <div class="steps" id="steps"></div>
+      <div class="console">
+        <div class="console-head">
+          <div class="traffic"><span></span><span></span><span></span></div>
+          <span id="log-path">~/.ccb/bootstrap.log</span>
+        </div>
+        <pre class="log" id="log"><span class="muted">$ 等待 bootstrap 输出...</span></pre>
+      </div>
+    </section>
+
+    <div class="footer">
+      <span id="footer-text">如果某一步失败，请检查右侧错误信息与 bootstrap 日志。</span>
+      <div class="progress" aria-hidden="true"><div class="bar" id="bar"></div></div>
+    </div>
   </main>
+
+  <script>
+    const stepOrder = ['start', 'python', 'environment', 'venv', 'claude', 'server']
+    const labels = {
+      start: '启动 Bootstrap',
+      python: '检查 Python 版本',
+      environment: '检测本机环境',
+      venv: '准备项目 Python 环境',
+      claude: '检查 Claude Code CLI',
+      server: '启动本地服务',
+    }
+    const state = new Map(stepOrder.map(key => [key, { status: 'pending', title: labels[key], detail: '等待执行' }]))
+    const stepsEl = document.getElementById('steps')
+    const logEl = document.getElementById('log')
+    const headlineEl = document.getElementById('headline')
+    const footerEl = document.getElementById('footer-text')
+    const barEl = document.getElementById('bar')
+    const logLines = []
+
+    function iconFor(status, index) {
+      if (status === 'done') return '✓'
+      if (status === 'error') return '!'
+      if (status === 'running') return '•'
+      return String(index + 1)
+    }
+
+    function renderSteps() {
+      stepsEl.innerHTML = stepOrder.map((key, index) => {
+        const item = state.get(key)
+        return `<div class="step ${item.status}" data-step="${key}">
+          <div class="dot">${iconFor(item.status, index)}</div>
+          <div>
+            <div class="step-title">${escapeHtml(item.title)}</div>
+            <p class="step-detail">${escapeHtml(item.detail || statusText(item.status))}</p>
+          </div>
+        </div>`
+      }).join('')
+      const done = [...state.values()].filter(item => item.status === 'done').length
+      const running = [...state.values()].some(item => item.status === 'running') ? .5 : 0
+      barEl.style.width = `${Math.max(12, Math.min(100, ((done + running) / stepOrder.length) * 100))}%`
+    }
+
+    function statusText(status) {
+      if (status === 'running') return '正在执行'
+      if (status === 'done') return '已完成'
+      if (status === 'error') return '执行失败'
+      return '等待执行'
+    }
+
+    function escapeHtml(text) {
+      return String(text || '').replace(/[&<>"']/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;' }[ch]))
+    }
+
+    function appendLog(event) {
+      const prefix = event.status === 'error' ? 'error' : event.status === 'done' ? 'ok' : 'muted'
+      const detail = event.error || event.detail || statusText(event.status)
+      logLines.push(`<span class="${prefix}">[${new Date().toLocaleTimeString()}] ${escapeHtml(event.title || event.step)} — ${escapeHtml(detail)}</span>`)
+      while (logLines.length > 9) logLines.shift()
+      logEl.innerHTML = logLines.join('\n')
+    }
+
+    function applyProgress(event) {
+      if (!event || event.type !== 'bootstrap_progress') return
+      const key = stepOrder.includes(event.step) ? event.step : stepOrder.find(step => state.get(step).status === 'running') || event.step
+      if (!state.has(key)) return
+      state.set(key, {
+        status: event.status || 'running',
+        title: event.title || labels[key],
+        detail: event.error || event.detail || statusText(event.status),
+      })
+      headlineEl.textContent = event.error || event.detail || event.title || headlineEl.textContent
+      footerEl.textContent = event.status === 'error' ? '启动遇到问题：请根据错误信息处理后重新启动。' : '正在按步骤准备桌面端运行环境。'
+      appendLog(event)
+      renderSteps()
+    }
+
+    renderSteps()
+    window.ccBridgeDesktop?.getBootstrapLogPath?.().then(path => {
+      if (path) document.getElementById('log-path').textContent = path.replace(/\\/g, '/')
+    }).catch(() => {})
+    window.ccBridgeDesktop?.onBootstrapProgress?.(applyProgress)
+  </script>
 </body>
 </html>

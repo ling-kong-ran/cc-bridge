@@ -12,6 +12,7 @@ let backendProcess = null
 let backendReady = null
 let isQuitting = false
 let isInstallingUpdate = false
+let bootstrapFailed = false
 
 const APP_ID = 'local.cc-bridge.desktop'
 const APP_ROOT = app.isPackaged ? path.join(process.resourcesPath, 'cc-bridge') : path.resolve(__dirname, '..', '..')
@@ -181,6 +182,12 @@ function createWindow() {
   mainWindow.loadFile(pagePath('loading.html'))
 }
 
+function sendBootstrapProgress(event) {
+  if (event?.status === 'error') bootstrapFailed = true
+  if (!mainWindow || mainWindow.isDestroyed()) return
+  mainWindow.webContents.send('desktop:bootstrap-progress', event)
+}
+
 function waitForReady(child) {
   return new Promise((resolve, reject) => {
     let buffer = ''
@@ -211,6 +218,7 @@ function waitForReady(child) {
         if (!line.startsWith('{')) continue
         try {
           const event = JSON.parse(line)
+          if (event.type === 'bootstrap_progress') sendBootstrapProgress(event)
           if (event.type === 'server_ready' && event.url) {
             done()
             resolve(event)
@@ -323,7 +331,7 @@ function spawnBackend() {
   backendProcess.stderr.on('data', chunk => process.stderr.write(chunk.toString()))
   backendProcess.on('exit', () => {
     backendProcess = null
-    if (!isQuitting && mainWindow && !mainWindow.isDestroyed() && !backendReady) {
+    if (!isQuitting && mainWindow && !mainWindow.isDestroyed() && !backendReady && !bootstrapFailed) {
       mainWindow.loadFile(pagePath('backend-error.html'))
     }
   })
@@ -343,6 +351,13 @@ function openBackend(event, token = '') {
 async function startBackend() {
   const existing = await findExistingBackend(false)
   if (existing) {
+    sendBootstrapProgress({
+      type: 'bootstrap_progress',
+      step: 'server',
+      status: 'done',
+      title: '复用已运行的本地服务',
+      detail: `连接到 ${existing.url}`,
+    })
     openBackend(existing)
     return
   }
@@ -359,7 +374,7 @@ async function startBackend() {
     })
     .catch(error => {
       console.error(error)
-      if (mainWindow && !mainWindow.isDestroyed() && !backendReady) mainWindow.loadFile(pagePath('backend-error.html'))
+      if (mainWindow && !mainWindow.isDestroyed() && !backendReady && !bootstrapFailed) mainWindow.loadFile(pagePath('backend-error.html'))
     })
 }
 
@@ -491,6 +506,7 @@ function registerIpcHandlers() {
   ipcMain.handle('desktop:check-update', checkDesktopUpdate)
   ipcMain.handle('desktop:install-update', installDesktopUpdate)
   ipcMain.handle('desktop:notify', showDesktopNotification)
+  ipcMain.handle('desktop:get-bootstrap-log-path', () => path.join(os.homedir(), '.ccb', 'bootstrap.log'))
 }
 
 const gotLock = app.requestSingleInstanceLock()
