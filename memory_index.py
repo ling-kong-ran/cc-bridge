@@ -1,7 +1,8 @@
 """
 Memory Index - 为 Claude Code auto memory 提供轻量 SQLite FTS5 全文检索
 
-零外部依赖，仅使用 Python 标准库 sqlite3。每个项目一个索引数据库。
+可选依赖 jieba 用于中文分词（未安装时退回 bigram）。
+索引会随分词器变化；切换分词器后建议 force=True 全量重建一次索引。
 """
 import json
 import re
@@ -10,6 +11,13 @@ import sqlite3
 import time
 from pathlib import Path
 from typing import Any
+
+try:
+    import jieba
+    _has_jieba = True
+except ImportError:
+    _has_jieba = False
+    jieba = None  # type: ignore
 
 # 索引存储目录
 INDEX_DIR = Path.home() / ".ccb" / "memory_index"
@@ -134,7 +142,7 @@ def index_memory(cwd: str, force: bool = False) -> int:
             continue
         conn.execute(
             "INSERT INTO memory_fts(file_path, name, title, content) VALUES (?, ?, ?, ?)",
-            (parsed["name"], parsed["name"], parsed["title"], parsed["body"]),
+            (parsed["name"], parsed["name"], parsed["title"], _indexable_content(parsed)),
         )
         conn.execute(
             "INSERT OR REPLACE INTO file_mtime(file_path, mtime) VALUES (?, ?)",
@@ -184,6 +192,72 @@ def _has_changes(memory_dir: Path, db_path: Path) -> bool:
         return True
 
 
+def _build_fts_query(query: str) -> str:
+    """把用户查询转成对中文友好的 FTS5 MATCH 表达式。
+
+    unicode61 不分中文，整句当一个 token 基本匹配不上。这里复用
+    _extract_memory_terms 的中文 bigram 切法，把 query 拆成一组 token，
+    用 OR 连接以提高中文召回；英文/数字词原样作为短语。
+    """
+    query = (query or "").strip()
+    if not query:
+        return ""
+
+    # 用与索引整理一致的切分逻辑提取 token（中文 bigram + 英文词 + 分段）
+    terms = _extract_memory_terms(query, "", Path(query).stem)
+    # 去掉过短/无信息量的 token，转义双引号
+    safe_terms: list[str] = []
+    seen: set[str] = set()
+    for t in terms:
+        t = t.replace('"', '""')
+        if len(t) < 2 or t in seen:
+            continue
+        seen.add(t)
+        safe_terms.append(f'"{t}"')
+    # 没切出可用 token 时退化为原始查询（按空格分），避免完全搜不到
+    if not safe_terms:
+        parts = [p.replace('"', '""') for p in query.split() if len(p.strip()) > 1]
+        safe_terms = [f'"{p}"' for p in parts]
+    return " OR ".join(safe_terms)
+
+
+def _rerank_by_overlap(rows: list[tuple], query: str, limit: int) -> list[tuple]:
+    """按 query 与命中文本的真实 bigram 覆盖度重排，压低只蹭到常见 bigram 的噪声。
+
+    FTS5 的 bm25 rank 在中文 bigram 索引下区分度低：只要命中任一常见双字（已经/消息/重启）
+    就能排进来，且排序几乎随机。这里在拿回候选后逐条统计它实际命中了 query 的多少个
+    bigram，按命中覆盖度（去重后）重排；命中过少的丢弃。重叠度相同时保留 FTS rank 作 tiebreak。
+    """
+    if not rows:
+        return rows
+
+    # 复用与查询一致的 bigram 切分，得到 query 的 token 集合
+    q_terms = _extract_memory_terms(query, "", Path(query).stem)
+    q_bigrams = {t for t in q_terms if len(t) >= 2}
+    if not q_bigrams:
+        return rows[:limit]
+
+    def _row_overlap(row: tuple) -> int:
+        # row: (file_path, name, title, snippet, rank, content)；用 title+content 估计命中面。
+        # content 是索引时 bigram 化后的全文，能反映该记忆真正覆盖了 query 的多少语义片段。
+        title = str(row[2] or "")
+        content = str(row[5] or "") if len(row) > 5 else ""
+        text = f"{title} {content}"
+        terms = _extract_memory_terms(text, "", Path(str(row[1] or "")).stem)
+        return len(q_bigrams & {t for t in terms if len(t) >= 2})
+
+    scored = [(_row_overlap(r), r) for r in rows]
+    # 只保留至少命中 2 个 query bigram 的候选；query 本身 bigram 不足 2 个时不做过滤
+    if len(q_bigrams) >= 2:
+        scored = [s for s in scored if s[0] >= 2]
+        # 全被过滤掉时退回原 FTS 排序（保底有召回），但只取覆盖度最高的若干条
+        if not scored:
+            scored = sorted(((_row_overlap(r), r) for r in rows), key=lambda s: -s[0])[:limit]
+    # 覆盖度降序；同覆盖度按原 FTS rank 升序（rank 越小越相关）
+    scored.sort(key=lambda s: (-s[0], s[1][4]))
+    return [r for _, r in scored[:limit]]
+
+
 def search_memory(query: str, cwd: str, limit: int = 20) -> list[dict[str, Any]]:
     """全文搜索指定项目的 memory。"""
     db_path = _get_index_db(cwd)
@@ -192,18 +266,34 @@ def search_memory(query: str, cwd: str, limit: int = 20) -> list[dict[str, Any]]
 
     conn = _get_conn(db_path)
     try:
-        # 尝试 FTS5 搜索
-        # 转义特殊字符
-        safe_query = " ".join(
-            f'"{token}"' if len(token) > 1 else token
-            for token in query.replace('"', '""').split()
-            if token.strip()
-        )
-        rows = conn.execute(
-            "SELECT file_path, name, title, snippet(memory_fts, 1, '<mark>', '</mark>', '...', 64) AS snippet, rank "
-            "FROM memory_fts WHERE memory_fts MATCH ? ORDER BY rank LIMIT ?",
-            (safe_query, limit),
-        ).fetchall()
+        fts_query = _build_fts_query(query)
+        if not fts_query:
+            conn.close()
+            return []
+
+        def _run(match_expr: str) -> list[tuple]:
+            # 末列 content 用于按 query bigram 覆盖度重排；snippet 太短不足以估计命中面
+            return conn.execute(
+                "SELECT file_path, name, title, snippet(memory_fts, 1, '<mark>', '</mark>', '...', 64) AS snippet, rank, content "
+                "FROM memory_fts WHERE memory_fts MATCH ? ORDER BY rank LIMIT ?",
+                (match_expr, limit),
+            ).fetchall()
+
+        # 优先 OR 语义（中文召回宽容）；命中为空或出错则回退到 AND（更精确）
+        rows: list[tuple] = []
+        try:
+            rows = _run(fts_query)
+        except sqlite3.OperationalError:
+            rows = []
+        if not rows:
+            and_query = fts_query.replace(" OR ", " AND ")
+            try:
+                rows = _run(and_query)
+            except sqlite3.OperationalError:
+                rows = []
+
+        rows = _rerank_by_overlap(rows, query, limit)
+
         results = [
             {
                 "file": row[0],
@@ -354,6 +444,60 @@ def get_memory_graph(cwd: str) -> dict:
     return {"nodes": nodes, "edges": edges}
 
 
+def _segment_cjk(text: str) -> str:
+    """把文本中的中文按词切分，空格拼接，供 FTS5 索引/检索。
+
+    jieba 可用时按真实词切分（"飞书消息网关"→"飞书 消息 网关"），语义边界准确；
+    jieba 不可用时退回 bigram 滑窗（"飞书消息网关"→"飞书 书消 消息 息网 网关"）。
+    英文/数字原样保留，由 unicode61 正常分词。单字虚词（的/了/是）在 jieba 路径
+    下被过滤掉以减少索引噪声、提高检索精度。
+    """
+    if not text:
+        return ""
+    if _has_jieba:
+        return " ".join(w for w in jieba.cut(text) if len(w.strip()) > 1)
+    return _bigram_cjk(text)
+
+
+def _bigram_cjk(text: str) -> str:
+    """把文本中的连续中文切成 bigram 空格串，供 FTS5 索引/检索可匹配。
+
+    unicode61 不分中文，整段中文会粘成一个 token 导致搜不到。这里对 CJK
+    做相邻二字滑窗（"飞书消息" → "飞书 书消 消息"），让任意双字子串都能命中。
+    英文/数字原样保留，由 unicode61 正常分词。
+    """
+    if not text:
+        return ""
+    out: list[str] = []
+    buf: list[str] = []
+    for ch in text:
+        if "一" <= ch <= "鿿":
+            buf.append(ch)
+        else:
+            if len(buf) >= 2:
+                out.extend(buf[k] + buf[k + 1] for k in range(len(buf) - 1))
+            elif len(buf) == 1:
+                out.append(buf[0])  # 单字也保留，便于单字查询
+            buf = []
+            out.append(ch)
+    if len(buf) >= 2:
+        out.extend(buf[k] + buf[k + 1] for k in range(len(buf) - 1))
+    elif len(buf) == 1:
+        out.append(buf[0])
+    return " ".join(out)
+
+
+def _indexable_content(parsed: dict[str, Any]) -> str:
+    """构造用于 FTS5 content 列的可索引文本：中文分词后的标题+正文。
+
+    原文不直接入 content（否则中文粘成一团搜不到），而是把 title 和 body
+    的中文用 jieba/bigram 切分后拼接。snippet 仍从原文渲染（见 _parse_memory_file）。
+    """
+    title = parsed.get("title", "") or ""
+    body = parsed.get("body", "") or ""
+    return f"{_segment_cjk(title)} {_segment_cjk(body)}"
+
+
 def _extract_memory_terms(title: str, body: str, stem: str) -> set[str]:
     """提取用于记忆整理的轻量关键词，兼顾中文文件名。"""
     text = f"{title} {body} {stem}".lower()
@@ -363,20 +507,35 @@ def _extract_memory_terms(title: str, body: str, stem: str) -> set[str]:
     for word in re.findall(r"[a-zA-Z0-9_]{2,}", text):
         terms.add(word)
 
-    # 中文字符 bigram（"飞书消息" → ["飞书", "书消", "消息"]）
-    cjk_chars = re.findall(r"[一-鿿]", text)
-    for k in range(len(cjk_chars) - 1):
-        terms.add(cjk_chars[k] + cjk_chars[k + 1])
-
+    # 中文字符切词：jieba 可用时按真实词切分（"飞书消息"→{"飞书","消息"}），
+    # 不可用时退回 bigram 滑窗（"飞书消息"→{"飞书","书消","消息"}）。
+    if _has_jieba:
+        for word in jieba.cut(text):
+            word = word.strip()
+            if len(word) >= 2:
+                terms.add(word)
+    else:
+        cjk_chars = re.findall(r"[一-鿿]", text)
+        for k in range(len(cjk_chars) - 1):
+            terms.add(cjk_chars[k] + cjk_chars[k + 1])
+        for ch in cjk_chars:
+            terms.add(ch)
     # 文件名分段：中文前缀/编号后缀常靠 - _ 空格分隔
     for part in re.split(r"[-_\s.]+", stem):
         part = part.strip().lower()
         if len(part) < 2:
             continue
         terms.add(part)
-        part_cjk = re.findall(r"[一-鿿]", part)
-        for k in range(len(part_cjk) - 1):
-            terms.add(part_cjk[k] + part_cjk[k + 1])
+        # 同样的 CJK 分词策略（jieba 优先），避免 stem 路径的 bigram 污染顶掉上层 jieba 的效果
+        if _has_jieba:
+            for word in jieba.cut(part):
+                word = word.strip()
+                if len(word) >= 2:
+                    terms.add(word)
+        else:
+            part_cjk = re.findall(r"[一-鿿]", part)
+            for k in range(len(part_cjk) - 1):
+                terms.add(part_cjk[k] + part_cjk[k + 1])
 
     return terms
 
@@ -580,7 +739,7 @@ def save_memory_file(filename: str, content: str, cwd: str) -> dict[str, Any] | 
     # 写入内容
     file_path.write_text(content, encoding="utf-8")
 
-    # 重新索引该文件
+    # 重新索引该文件（列名须与 _init_db 的 memory_fts 表结构一致：file_path, name, title, content）
     db_path = _get_index_db(cwd)
     try:
         _init_db(db_path)
@@ -588,8 +747,8 @@ def save_memory_file(filename: str, content: str, cwd: str) -> dict[str, Any] | 
         conn = sqlite3.connect(str(db_path))
         conn.execute("DELETE FROM memory_fts WHERE file_path = ?", (safe_name,))
         conn.execute(
-            "INSERT INTO memory_fts (file_path, title, body) VALUES (?, ?, ?)",
-            (safe_name, parsed.get("title", safe_name), parsed.get("body", content))
+            "INSERT INTO memory_fts (file_path, name, title, content) VALUES (?, ?, ?, ?)",
+            (safe_name, safe_name, parsed.get("title", safe_name), _indexable_content(parsed))
         )
         conn.execute(
             "INSERT OR REPLACE INTO file_mtime (file_path, mtime) VALUES (?, ?)",

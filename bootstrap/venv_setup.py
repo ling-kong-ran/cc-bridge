@@ -169,9 +169,15 @@ def _install_deps(python: Path) -> None:
     if not req_file.exists():
         return
     log("安装项目依赖...")
+    # 强制 UTF-8：Windows GBK(cp936) locale 下 pip 用 locale 编码读 requirements.txt，
+    # 遇中文注释会抛 UnicodeDecodeError。PYTHONUTF8=1 让 pip 按 UTF-8 解码文件。
+    env = dict(os.environ)
+    env["PYTHONUTF8"] = "1"
+    env["PYTHONIOENCODING"] = "utf-8"
     try:
         subprocess.run(
             [str(python), "-m", "pip", "install", "-r", str(req_file)],
+            env=env,
             check=True,
         )
     except subprocess.CalledProcessError:
