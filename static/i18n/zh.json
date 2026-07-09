@@ -497,7 +497,7 @@
   "quoteSelection": "引用选中内容",
   "quoteLine": "引用此行",
   "filePreviewSelectHint": "点击行选择，Shift+点击选择连续范围",
-  "filePreviewUnsupported": "该文件无法作为文本预览",
+  "filePreviewUnsupported": "该文件无法预览",
   "filePreviewLoadFailed": "文件预览加载失败: {message}",
   "historyUser": "用户",
   "historyAssistant": "助手",

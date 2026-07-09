@@ -795,6 +795,8 @@ MIME_TYPES = {
     ".jpeg": "image/jpeg",
     ".gif": "image/gif",
     ".webp": "image/webp",
+    ".avif": "image/avif",
+    ".bmp": "image/bmp",
     ".svg": "image/svg+xml",
     ".ico": "image/x-icon",
     ".pdf": "application/pdf",
@@ -1056,39 +1058,65 @@ TEXT_PREVIEW_EXTENSIONS = {
     ".css", ".html", ".xml", ".yaml", ".yml", ".toml", ".ini", ".cfg",
     ".env", ".gitignore", ".dockerignore", ".sh", ".bat", ".ps1", ".sql", ".log",
 }
+IMAGE_PREVIEW_EXTENSIONS = {".png", ".jpg", ".jpeg", ".gif", ".webp", ".avif", ".bmp", ".ico", ".svg"}
 TEXT_PREVIEW_MAX_BYTES = 512 * 1024
 
 
-def preview_text_file(path: str, cwd: str = "") -> dict:
-    """读取工作目录内的文本文件预览内容。"""
+def _resolve_preview_file(path: str, cwd: str = "") -> tuple[Path | None, str | None]:
+    """校验并解析工作目录内可预览文件路径。"""
     if not path:
-        return {"ok": False, "error": "missing_path"}
+        return None, "missing_path"
 
     root_value = cwd or DEFAULT_CWD
     if not root_value or not os.path.isdir(root_value):
-        return {"ok": False, "error": "cwd_not_found"}
+        return None, "cwd_not_found"
 
     try:
         root = Path(root_value).resolve()
         fp = Path(path).resolve()
     except OSError as exc:
-        return {"ok": False, "error": str(exc)}
+        return None, str(exc)
 
     if fp != root and root not in fp.parents:
-        return {"ok": False, "error": "forbidden"}
+        return None, "forbidden"
     if not fp.exists() or not fp.is_file():
-        return {"ok": False, "error": "not_found"}
+        return None, "not_found"
     if any(part in (".git", "node_modules", "__pycache__", "venv", ".venv") for part in fp.parts):
-        return {"ok": False, "error": "forbidden"}
+        return None, "forbidden"
     if any(part.startswith(".") and part not in (".env", ".gitignore", ".dockerignore") for part in fp.relative_to(root).parts):
-        return {"ok": False, "error": "forbidden"}
+        return None, "forbidden"
+    return fp, None
+
+
+def preview_text_file(path: str, cwd: str = "") -> dict:
+    """读取工作目录内的文本/图片文件预览信息。"""
+    fp, error = _resolve_preview_file(path, cwd)
+    if error:
+        return {"ok": False, "error": error}
+    if not fp:
+        return {"ok": False, "error": "not_found"}
 
     ext = fp.suffix.lower()
+    try:
+        size = fp.stat().st_size
+    except OSError as exc:
+        return {"ok": False, "error": str(exc)}
+
+    if ext in IMAGE_PREVIEW_EXTENSIONS:
+        return {
+            "ok": True,
+            "kind": "image",
+            "path": str(fp).replace("\\", "/"),
+            "name": fp.name,
+            "size": size,
+            "mime": MIME_TYPES.get(ext, "application/octet-stream"),
+            "url": "/api/file-preview-image?path=" + quote(str(fp).replace("\\", "/"), safe="") + "&cwd=" + quote(cwd or DEFAULT_CWD, safe=""),
+        }
+
     if ext not in TEXT_PREVIEW_EXTENSIONS and fp.name not in ("Dockerfile", "Makefile", "LICENSE", "README"):
         return {"ok": False, "error": "unsupported_type"}
 
     try:
-        size = fp.stat().st_size
         data = fp.read_bytes()[:TEXT_PREVIEW_MAX_BYTES + 1]
     except OSError as exc:
         return {"ok": False, "error": str(exc)}
@@ -1102,6 +1130,7 @@ def preview_text_file(path: str, cwd: str = "") -> dict:
     text = data.decode("utf-8-sig", errors="replace")
     return {
         "ok": True,
+        "kind": "text",
         "path": str(fp).replace("\\", "/"),
         "name": fp.name,
         "size": size,
@@ -2832,6 +2861,21 @@ async def handle_api_get(path: str, writer: asyncio.StreamWriter, query: dict = 
         p = query.get("path", [""])[0]
         cwd = query.get("cwd", [DEFAULT_CWD])[0] or DEFAULT_CWD
         data = preview_text_file(p, cwd)
+    elif path == "/api/file-preview-image":
+        query = query or {}
+        p = query.get("path", [""])[0]
+        cwd = query.get("cwd", [DEFAULT_CWD])[0] or DEFAULT_CWD
+        fp, error = _resolve_preview_file(p, cwd)
+        if error or not fp:
+            status = 404 if error == "not_found" else 403 if error == "forbidden" else 400
+            await send_response(writer, status, "text/plain; charset=utf-8", (error or "not_found").encode("utf-8"))
+            return
+        ext = fp.suffix.lower()
+        if ext not in IMAGE_PREVIEW_EXTENSIONS:
+            await send_response(writer, 415, "text/plain; charset=utf-8", b"unsupported type")
+            return
+        await send_response(writer, 200, MIME_TYPES.get(ext, "application/octet-stream"), fp.read_bytes())
+        return
     elif path == "/api/default-cwd":
         data = {"cwd": DEFAULT_CWD}
     elif path.startswith("/api/memory/"):

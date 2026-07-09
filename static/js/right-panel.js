@@ -69,6 +69,7 @@
   const previewMetaEl = document.getElementById('file-preview-meta');
   const previewContentEl = document.getElementById('file-preview-content');
   const previewSearchEl = document.getElementById('file-preview-search');
+  const previewToolsEl = previewSearchEl?.closest('.file-preview-tools');
   const previewCloseBtn = document.getElementById('file-preview-close');
   const previewQuoteSelectionBtn = document.getElementById('file-preview-quote-selection');
   let currentPreviewFile = null;
@@ -755,6 +756,7 @@ function closeFilePreview() {
   previewResizeState = null;
   previewPanel.classList.remove('dragging', 'resizing');
   if (previewContentEl) previewContentEl.innerHTML = '';
+  if (previewToolsEl) previewToolsEl.style.display = '';
   if (previewSearchEl) previewSearchEl.value = '';
 }
 
@@ -777,6 +779,7 @@ async function openFilePreview(filePath) {
   currentPreviewFile = { path: filePath, content: '' };
   if (previewNameEl) previewNameEl.textContent = filePath.split('/').pop() || filePath;
   if (previewMetaEl) previewMetaEl.textContent = shortenPlainPath(filePath);
+  if (previewToolsEl) previewToolsEl.style.display = '';
   previewContentEl.innerHTML = `<div class="file-preview-state">${esc(t('loading'))}</div>`;
   if (previewSearchEl) previewSearchEl.value = '';
   try {
@@ -795,6 +798,11 @@ async function openFilePreview(filePath) {
       const sizeKb = Math.max(1, Math.ceil((data.size || 0) / 1024));
       previewMetaEl.textContent = `${shortenPlainPath(data.path || filePath)} · ${sizeKb} KB${data.truncated ? ' · truncated' : ''}`;
     }
+    if (data.kind === 'image') {
+      renderImagePreviewContent(data);
+      return;
+    }
+    if (previewToolsEl) previewToolsEl.style.display = '';
     renderFilePreviewContent();
   } catch (e) {
     previewContentEl.innerHTML = `<div class="file-preview-state">${esc(t('filePreviewLoadFailed', { message: e.message }))}</div>`;
@@ -827,7 +835,7 @@ function selectPreviewLine(lineNo, extend = false) {
 }
 
 function getSelectedPreviewText() {
-  if (!currentPreviewFile || !previewSelectedLines.size) return '';
+  if (!currentPreviewFile || currentPreviewFile.kind === 'image' || !previewSelectedLines.size) return '';
   const lines = String(currentPreviewFile.content || '').split(/\r?\n/);
   return Array.from(previewSelectedLines).sort((a,b) => a-b).map(lineNo => {
     const text = lines[lineNo - 1] || '';
@@ -837,6 +845,18 @@ function getSelectedPreviewText() {
 
 function getSortedPreviewSelectedLines() {
   return Array.from(previewSelectedLines).sort((a,b) => a-b);
+}
+
+function renderImagePreviewContent(file) {
+  if (!previewContentEl) return;
+  if (previewToolsEl) previewToolsEl.style.display = 'none';
+  previewSelectedLines.clear();
+  lastPreviewSelectedLine = 0;
+  const src = file.url || '';
+  const alt = file.name || file.path || 'image';
+  previewContentEl.innerHTML = src
+    ? `<div class="file-preview-image-wrap"><img class="file-preview-image" src="${esc(src)}" alt="${esc(alt)}"></div>`
+    : `<div class="file-preview-state">${esc(t('filePreviewUnsupported'))}</div>`;
 }
 
 function renderFilePreviewContent() {
@@ -867,7 +887,7 @@ function renderFilePreviewContent() {
 }
 
 function quoteSelectedPreviewText() {
-  if (!previewPanel || previewPanel.style.display === 'none') return;
+  if (!previewPanel || previewPanel.style.display === 'none' || currentPreviewFile?.kind === 'image') return;
   const path = currentPreviewFile?.path || currentPreviewFile?.name || '';
   const selectedLinesText = getSelectedPreviewText();
   if (selectedLinesText) {

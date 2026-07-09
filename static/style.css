@@ -2197,6 +2197,21 @@ body.pane-right-collapsed .chat-sidebar {
   font-size: 11px;
   line-height: 1.55;
 }
+.file-preview-image-wrap {
+  min-height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+}
+.file-preview-image {
+  display: block;
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+  border-radius: var(--radius-xs);
+  box-shadow: 0 12px 30px rgba(0,0,0,.26);
+}
 .file-preview-line {
   display: grid;
   grid-template-columns: 54px minmax(0, 1fr);
