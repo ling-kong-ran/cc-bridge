@@ -225,6 +225,12 @@ function initMemoryUI() {
   document.getElementById('memory-edit-overlay')?.addEventListener('click', (e) => {
     if (e.target === e.currentTarget) closeMemoryEditor();
   });
+  document.getElementById('btn-memory-organize-apply')?.addEventListener('click', applySelectedMemoryOrganizeActions);
+  document.getElementById('btn-memory-organize-cancel')?.addEventListener('click', closeMemoryOrganizeReview);
+  document.getElementById('memory-organize-close')?.addEventListener('click', closeMemoryOrganizeReview);
+  document.getElementById('memory-organize-overlay')?.addEventListener('click', (e) => {
+    if (e.target === e.currentTarget) closeMemoryOrganizeReview();
+  });
 
   // Graph reset button
   document.getElementById('btn-graph-reset')?.addEventListener('click', function() {
@@ -239,6 +245,9 @@ function initMemoryUI() {
     }
     if (e.key === 'Escape' && document.getElementById('memory-edit-overlay')?.style.display === 'flex') {
       closeMemoryEditor();
+    }
+    if (e.key === 'Escape' && document.getElementById('memory-organize-overlay')?.style.display === 'flex') {
+      closeMemoryOrganizeReview();
     }
   });
 }
@@ -289,8 +298,9 @@ async function handleMemoryImport(selectedItems) {
 async function organizeMemoryLinks() {
   const btn = document.getElementById('btn-memory-organize');
   if (btn) btn.disabled = true;
+  openMemoryOrganizeLoading();
   try {
-    const resp = await fetch('/api/memory/organize', {
+    const resp = await fetch('/api/memory/organize/preview', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ cwd: cwdInput.value.trim() || '' }),
@@ -299,14 +309,148 @@ async function organizeMemoryLinks() {
     if (data.linked > 0) {
       showToast(t('organizeMemorySuccess', { linked: data.linked }), 'success');
       await indexMemoryFiles();
-      if (typeof initWikiGraph === 'function') initWikiGraph();
-    } else if (data.skipped > 0) {
-      showToast(t('noMemoryResults'), 'info');
-    } else {
-      showToast(t('noMemoryResults'), 'info');
     }
+    if (data.message) {
+      showToast(data.message, data.actions && data.actions.length ? 'info' : 'error');
+    }
+    if (data.actions && data.actions.length) {
+      openMemoryOrganizeReview(data);
+    } else {
+      closeMemoryOrganizeReview();
+      if (!data.linked) {
+        showToast(t('organizeNoActions'), 'info');
+      }
+    }
+    if (typeof initWikiGraph === 'function') initWikiGraph();
   } catch (e) {
     console.error('Organize memory failed:', e);
+    showToast(t('memoryOrganizeFailed'), 'error');
+  } finally {
+    if (btn) btn.disabled = false;
+  }
+}
+
+function memoryOrganizeActionLabel(action) {
+  return t('memoryAction' + String(action || '').charAt(0).toUpperCase() + String(action || '').slice(1));
+}
+
+function openMemoryOrganizeLoading() {
+  const overlay = document.getElementById('memory-organize-overlay');
+  const summaryEl = document.getElementById('memory-organize-summary');
+  const listEl = document.getElementById('memory-organize-list');
+  const errorsEl = document.getElementById('memory-organize-errors');
+  const applyBtn = document.getElementById('btn-memory-organize-apply');
+  if (!overlay || !summaryEl || !listEl) return;
+  summaryEl.textContent = t('memoryOrganizingStatus');
+  listEl.dataset.actions = '[]';
+  listEl.innerHTML = `
+    <div class="memory-organize-loading" role="status" aria-live="polite">
+      <span class="memory-organize-spinner" aria-hidden="true"></span>
+      <div>
+        <div class="memory-organize-loading-title">${esc(t('memoryOrganizingTitle'))}</div>
+        <div class="memory-organize-loading-desc">${esc(t('memoryOrganizingDesc'))}</div>
+      </div>
+    </div>
+  `;
+  if (errorsEl) {
+    errorsEl.style.display = 'none';
+    errorsEl.textContent = '';
+  }
+  if (applyBtn) applyBtn.disabled = true;
+  overlay.style.display = 'flex';
+}
+
+function openMemoryOrganizeReview(data) {
+  const overlay = document.getElementById('memory-organize-overlay');
+  const summaryEl = document.getElementById('memory-organize-summary');
+  const listEl = document.getElementById('memory-organize-list');
+  const errorsEl = document.getElementById('memory-organize-errors');
+  if (!overlay || !summaryEl || !listEl) return;
+
+  const actions = data.actions || [];
+  const applyBtn = document.getElementById('btn-memory-organize-apply');
+  if (applyBtn) applyBtn.disabled = false;
+  summaryEl.textContent = t('memoryOrganizeSummary', {
+    count: actions.length,
+    linked: data.linked || 0,
+    model: data.model || '-',
+  });
+  listEl.innerHTML = actions.map(action => {
+    const checked = action.action !== 'keep' ? 'checked' : '';
+    const contentPreview = action.new_content
+      ? `<details class="memory-organize-preview"><summary>${esc(t('previewNewContent'))}</summary><pre>${esc(action.new_content.slice(0, 1200))}${action.new_content.length > 1200 ? '\n...' : ''}</pre></details>`
+      : '';
+    const newFile = action.new_filename ? `<div class="memory-organize-newfile">${esc(t('mergeAs'))}: <code>${esc(action.new_filename)}</code></div>` : '';
+    return `
+      <label class="memory-organize-item" data-action-id="${esc(String(action.id))}">
+        <div class="memory-organize-row">
+          <input type="checkbox" class="memory-organize-check" ${checked}>
+          <span class="memory-organize-badge action-${esc(action.action)}">${esc(memoryOrganizeActionLabel(action.action))}</span>
+          <span class="memory-organize-targets">${esc((action.targets || []).join(' + '))}</span>
+        </div>
+        <div class="memory-organize-reason">${esc(action.reason || t('noDescription'))}</div>
+        ${newFile}
+        ${contentPreview}
+      </label>
+    `;
+  }).join('');
+  listEl.dataset.actions = JSON.stringify(actions);
+  if (errorsEl) {
+    errorsEl.style.display = 'none';
+    errorsEl.textContent = '';
+  }
+  overlay.style.display = 'flex';
+}
+
+function closeMemoryOrganizeReview() {
+  const overlay = document.getElementById('memory-organize-overlay');
+  const applyBtn = document.getElementById('btn-memory-organize-apply');
+  if (overlay) overlay.style.display = 'none';
+  if (applyBtn) applyBtn.disabled = false;
+}
+
+async function applySelectedMemoryOrganizeActions() {
+  const listEl = document.getElementById('memory-organize-list');
+  const errorsEl = document.getElementById('memory-organize-errors');
+  const btn = document.getElementById('btn-memory-organize-apply');
+  if (!listEl) return;
+  const actions = JSON.parse(listEl.dataset.actions || '[]');
+  const selectedIds = Array.from(listEl.querySelectorAll('.memory-organize-item'))
+    .filter(item => item.querySelector('.memory-organize-check')?.checked)
+    .map(item => Number(item.dataset.actionId));
+  const selected = actions.filter(action => selectedIds.includes(Number(action.id)) && action.action !== 'keep');
+  if (!selected.length) {
+    showToast(t('memoryOrganizeNoSelected'), 'info');
+    return;
+  }
+
+  if (btn) btn.disabled = true;
+  try {
+    const resp = await fetch('/api/memory/organize/apply', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ cwd: cwdInput.value.trim() || '', actions: selected }),
+    });
+    const data = await resp.json();
+    if (data.errors && data.errors.length) {
+      if (errorsEl) {
+        errorsEl.style.display = 'block';
+        errorsEl.innerHTML = data.errors.map(err => `<div>${esc(err.action)} ${esc((err.targets || []).join(', '))}: ${esc(err.error)}</div>`).join('');
+      }
+      showToast(t('memoryOrganizeApplyPartial'), 'error');
+    } else {
+      showToast(t('memoryOrganizeApplied', {
+        merged: data.merged || 0,
+        deleted: data.deleted || 0,
+        rewritten: data.rewritten || 0,
+      }), 'success');
+      closeMemoryOrganizeReview();
+    }
+    await indexMemoryFiles();
+    if (typeof initWikiGraph === 'function') initWikiGraph();
+  } catch (e) {
+    console.error('Apply memory organize failed:', e);
+    showToast(t('memoryOrganizeApplyFailed'), 'error');
   } finally {
     if (btn) btn.disabled = false;
   }

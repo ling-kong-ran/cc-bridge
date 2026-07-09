@@ -1086,6 +1086,23 @@
     </div>
   </div>
 
+  <!-- Memory 整理复核模态框 -->
+  <div id="memory-organize-overlay" class="modal-overlay" style="display:none">
+    <div class="modal memory-edit-modal memory-organize-modal">
+      <div class="memory-modal-head">
+        <span id="memory-organize-title" data-i18n="memoryOrganizeReview">Memory organize review</span>
+        <button id="memory-organize-close" class="close-btn" type="button">&times;</button>
+      </div>
+      <div id="memory-organize-summary" class="modal-field-pad memory-organize-summary"></div>
+      <div id="memory-organize-list" class="modal-scroll-body memory-organize-list"></div>
+      <div id="memory-organize-errors" class="modal-field-pad memory-organize-errors" style="display:none"></div>
+      <div class="modal-actions-row">
+        <button id="btn-memory-organize-apply" class="btn-save" type="button"><span data-i18n="applySelected">Apply selected</span></button>
+        <button id="btn-memory-organize-cancel" class="btn-mini" type="button"><span data-i18n="cancel">Cancel</span></button>
+      </div>
+    </div>
+  </div>
+
   <!-- Agent 编辑模态框 -->
   <div id="agent-modal-overlay" class="modal-overlay" style="display:none">
     <div class="modal agent-modal">

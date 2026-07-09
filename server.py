@@ -65,6 +65,7 @@ from backend.routes.gateway_routes import encode_gateway_get_body, handle_gatewa
 from backend.routes.remote_routes import handle_remote_get, handle_remote_post
 from backend.responses import send_response
 from backend.services.sessions_service import list_gui_sessions
+from backend.services.memory_service import apply_memory_organize, preview_memory_organize
 from bootstrap.probe import NPM_PREFIX
 # 飞书模块延迟加载 — 避免 lark_oapi SDK 拖慢 server 启动
 class _LazyFeishu:
@@ -3235,6 +3236,20 @@ async def handle_api_post(path: str, body: bytes, writer: asyncio.StreamWriter):
             if agent in agents:
                 agents.remove(agent)
         resp = json.dumps({"agents": agents}, ensure_ascii=False).encode("utf-8")
+        await send_response(writer, 200, "application/json; charset=utf-8", resp)
+        return
+    elif path == "/api/memory/organize/preview":
+        result = await preview_memory_organize(data.get("cwd", DEFAULT_CWD))
+        resp = json.dumps(result or {}, ensure_ascii=False).encode("utf-8")
+        await send_response(writer, 200, "application/json; charset=utf-8", resp)
+        return
+    elif path == "/api/memory/organize/apply":
+        result = await asyncio.to_thread(
+            apply_memory_organize,
+            data.get("cwd", DEFAULT_CWD),
+            data.get("actions") or [],
+        )
+        resp = json.dumps(result or {}, ensure_ascii=False).encode("utf-8")
         await send_response(writer, 200, "application/json; charset=utf-8", resp)
         return
     elif path.startswith("/api/memory/"):
