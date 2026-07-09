@@ -11,7 +11,6 @@
       setCurrentLanguage: options.setCurrentLanguage || (() => {}),
       setLanguageSelectValue: options.setLanguageSelectValue || (() => {}),
       saveGuiSettings: options.saveGuiSettings || (() => {}),
-      updateThemeToggle: options.updateThemeToggle || (() => {}),
       updateConnectionText: options.updateConnectionText || (() => {}),
       updateUI: options.updateUI || (() => {}),
       setSidebarCollapsed: options.setSidebarCollapsed || (() => {}),
@@ -56,7 +55,6 @@
     const loadedLanguage = await loadLanguageMap(currentLanguage, options);
     ctx.document.title = ctx.t('pageTitle');
     renderLocalizedText(options);
-    ctx.updateThemeToggle();
     ctx.updateConnectionText();
     ctx.updateUI();
     ctx.setSidebarCollapsed(ctx.getSidebarCollapsed());

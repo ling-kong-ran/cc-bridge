@@ -172,7 +172,6 @@ const inputCwdStatus = document.getElementById('input-cwd-status');
 const sessionSearchInput = document.getElementById('session-search');
 const sessionsCountEl = document.getElementById('sessions-count');
 const sessionsNewSessionBtn = document.getElementById('sessions-new-session');
-const btnThemeToggle = document.getElementById('btn-theme-toggle');
 const btnDesktopMinimize = document.getElementById('btn-desktop-minimize');
 const btnDesktopClose = document.getElementById('btn-desktop-close');
 const btnShortcuts = document.getElementById('btn-shortcuts');
@@ -190,7 +189,6 @@ const btnSessionPin = document.getElementById('btn-session-pin');
 const btnSessionCwd = document.getElementById('btn-session-cwd');
 const btnSessionRename = document.getElementById('btn-session-rename');
 const btnSessionDelete = document.getElementById('btn-session-delete');
-const themeToggleText = document.getElementById('theme-toggle-text');
 const languageSelect = document.getElementById('language-select');
 const fontSizeRange = document.getElementById('font-size-range');
 const fontSizeValue = document.getElementById('font-size-value');
@@ -223,7 +221,6 @@ function initDesktopWindowControls() {
 document.addEventListener('DOMContentLoaded', async () => {
   initUnhandledRejectionGuard();
   initDesktopWindowControls();
-  initTheme();
   initShortcutsHelp();
   initInterfaceSettings();
   initNotifications();
@@ -582,10 +579,6 @@ function loadDefaultCwd() {
   return window.CCBridge.settings?.loadDefaultCwd?.();
 }
 
-function initTheme() {
-  window.CCBridge.settings?.initTheme?.();
-}
-
 function getShortcutsOptions() {
   return {
     btnShortcuts,
@@ -875,27 +868,12 @@ async function reloadExternalConfig() {
   return getConfigReloadModule()?.reloadExternalConfig?.(getConfigReloadOptions());
 }
 
-function applyTheme(theme, persist = true) {
-  window.CCBridge.settings?.applyTheme?.(theme, persist);
-}
-
 function loadThemePreference() {
   return window.CCBridge.settings?.loadThemePreference?.();
 }
 
-function saveThemePreference(theme) {
-  return window.CCBridge.settings?.saveThemePreference?.(theme);
-}
-
 function saveGuiSettings(settings) {
   return window.CCBridge.settings?.saveGuiSettings?.(settings);
-}
-
-function updateThemeToggle() {
-  const isLight = document.documentElement.classList.contains('light-theme');
-  if (themeToggleText) themeToggleText.textContent = isLight ? t('switchToDark') : t('switchToLight');
-  btnThemeToggle.setAttribute('aria-label', isLight ? t('switchToDarkTheme') : t('switchToLightTheme'));
-  btnThemeToggle.title = isLight ? t('switchToDarkTheme') : t('switchToLightTheme');
 }
 
 function getLocalizationOptions() {
@@ -909,7 +887,6 @@ function getLocalizationOptions() {
       if (languageSelect) languageSelect.value = language;
     },
     saveGuiSettings,
-    updateThemeToggle,
     updateConnectionText,
     updateUI,
     setSidebarCollapsed,

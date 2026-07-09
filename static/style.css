@@ -867,11 +867,6 @@ body:not(.has-active-session) .runtime-summary-value {
   flex-shrink: 0;
 }
 
-.titlebar-btn .theme-icon-moon { display: none; }
-.titlebar-btn .theme-icon-sun { display: block; }
-html.light-theme .titlebar-btn .theme-icon-moon { display: block; }
-html.light-theme .titlebar-btn .theme-icon-sun { display: none; }
-
 /* ─── Buttons ───────────────────────────────────────────────── */
 .btn,
 .btn-secondary,

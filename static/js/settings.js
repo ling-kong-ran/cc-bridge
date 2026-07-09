@@ -13,14 +13,6 @@
     } catch (e) { /* ignore */ }
   }
 
-  function initTheme() {
-    updateThemeToggle();
-    btnThemeToggle.addEventListener('click', () => {
-      const nextTheme = document.documentElement.classList.contains('light-theme') ? 'dark' : 'light';
-      applyTheme(nextTheme);
-    });
-  }
-
   function initInterfaceSettings() {
     languageSelect?.addEventListener('change', () => {
       applyLanguage(languageSelect.value || 'en').then(() => {
@@ -159,18 +151,6 @@
     }
   }
 
-  function applyTheme(theme, persist = true) {
-    const isLight = theme === 'light';
-    document.documentElement.classList.toggle('light-theme', isLight);
-    const themeValue = isLight ? 'light' : 'dark';
-    document.cookie = `ccb-theme=${encodeURIComponent(themeValue)}; Max-Age=31536000; Path=/; SameSite=Lax`;
-    try {
-      localStorage.setItem('ccb-theme', themeValue);
-    } catch (e) { /* ignore */ }
-    updateThemeToggle();
-    if (persist) saveThemePreference(themeValue);
-  }
-
   async function loadThemePreference() {
     let data;
     try {
@@ -199,13 +179,6 @@
 
     if (languageSelect) languageSelect.value = language;
     if (notifyFeishu) notifyFeishu.checked = data.notify_feishu === true;
-
-    if (data.theme === 'light' || data.theme === 'dark') {
-      applyTheme(data.theme, false);
-    } else {
-      const currentTheme = document.documentElement.classList.contains('light-theme') ? 'light' : 'dark';
-      saveGuiSettings({ theme: currentTheme });
-    }
 
     applyFontSize(size, false);
     try {
@@ -236,10 +209,6 @@
     }
   }
 
-  async function saveThemePreference(theme) {
-    await saveGuiSettings({ theme });
-  }
-
   async function saveGuiSettings(settings) {
     try {
       await root.api.postJson('/api/gui-settings', settings);
@@ -262,7 +231,6 @@
 
   root.settings = {
     loadDefaultCwd,
-    initTheme,
     initInterfaceSettings,
     initNotifications,
     initLanAccessControl,
@@ -273,9 +241,7 @@
     applyMemoryAutoInjectPreference,
     loadContextSettings,
     saveContextSettings,
-    applyTheme,
     loadThemePreference,
-    saveThemePreference,
     saveGuiSettings,
     applyFontSize,
     normalizeFontSize,
