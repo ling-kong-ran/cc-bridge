@@ -61,8 +61,8 @@ jobs:
     needs: prepare
     runs-on: ${{ matrix.os }}
     env:
-      ELECTRON_CACHE: ${{ runner.temp }}/electron-cache
-      ELECTRON_BUILDER_CACHE: ${{ runner.temp }}/electron-builder-cache
+      ELECTRON_CACHE: .cache/electron
+      ELECTRON_BUILDER_CACHE: .cache/electron-builder
     strategy:
       fail-fast: false
       matrix:
