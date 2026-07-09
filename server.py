@@ -1476,7 +1476,7 @@ async def prepare_contextual_message(client_id: str, content: str, cwd: str, ses
                 settings=get_gui_settings(),
                 skip_inject=skip_inject,
             ),
-            timeout=3.0,
+            timeout=15.0,
         )
     except asyncio.TimeoutError:
         final_content = content

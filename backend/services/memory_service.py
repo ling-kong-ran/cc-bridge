@@ -116,7 +116,7 @@ def _normalize_memory_organize_actions(raw_actions: Any, existing_names: set[str
         return []
 
     normalized: list[dict[str, Any]] = []
-    valid_actions = {"keep", "merge", "delete", "rewrite"}
+    valid_actions = {"keep", "merge", "delete", "rewrite", "refine"}
     for item in raw_actions:
         if not isinstance(item, dict):
             continue
@@ -150,6 +150,16 @@ def _normalize_memory_organize_actions(raw_actions: Any, existing_names: set[str
             if len(clean_targets) != 1 or not new_content:
                 continue
             new_filename = ""
+        elif action == "refine":
+            if len(clean_targets) < 1 or not new_content:
+                continue
+            if len(clean_targets) == 1:
+                if not new_filename:
+                    new_filename = clean_targets[0]
+            elif not new_filename:
+                continue
+            if not new_filename.endswith(".md"):
+                new_filename += ".md"
         elif action == "merge":
             if len(clean_targets) < 2 or not new_content:
                 continue
@@ -219,6 +229,7 @@ def apply_memory_organize(cwd: str, actions: list[dict[str, Any]]) -> dict[str, 
     merged = 0
     deleted = 0
     rewritten = 0
+    refined = 0
     errors: list[dict[str, Any]] = []
 
     if not isinstance(actions, list):
@@ -257,6 +268,21 @@ def apply_memory_organize(cwd: str, actions: list[dict[str, Any]]) -> dict[str, 
                     if source != new_filename:
                         delete_memory_file(source, cwd)
                 merged += 1
+            elif action == "refine":
+                if len(targets) < 1:
+                    raise ValueError("refine requires at least one target")
+                content = str(item.get("new_content") or "")
+                if not content.strip():
+                    raise ValueError("refine requires new_content")
+                new_filename = Path(str(item.get("new_filename") or targets[0])).name
+                if not new_filename.endswith(".md"):
+                    new_filename += ".md"
+                if not save_memory_file(new_filename, content, cwd):
+                    raise RuntimeError("save failed")
+                for source in targets:
+                    if source != new_filename:
+                        delete_memory_file(source, cwd)
+                refined += 1
             elif action == "delete":
                 if len(targets) != 1:
                     raise ValueError("delete requires one target")
@@ -271,4 +297,4 @@ def apply_memory_organize(cwd: str, actions: list[dict[str, Any]]) -> dict[str, 
             })
 
     index_memory(cwd, force=True)
-    return {"merged": merged, "deleted": deleted, "rewritten": rewritten, "errors": errors}
+    return {"merged": merged, "deleted": deleted, "rewritten": rewritten, "refined": refined, "errors": errors}

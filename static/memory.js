@@ -380,7 +380,8 @@ function openMemoryOrganizeReview(data) {
     const contentPreview = action.new_content
       ? `<details class="memory-organize-preview"><summary>${esc(t('previewNewContent'))}</summary><pre>${esc(action.new_content.slice(0, 1200))}${action.new_content.length > 1200 ? '\n...' : ''}</pre></details>`
       : '';
-    const newFile = action.new_filename ? `<div class="memory-organize-newfile">${esc(t('mergeAs'))}: <code>${esc(action.new_filename)}</code></div>` : '';
+    const newFileLabel = action.action === 'refine' ? t('refineAs') : t('mergeAs');
+    const newFile = action.new_filename ? `<div class="memory-organize-newfile">${esc(newFileLabel)}: <code>${esc(action.new_filename)}</code></div>` : '';
     return `
       <label class="memory-organize-item" data-action-id="${esc(String(action.id))}">
         <div class="memory-organize-row">
@@ -441,6 +442,7 @@ async function applySelectedMemoryOrganizeActions() {
     } else {
       showToast(t('memoryOrganizeApplied', {
         merged: data.merged || 0,
+        refined: data.refined || 0,
         deleted: data.deleted || 0,
         rewritten: data.rewritten || 0,
       }), 'success');

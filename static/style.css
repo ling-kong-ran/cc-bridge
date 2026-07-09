@@ -323,7 +323,8 @@ body::before {
 }
 
 .memory-organize-badge.action-merge,
-.memory-organize-badge.action-rewrite {
+.memory-organize-badge.action-rewrite,
+.memory-organize-badge.action-refine {
   border-color: rgba(var(--accent-rgb), 0.35);
   color: var(--action-primary);
 }

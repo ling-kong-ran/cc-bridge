@@ -6,6 +6,7 @@ Context Orchestrator - 发送前自动召回 Memory / Wiki 上下文并生成可
 """
 from __future__ import annotations
 
+import asyncio
 import html
 import re
 import time
@@ -19,9 +20,9 @@ import wiki_store
 
 DEFAULT_CONTEXT_SETTINGS: dict[str, Any] = {
     "memoryAutoInject": True,
-    "memoryInjectMaxTokens": 8000,
-    "memoryInjectMaxItems": 6,
-    "memoryInjectDepth": 1,
+    "memoryInjectMaxTokens": 6000,
+    "memoryInjectMaxItems": 4,
+    "memoryInjectDepth": 0,
     "memoryInjectIncludeRaw": False,
     "memoryInjectExplain": True,
 }
@@ -115,7 +116,7 @@ def retrieve_context_trace(
         errors.append(f"wiki: {exc}")
 
     deduped = _dedupe_candidates(candidates)
-    deduped.sort(key=lambda item: item.get("score", 0), reverse=True)
+    deduped = _rank_relevant_candidates(query, deduped)
     trace["candidates"] = len(deduped)
 
     used_tokens = 0
@@ -137,10 +138,10 @@ def retrieve_context_trace(
         target_tokens = min(_item_token_budget(max_tokens, max_items), remaining_tokens)
         item_tokens = _estimate_tokens(original_content)
         if item_tokens > target_tokens:
-            compressed = _summarize_to_tokens(query, original_content, target_tokens)
+            compressed = _summarize_to_tokens(query, original_content, target_tokens, cwd, normalized)
             compressed_tokens = _estimate_tokens(compressed)
             if compressed_tokens > remaining_tokens:
-                compressed = _summarize_to_tokens(query, original_content, remaining_tokens)
+                compressed = _summarize_to_tokens(query, original_content, remaining_tokens, cwd, normalized)
                 compressed_tokens = _estimate_tokens(compressed)
             if compressed_tokens > remaining_tokens:
                 skipped.append(_skip_item(item, "摘要后仍超出 token 预算"))
@@ -301,6 +302,85 @@ def _dedupe_candidates(candidates: list[dict[str, Any]]) -> list[dict[str, Any]]
     return deduped
 
 
+def _rank_relevant_candidates(query: str, candidates: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """按多信号相关性重排自动注入候选，避免只靠 FTS OR 弱命中。"""
+    query_terms = _semantic_terms(query)
+    if len(query_terms) < 2:
+        return []
+
+    ranked: list[dict[str, Any]] = []
+    for item in candidates:
+        title = str(item.get("title") or "")
+        content = str(item.get("content") or "")
+        path = str(item.get("path") or "")
+        item_terms = _semantic_terms(f"{title}\n{content}")
+        title_terms = _semantic_terms(f"{title}\n{path}")
+        overlap = query_terms & item_terms
+        title_overlap = query_terms & title_terms
+        if not overlap:
+            continue
+
+        query_size = max(1, len(query_terms))
+        recall = len(overlap) / query_size
+        precision = len(overlap) / max(1, min(len(item_terms), 80))
+        title_boost = len(title_overlap) * 0.18
+        phrase_boost = _phrase_overlap_score(query, f"{title}\n{content}")
+        type_boost = 0.12 if item.get("source") == "project-memory" else 0.0
+        source_score = float(item.get("score") or 0) * 0.15
+        score = recall * 0.48 + precision * 0.18 + title_boost + phrase_boost + type_boost + source_score
+
+        required_hits = 2 if query_size < 6 else 3
+        min_score = 0.42 if query_size < 6 else 0.36
+        if len(overlap) < required_hits or score < min_score:
+            continue
+
+        adjusted = dict(item)
+        adjusted["score"] = round(score, 3)
+        adjusted["reason"] = (
+            f"{adjusted.get('reason') or '上下文命中'}，相关性 {score:.2f}，"
+            f"关键词覆盖 {len(overlap)}/{query_size}"
+        )
+        ranked.append(adjusted)
+
+    ranked.sort(key=lambda item: item.get("score", 0), reverse=True)
+    return ranked
+
+
+def _phrase_overlap_score(query: str, text: str) -> float:
+    """给连续短语命中加权，减少零散双字误命中。"""
+    query = str(query or "").lower()
+    text = str(text or "").lower()
+    score = 0.0
+    for phrase in re.findall(r"[a-zA-Z0-9_]{4,}|[\u4e00-\u9fff]{3,}", query):
+        if phrase in text:
+            score += 0.22 if len(phrase) >= 6 else 0.14
+    return min(score, 0.5)
+
+
+def _semantic_terms(text: str) -> set[str]:
+    """提取用于自动注入相关性判断的低噪声关键词。"""
+    text = str(text or "").lower()
+    terms: set[str] = set()
+    stopwords = {
+        "the", "and", "for", "with", "from", "this", "that", "have", "will", "just", "into", "your",
+        "现在", "刚刚", "这个", "那个", "一下", "感觉", "似乎", "另外", "注意", "项目", "功能", "问题", "时候",
+        "需要", "可以", "没有", "不是", "比较", "还是", "已经", "进行", "当前", "相关", "内容", "文件",
+    }
+    for word in re.findall(r"[a-zA-Z0-9_]{3,}", text):
+        if word not in stopwords:
+            terms.add(word)
+    cjk_chunks = re.findall(r"[\u4e00-\u9fff]{2,}", text)
+    for chunk in cjk_chunks:
+        if len(chunk) <= 4 and chunk not in stopwords:
+            terms.add(chunk)
+            continue
+        for idx in range(len(chunk) - 1):
+            term = chunk[idx:idx + 2]
+            if term not in stopwords:
+                terms.add(term)
+    return terms
+
+
 def _trace_item(item: dict[str, Any]) -> dict[str, Any]:
     return {
         "id": item.get("id", ""),
@@ -331,11 +411,14 @@ def _item_token_budget(max_tokens: int, max_items: int) -> int:
     return max(800, min(3000, max_tokens // max(1, min(max_items, 4))))
 
 
-def _summarize_to_tokens(query: str, text: str, max_tokens: int) -> str:
-    """面向当前查询做抽取式摘要，保留相关句子，而不是机械截断。"""
+def _summarize_to_tokens(query: str, text: str, max_tokens: int, cwd: str = "", settings: dict[str, Any] | None = None) -> str:
+    """面向当前查询做摘要；优先用 LLM 提炼，失败后退回本地抽取。"""
     text = (text or "").strip()
     if _estimate_tokens(text) <= max_tokens:
         return text
+    refined = _refine_context_with_llm(query, text, max_tokens, cwd, settings)
+    if refined and _estimate_tokens(refined) <= max_tokens:
+        return refined
     if max_tokens < 80:
         return _trim_to_tokens(text, max_tokens)
 
@@ -381,6 +464,33 @@ def _summarize_to_tokens(query: str, text: str, max_tokens: int) -> str:
     summary = "\n".join(sentence for _, sentence in selected).strip()
     result = "[自动摘要：原文较长，已按当前问题保留最相关片段]\n" + summary
     return _trim_to_tokens(result, max_tokens)
+
+
+def _refine_context_with_llm(query: str, text: str, max_tokens: int, cwd: str, settings: dict[str, Any] | None) -> str:
+    """同步包装 LLM 上下文提炼；失败时返回空字符串，由本地摘要兜底。"""
+    if max_tokens < 180 or _estimate_tokens(text) < max_tokens * 1.25:
+        return ""
+    try:
+        import memory_llm
+    except Exception:
+        return ""
+    model = ""
+    if isinstance(settings, dict):
+        model = str(settings.get("memory_assistant_model") or "").strip()
+    if not model:
+        model = "claude-sonnet-4-6"
+    max_chars = max(600, min(6000, max_tokens * 3))
+    try:
+        return asyncio.run(memory_llm.refine_context_via_llm(
+            query=query,
+            content=text,
+            model=model,
+            cwd=cwd,
+            timeout=10.0,
+            max_chars=max_chars,
+        ))
+    except Exception:
+        return ""
 
 
 def _query_terms(query: str) -> list[str]:

@@ -375,22 +375,29 @@
     if (!el) return;
     let html = '';
 
-    for (const block of currentContent) {
-      if (!final && isResponding && block.type === 'text' && block.text) {
+    const blocks = [];
+    currentContent.forEach((block, fallbackIndex) => {
+      blocks.push({ block, index: Number.isFinite(block.streamIndex) ? block.streamIndex : fallbackIndex, streaming: false });
+    });
+    for (const idx of Object.keys(streamBlocks)) {
+      blocks.push({ block: streamBlocks[idx], index: Number(idx), streaming: true });
+    }
+    blocks.sort((a, b) => a.index - b.index);
+
+    for (const item of blocks) {
+      const block = item.block;
+      if (item.streaming) {
+        if (block.type === 'thinking' && block.thinking) {
+          html += renderBlock({ type: 'thinking', thinking: block.thinking }, options);
+        } else if (block.type === 'text' && block.text) {
+          html += `<div class="text-block">${renderStreamingText(block.text, options)}<span class="typing-cursor"></span></div>`;
+        } else if (block.type === 'tool_use') {
+          html += renderToolCard(block, {}, options);
+        }
+      } else if (!final && isResponding && block.type === 'text' && block.text) {
         html += `<div class="text-block">${renderStreamingText(block.text, options)}</div>`;
       } else {
         html += renderBlock(block, options);
-      }
-    }
-
-    for (const idx of Object.keys(streamBlocks).sort((a, b) => a - b)) {
-      const block = streamBlocks[idx];
-      if (block.type === 'thinking' && block.thinking) {
-        html += renderBlock({ type: 'thinking', thinking: block.thinking }, options);
-      } else if (block.type === 'text' && block.text) {
-        html += `<div class="text-block">${renderStreamingText(block.text, options)}<span class="typing-cursor"></span></div>`;
-      } else if (block.type === 'tool_use') {
-        html += renderToolCard(block, {}, options);
       }
     }
 

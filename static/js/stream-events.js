@@ -42,14 +42,14 @@
     return true;
   }
 
-  function finishStreamBlock(block) {
+  function finishStreamBlock(block, index) {
     if (!block) return null;
-    if (block.type === 'thinking') return { type: 'thinking', thinking: block.thinking };
-    if (block.type === 'text') return { type: 'text', text: block.text };
+    if (block.type === 'thinking') return { type: 'thinking', thinking: block.thinking, streamIndex: index };
+    if (block.type === 'text') return { type: 'text', text: block.text, streamIndex: index };
     if (block.type === 'tool_use') {
       let input = block.input;
       try { input = JSON.parse(input); } catch (e) {}
-      return { type: 'tool_use', name: block.name, id: block.id, input };
+      return { type: 'tool_use', name: block.name, id: block.id, input, streamIndex: index };
     }
     return null;
   }
@@ -104,7 +104,7 @@
       }
 
       case 'content_block_stop': {
-        const block = finishStreamBlock(streamBlocks[evt.index]);
+        const block = finishStreamBlock(streamBlocks[evt.index], evt.index);
         if (block) {
           currentContent.push(block);
           if (block.type === 'tool_use') ctx.registerTaskBlocks([block]);
