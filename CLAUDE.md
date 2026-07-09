@@ -27,7 +27,7 @@ powershell -ExecutionPolicy Bypass -File scripts/package-desktop.ps1 -SkipInstal
 powershell -ExecutionPolicy Bypass -File scripts/package-desktop.ps1 -Target pack # unpacked app only
 ```
 
-The script writes output to `release/` and performs Python syntax checks before packaging. By default it uses the version in `package.json`. The script's `-Version` parameter only applies with `-Release`, because release mode bumps `package.json` via `npm version` before packaging.
+The script writes output to `release/` and performs Python syntax checks before packaging. By default it uses the version in `package.json`. In release mode, `-Version` bumps `package.json` via `npm version`, commits `package.json` / `package-lock.json`, pushes the commit, builds the Windows installer, tags the built HEAD as `v<version>`, then uploads the installer assets to the matching GitHub release. If the tag already exists at a different commit, release mode fails instead of moving the tag.
 
 For GitHub all-platform packaging, use the workflow file name and pass the intended release version explicitly:
 
@@ -35,7 +35,7 @@ For GitHub all-platform packaging, use the workflow file name and pass the inten
 gh workflow run release-desktop.yml --ref master -f version=0.1.6
 ```
 
-If `version` is omitted, the workflow uses the current `package.json` version. Check the run and release with:
+If `version` is omitted, the workflow uses the current `package.json` version. If `version` is provided, the workflow bumps `package.json` / `package-lock.json`, commits and pushes that version bump to the workflow ref, builds all desktop artifacts, then tags the built commit as `v<version>` before publishing the GitHub release. Existing tags are only accepted when they already point at that commit. Check the run and release with:
 
 ```bash
 gh run list --workflow release-desktop.yml --branch master --limit 3
