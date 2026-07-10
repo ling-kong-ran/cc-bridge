@@ -8,8 +8,11 @@ import subprocess
 import sys
 from pathlib import Path
 
+from .state import CCB_HOME
+
 REPO_ROOT = Path(__file__).resolve().parents[1]
-NPM_PREFIX = Path.home() / ".ccb" / "npm-global"
+NPM_PREFIX = CCB_HOME / "npm-global"
+VENV_DIR = CCB_HOME / "venv"
 
 
 def npm_bin_dirs() -> list[Path]:
@@ -55,17 +58,16 @@ def detect_python() -> dict:
 
 
 def detect_venv() -> dict:
-    venv_dir = REPO_ROOT / ".venv"
-    python = venv_python_path(venv_dir)
+    python = venv_python_path(VENV_DIR)
     return {
-        "path": str(venv_dir),
+        "path": str(VENV_DIR),
         "python": str(python),
         "exists": python.exists(),
     }
 
 
 def venv_python_path(venv_dir: Path | None = None) -> Path:
-    root = venv_dir or (REPO_ROOT / ".venv")
+    root = venv_dir or VENV_DIR
     if os.name == "nt":
         return root / "Scripts" / "python.exe"
     return root / "bin" / "python"
@@ -141,4 +143,5 @@ def get_environment_status() -> dict:
         "cli": detect_cli(),
         "npm_prefix": str(NPM_PREFIX),
         "npm_bin_dirs": [str(p) for p in npm_bin_dirs()],
+        "ccb_home": str(CCB_HOME),
     }

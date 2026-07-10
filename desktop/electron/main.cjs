@@ -58,6 +58,25 @@ function runtimeRoot() {
   return path.join(APP_ROOT, 'runtime')
 }
 
+function desktopRuntimeHome() {
+  if (process.env.CCB_HOME) return process.env.CCB_HOME
+  if (!app.isPackaged) return path.join(os.homedir(), '.ccb')
+
+  const installDir = path.dirname(app.getPath('exe'))
+  const candidate = path.join(path.dirname(installDir), 'CC Bridge Runtime')
+  try {
+    fs.mkdirSync(candidate, { recursive: true })
+    fs.accessSync(candidate, fs.constants.W_OK)
+    return candidate
+  } catch {
+    return path.join(app.getPath('userData'), 'runtime')
+  }
+}
+
+function bootstrapLogPath() {
+  return path.join(desktopRuntimeHome(), 'bootstrap.log')
+}
+
 function isWindowsAppExecutionAlias(filePath) {
   return String(filePath || '').replace(/\\/g, '/').toLowerCase().includes('/microsoft/windowsapps/')
 }
@@ -315,6 +334,7 @@ function spawnBackend() {
     CCB_DESKTOP: '1',
     CCB_DESKTOP_TOKEN: token,
     CCB_HOST: '127.0.0.1',
+    CCB_HOME: desktopRuntimeHome(),
     CCB_BUNDLED_RUNTIME_ROOT: runtimeRoot(),
     CCB_BUNDLED_MANIFEST: runtimeManifestPath(),
   }
@@ -513,7 +533,7 @@ function showMainWindow() {
 }
 
 function registerIpcHandlers() {
-  ipcMain.handle('desktop:open-logs', () => shell.openPath(path.join(os.homedir(), '.ccb')))
+  ipcMain.handle('desktop:open-logs', () => shell.openPath(desktopRuntimeHome()))
   ipcMain.handle('desktop:minimize-window', () => {
     if (mainWindow && !mainWindow.isDestroyed()) mainWindow.minimize()
   })
@@ -524,7 +544,7 @@ function registerIpcHandlers() {
   ipcMain.handle('desktop:check-update', checkDesktopUpdate)
   ipcMain.handle('desktop:install-update', installDesktopUpdate)
   ipcMain.handle('desktop:notify', showDesktopNotification)
-  ipcMain.handle('desktop:get-bootstrap-log-path', () => path.join(os.homedir(), '.ccb', 'bootstrap.log'))
+  ipcMain.handle('desktop:get-bootstrap-log-path', () => bootstrapLogPath())
 }
 
 const gotLock = app.requestSingleInstanceLock()

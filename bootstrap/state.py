@@ -2,11 +2,12 @@
 from __future__ import annotations
 
 import json
+import os
 import time
 from pathlib import Path
 from typing import Any
 
-CCB_HOME = Path.home() / ".ccb"
+CCB_HOME = Path(os.environ.get("CCB_HOME") or (Path.home() / ".ccb")).expanduser()
 LOG_PATH = CCB_HOME / "bootstrap.log"
 STATE_PATH = CCB_HOME / "bootstrap_state.json"
 

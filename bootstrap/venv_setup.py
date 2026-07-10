@@ -1,6 +1,8 @@
 """项目 Python 环境检测与准备。"""
 from __future__ import annotations
 
+import hashlib
+import json
 import os
 import re
 import shutil
@@ -9,7 +11,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-from .probe import REPO_ROOT, venv_python_path
+from .probe import CCB_HOME, REPO_ROOT, VENV_DIR, venv_python_path
 from .state import log
 
 _MIN_PYTHON = (3, 10)
@@ -129,11 +131,11 @@ def find_server_python(allow_install: bool = True) -> Path:
 
     # 2. 有网：创建 .venv
     if online:
-        log("创建虚拟环境...")
+        log(f"创建虚拟环境：{VENV_DIR}")
         _create_venv()
         venv_python = venv_python_path()
         if venv_python.exists():
-            _install_deps(venv_python)
+            _install_deps(venv_python, force=True)
             return venv_python
 
     # 3. 无网 / .venv 创建失败：扫描机器上的 Python，选版本最高的 ≥ 3.10
@@ -163,10 +165,38 @@ def find_server_python(allow_install: bool = True) -> Path:
     return Path(sys.executable)
 
 
-def _install_deps(python: Path) -> None:
+def _requirements_hash(req_file: Path) -> str:
+    return hashlib.sha256(req_file.read_bytes()).hexdigest()
+
+
+def _deps_state_path() -> Path:
+    return CCB_HOME / "python_deps_state.json"
+
+
+def _read_deps_state() -> dict:
+    try:
+        return json.loads(_deps_state_path().read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return {}
+
+
+def _write_deps_state(req_hash: str) -> None:
+    CCB_HOME.mkdir(parents=True, exist_ok=True)
+    _deps_state_path().write_text(
+        json.dumps({"requirements_hash": req_hash}, ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
+
+
+def _install_deps(python: Path, force: bool = False) -> None:
     """将 requirements.txt 安装到 Python 环境中（失败不阻止启动）。"""
     req_file = REPO_ROOT / "requirements.txt"
     if not req_file.exists():
+        return
+    req_hash = _requirements_hash(req_file)
+    state = _read_deps_state()
+    if not force and state.get("requirements_hash") == req_hash:
+        log("Python 依赖未变化，跳过安装")
         return
     log("安装项目依赖...")
     # 强制 UTF-8：Windows GBK(cp936) locale 下 pip 用 locale 编码读 requirements.txt，
@@ -180,6 +210,7 @@ def _install_deps(python: Path) -> None:
             env=env,
             check=True,
         )
+        _write_deps_state(req_hash)
     except subprocess.CalledProcessError:
         log("依赖安装失败，可能是离线环境，继续启动服务")
 
@@ -197,9 +228,10 @@ def _check_internet(timeout: float = 3.0) -> bool:
 
 
 def _create_venv() -> None:
-    """在项目中创建 .venv 虚拟环境。"""
-    venv_dir = REPO_ROOT / ".venv"
+    """在持久化运行时目录中创建虚拟环境。"""
+    venv_dir = VENV_DIR
     try:
+        venv_dir.parent.mkdir(parents=True, exist_ok=True)
         subprocess.run(
             [sys.executable, "-m", "venv", str(venv_dir)],
             check=True,
