@@ -1843,23 +1843,33 @@ async def handle_sse(query: dict, writer: asyncio.StreamWriter):
             # 跳过后续 existing_session 检查，viewer 没有自己的 session
             existing_session = None
 
-    if existing_session and existing_session.is_running:
+    if existing_session:
         meta = client_meta.get(client_id, {})
-        state = {
-            "model": existing_session.model,
-            "resumed": bool(existing_session.session_id),
-            "session_id": existing_session.session_id or client_session_ids.get(client_id, ""),
-            "remote_target_id": meta.get("remote_target_id", ""),
-            "cli": existing_session.cli or get_current_cli(),
-        }
-        if existing_session.session_id and session_run_ids.get(existing_session.session_id):
-            state["run_id"] = session_run_ids[existing_session.session_id]
-        await _sse_write(writer, "session_started", state)
-        # 如果正在回复中，前端也需进入响应状态
-        gen_state = build_generation_state(existing_session)
-        if gen_state:
-            await _sse_write(writer, "generation_started", gen_state)
-        await push_current_session_lock(client_id, state.get("session_id", ""))
+        sid = existing_session.session_id or client_session_ids.get(client_id, "")
+        if existing_session.is_running:
+            state = {
+                "model": existing_session.model,
+                "resumed": bool(existing_session.session_id),
+                "session_id": sid,
+                "remote_target_id": meta.get("remote_target_id", ""),
+                "cli": existing_session.cli or get_current_cli(),
+            }
+            if existing_session.session_id and session_run_ids.get(existing_session.session_id):
+                state["run_id"] = session_run_ids[existing_session.session_id]
+            await _sse_write(writer, "session_started", state)
+            # 如果正在回复中，前端也需进入响应状态
+            gen_state = build_generation_state(existing_session)
+            if gen_state:
+                await _sse_write(writer, "generation_started", gen_state)
+            await push_current_session_lock(client_id, sid)
+        elif sid:
+            # 重连时会话已结束：推送 locked=false，消除前端可能残留的 isResponding 状态
+            await _sse_write(writer, "session_lock_changed", {
+                "session_id": sid,
+                "locked": False,
+                "holder_id": "",
+                "is_holder": False,
+            })
 
     try:
         while True:

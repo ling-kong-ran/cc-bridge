@@ -10,6 +10,7 @@ from bootstrap.launcher import launch_server
 from bootstrap.node_setup import ensure_node
 from bootstrap.probe import get_environment_status
 from bootstrap.python_setup import ensure_python_version
+from bootstrap.runtime_unpack import maybe_unpack_runtime
 from bootstrap.state import emit_progress, log, write_state
 from bootstrap.venv_setup import find_server_python
 
@@ -57,6 +58,9 @@ def main() -> int:
             emit_progress("status", "done", "环境状态已写入", "仅检查模式完成")
             return 0
 
+        # 离线分发：若安装目录同级有 `CC Bridge Runtime.zip`，先解压成 venv/npm-global，
+        # 这样后续 venv/claude 检测能在离线机器直接命中。放在所有检测之前。
+        _run_step("runtime", "准备运行时", maybe_unpack_runtime)
         python = _run_step("venv", "准备项目 Python 环境", find_server_python)
         _run_step("claude", "检查 Claude Code CLI", lambda: _ensure_claude_runtime(args.yes))
         write_state(get_environment_status())

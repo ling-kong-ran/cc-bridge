@@ -1287,6 +1287,28 @@ function bindSSEEvents(source = eventSource) {
     const data = JSON.parse(e.data);
     clientId = data.client_id;
     setConnectionStatus(true);
+    // SSE 重连后，若之前处于响应中状态（断连前在等 reply），强制刷新当前会话历史
+    // 以同步最终状态。这处理了 tab 长时间后台化后 SSE 断开、会话已完成但 UI 仍卡在
+    // "流式回复中" 的场景——刷新后 history 不含 streaming 标记，UI 自然恢复。
+    (async () => {
+      if (isResponding && currentSessionId) {
+        await reloadSessionHistory(currentSessionId, cwdInput?.value?.trim?.() || '');
+        resetAssistantStreamState();
+        stopTurnTimer();
+        clearRunningTasks?.();
+        clearSubagentBubbles?.();
+        isResponding = false;
+        currentContent = [];
+        streamBlocks = {};
+        currentAssistantEl = null;
+        currentAssistantMessageId = null;
+        currentRunId = null;
+        currentTurnContent = '';
+        currentTurnHasAssistantOutput = false;
+        currentTurnStartedAt = 0;
+        updateUI();
+      }
+    })();
   });
 
   source.addEventListener('session_started', (e) => {

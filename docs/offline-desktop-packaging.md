@@ -63,3 +63,33 @@ node --check desktop/electron-builder.config.cjs
 - `resources/cc-bridge/` 下没有 `runtime/`。
 - 安装包内没有 Python 解释器、Python site-packages、Node 或 Claude CLI。
 - 首次启动时，如果用户环境缺少 Python 或 Claude CLI，应通过启动失败页或 CLI 检测 UI 提示用户自行安装。
+
+## 离线 runtime zip 分发
+
+除了让用户自行准备 Python / Claude CLI，还支持「预配置 runtime 压缩包」离线分发：
+
+### 制作压缩包
+
+1. 在一台有网的机器上首次运行桌面端，bootstrap 会在 `CC Bridge Runtime/` 下生成 `venv/`（用 `--copies` 创建，可跨机器拷贝）和 `npm-global/`（含 claude CLI）。
+2. 把整个 `CC Bridge Runtime/` 目录压缩成 `CC Bridge Runtime.zip`（zip 内可以是顶层 `CC Bridge Runtime/` 目录，也可以直接是 `venv/`、`npm-global/`，两种结构 bootstrap 都能识别）。
+
+### 离线机器使用
+
+1. 安装 CC Bridge。
+2. 把 `CC Bridge Runtime.zip` 放到**安装目录同级**（即与 `CC Bridge Runtime/` 同级，例如 `D:\Programs\CC Bridge Runtime.zip`）。文件名必须正好是 `CC Bridge Runtime.zip`。
+3. 启动桌面端。bootstrap 在准备运行时阶段会：
+   - 检测到该 zip（按文件名触发，不做 hash 校验）；
+   - 解压到 `CC Bridge Runtime/`；
+   - 写入 `.unpacked_from`（zip 的 sha256，仅作「zip 是否变过」的判重），后续启动命中则跳过（幂等）。
+4. 解压后 `venv/`、`npm-global/` 齐备，离线机器无需联网即可复用。
+
+### 降级与容错
+
+- zip 不存在：直接跳过，走原有的在线/离线检测流程。
+- 解压过程异常：仅记日志，不阻断 bootstrap。
+- zip 内容变化（sha256 变了）：会重新解压覆盖。
+
+### 内置 Node 支持
+
+若离线机器没有系统 Node，`npm-global/` 里的 claude 仍无法执行。此时可把 node 运行时随 runtime 一起分发：把 `node/` 目录放进 `CC Bridge Runtime/`（Windows 直接含 `node.exe`；macOS/Linux 含 `bin/node`），压进 `CC Bridge Runtime.zip`。解压后 `bootstrap/probe.py` 的 `bundled_node_dirs()` 会从内置 runtime（`CCB_BUNDLED_RUNTIME_ROOT`，即安装包内 `resources/cc-bridge/runtime/`）而非 CCB_HOME 读取——因此内置 node 需通过打包内置 runtime 提供，或确保离线机器 PATH 中有 node。
+

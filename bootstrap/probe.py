@@ -22,10 +22,29 @@ def npm_bin_dirs() -> list[Path]:
     return [NPM_PREFIX / "bin", NPM_PREFIX / "node_modules" / ".bin"]
 
 
+def bundled_node_dirs() -> list[Path]:
+    """返回内置运行时（CCB_BUNDLED_RUNTIME_ROOT）中 node 可执行文件所在目录。
+
+    离线机器没有系统 Node 时，npm-global 里的 claude.cmd 仍依赖 node 才能运行。
+    把内置 runtime 里的 node 目录加进 PATH，让 claude 在零外部依赖下也能启动。
+    目录不存在则返回空列表，无副作用。
+    """
+    root = os.environ.get("CCB_BUNDLED_RUNTIME_ROOT")
+    if not root:
+        return []
+    base = Path(root) / "node"
+    if os.name == "nt":
+        # node.exe 直接放在 node/ 下
+        return [base] if (base / "node.exe").exists() else []
+    # macOS/Linux：node 二进制在 node/bin/ 下
+    return [base / "bin"] if (base / "bin" / "node").exists() else []
+
+
 def path_with_controlled_npm(env: dict[str, str] | None = None) -> dict[str, str]:
-    """构造将内置运行时与受控 npm bin 放在最前的环境变量。"""
+    """构造将内置 node、受控 npm bin 放在最前的环境变量。"""
     merged = dict(env or os.environ)
-    dirs = npm_bin_dirs()
+    # 顺序：内置 node 在最前（claude.cmd 要靠它执行），其次 npm-global bin
+    dirs = bundled_node_dirs() + npm_bin_dirs()
     prefix = os.pathsep.join(str(p) for p in dirs)
     old_path = merged.get("PATH", "")
     merged["PATH"] = prefix + (os.pathsep + old_path if old_path else "") if prefix else old_path

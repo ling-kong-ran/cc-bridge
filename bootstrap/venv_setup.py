@@ -228,12 +228,17 @@ def _check_internet(timeout: float = 3.0) -> bool:
 
 
 def _create_venv() -> None:
-    """在持久化运行时目录中创建虚拟环境。"""
+    """在持久化运行时目录中创建虚拟环境。
+
+    使用 --copies：把 Python 核心复制进 venv 而非生成指向源 Python 的 redirector。
+    这样生成的 venv 可随 runtime 目录整体拷贝到其他机器（离线分发），不依赖源机器
+    的 Python 仍在原路径。代价是体积略大。
+    """
     venv_dir = VENV_DIR
     try:
         venv_dir.parent.mkdir(parents=True, exist_ok=True)
         subprocess.run(
-            [sys.executable, "-m", "venv", str(venv_dir)],
+            [sys.executable, "-m", "venv", "--copies", str(venv_dir)],
             check=True,
         )
     except subprocess.CalledProcessError:
