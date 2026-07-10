@@ -373,6 +373,52 @@
     ctx.scrollToBottom(true);
   }
 
+  // 将消息插入到 messagesEl 的最顶部（懒加载更早的消息时使用）
+  function prependHistory(history, options = {}) {
+    const messagesEl = options.messagesEl || document.getElementById('messages');
+    if (!messagesEl || !history || history.length === 0) return;
+
+    const prevScrollHeight = messagesEl.scrollHeight;
+
+    // anchor = 当前最顶部节点，所有新节点都插到它前面
+    const anchor = messagesEl.firstChild || null;
+    // 直接用 message-ui.js 原始模块，这样 insertBefore 选项能正确生效
+    const msgUi = window.CCBridge?.messageUi;
+    const prependOpts = { ...options, messagesEl, insertBefore: anchor, scrollToBottom: () => {} };
+
+    for (const msg of history) {
+      if (msg.role === 'user') {
+        msgUi?.addUserMessage?.(msg.text, [], prependOpts);
+        if (msg.context_trace && options.renderContextTrace) {
+          options.renderContextTrace(msg.context_trace);
+        }
+      } else if (msg.role === 'assistant') {
+        const el = msgUi?.createAssistantBubble?.(false, prependOpts) ?? null;
+        const contentEl = el?.querySelector?.('.msg-content');
+        if (!contentEl) continue;
+        let html = '';
+        const blocks = [...(msg.blocks || [])].sort((a, b) => {
+          const aTool = a.type === 'tool_use' ? 0 : 1;
+          const bTool = b.type === 'tool_use' ? 0 : 1;
+          return aTool - bTool;
+        });
+        for (const block of blocks) {
+          if (block.type === 'text') {
+            html += `<div class="text-block">${renderMd(block.text, options)}</div>`;
+          } else if (block.type === 'thinking') {
+            html += renderBlock(block, options);
+          } else if (block.type === 'tool_use') {
+            html += renderHistoryToolCard(block, options);
+          }
+        }
+        contentEl.innerHTML = html;
+      }
+    }
+
+    // 恢复滚动位置，让用户看到插入前的内容位置
+    messagesEl.scrollTop += messagesEl.scrollHeight - prevScrollHeight;
+  }
+
   function renderCurrentState(state = {}, options = {}) {
     const { currentAssistantEl, currentContent = [], streamBlocks = {}, isResponding = false, final = false } = state;
     if (!currentAssistantEl) return;
@@ -431,6 +477,7 @@
     renderBlock,
     renderHistoryToolCard,
     renderHistory,
+    prependHistory,
     renderCurrentState,
   };
 })();

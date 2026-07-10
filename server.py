@@ -4,6 +4,7 @@ HTTP 静态文件 + REST API + SSE (Server-Sent Events) 通信
 使用 SSE 替代 WebSocket 避免 Windows asyncio 兼容性问题
 """
 import asyncio
+import functools
 import json
 import os
 import sys
@@ -49,7 +50,7 @@ from config_manager import (
     get_agent,
     get_agents_for_cli,
 )
-from session_store import list_sessions, save_session, add_session_usage, delete_session, load_session_history, rename_session, update_session_cwd, toggle_pin
+from session_store import list_sessions, save_session, add_session_usage, delete_session, load_session_history, rename_session, update_session_cwd, toggle_pin, invalidate_history_cache
 from memory_index import save_memory_file, index_memory
 import wiki_store
 import context_orchestrator
@@ -2937,8 +2938,10 @@ async def handle_api_get(path: str, writer: asyncio.StreamWriter, query: dict = 
     elif path == "/api/remote-targets":
         _, data = handle_remote_get(path)
     elif path == "/api/sessions":
+        # list_sessions 要扫描所有本地 jsonl（stat + 读头尾），放在线程里跑避免阻塞事件循环
+        sessions = await asyncio.to_thread(list_sessions)
         data = list_gui_sessions(
-            sessions=list_sessions(),
+            sessions=sessions,
             session_owner=session_owner,
             get_owned_session=get_owned_session,
             query=query,
@@ -3109,7 +3112,12 @@ async def handle_api_post(path: str, body: bytes, writer: asyncio.StreamWriter):
     elif path == "/api/sessions/history":
         sid = data.get("session_id", "")
         cwd = data.get("cwd", "")
-        history = load_session_history(sid, cwd)
+        limit = int(data.get("limit", 20))
+        offset = int(data.get("offset", 0))
+        loop = asyncio.get_event_loop()
+        history = await loop.run_in_executor(
+            None, functools.partial(load_session_history, sid, cwd, limit=limit, offset=offset)
+        )
         resp = json.dumps(history, ensure_ascii=False).encode("utf-8")
         await send_response(writer, 200, "application/json; charset=utf-8", resp)
         return

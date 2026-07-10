@@ -37,13 +37,19 @@
   }
 
   async function loadSessionHistory(sessionId, cwd, ctx) {
+    // 优先使用外部提供的懒加载版本（history-loader.js）
+    if (typeof ctx.loadSessionHistory === 'function') {
+      return ctx.loadSessionHistory(sessionId, cwd);
+    }
+    // 降级：直接取全量（旧行为）
     try {
       const resp = await fetch('/api/sessions/history', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ session_id: sessionId, cwd }),
       });
-      const history = await resp.json();
+      const result = await resp.json();
+      const history = result.messages || result;
       if (history && history.length > 0) {
         ctx.renderStaticHistory(history);
       }

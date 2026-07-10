@@ -25,7 +25,12 @@
         <button class="msg-quote-btn" type="button" title="${ctx.esc(ctx.t('quoteMessage'))}" aria-label="${ctx.esc(ctx.t('quoteMessage'))}">${ctx.esc(ctx.t('quoteMessage'))}</button>
       </div>
     `;
-    ctx.messagesEl?.appendChild(el);
+    const insertBefore = options.insertBefore;
+    if (insertBefore && ctx.messagesEl?.contains(insertBefore)) {
+      ctx.messagesEl.insertBefore(el, insertBefore);
+    } else {
+      ctx.messagesEl?.appendChild(el);
+    }
     return el;
   }
 
@@ -56,8 +61,13 @@
         <button class="msg-quote-btn" type="button" title="${ctx.esc(ctx.t('quoteMessage'))}" aria-label="${ctx.esc(ctx.t('quoteMessage'))}">${ctx.esc(ctx.t('quoteMessage'))}</button>
       </div>
     `;
-    ctx.messagesEl?.appendChild(el);
-    ctx.scrollToBottom();
+    const insertBefore = options.insertBefore;
+    if (insertBefore && ctx.messagesEl?.contains(insertBefore)) {
+      ctx.messagesEl.insertBefore(el, insertBefore);
+    } else {
+      ctx.messagesEl?.appendChild(el);
+      ctx.scrollToBottom();
+    }
     return el;
   }
 

@@ -6,9 +6,15 @@ import html
 import json
 import os
 import re
+from collections import OrderedDict
 from datetime import datetime
 from pathlib import Path
 from typing import Optional
+
+# --- 历史消息缓存 ---
+# key: (str(path), mtime, size) → value: list[dict] (全量消息列表)
+_HISTORY_CACHE_MAX = 30
+_history_cache: "OrderedDict[tuple, list]" = OrderedDict()
 
 STORE_PATH = Path.home() / ".claude" / "gui_sessions.json"
 PROJECTS_DIR = Path.home() / ".claude" / "projects"
@@ -68,6 +74,12 @@ def list_sessions() -> list[dict]:
     """返回本机所有历史会话，按底层 jsonl 修改时间倒序。"""
     indexed_sessions = _load()
     hidden = _load_hidden()
+
+    # 先扫描本地 jsonl 一次（只读头尾），结果复用：既用于合并，也用于刷新已索引会话的标题，
+    # 避免对每个已索引会话再单独读一次文件。
+    discovered_list = discover_local_sessions()
+    discovered_by_id = {d.get("session_id"): d for d in discovered_list if d.get("session_id")}
+
     changed = False
     for s in indexed_sessions:
         if "total_cost_usd" not in s:
@@ -76,10 +88,11 @@ def list_sessions() -> list[dict]:
         if "total_tokens" not in s:
             s["total_tokens"] = empty_tokens()
             changed = True
-        last_user_msg = get_last_user_message(s.get("session_id", ""), s.get("cwd", ""))
-        if not s.get("manual_title") and last_user_msg and s.get("title") != last_user_msg[:50]:
-            s["title"] = last_user_msg[:50]
-            changed = True
+        if not s.get("manual_title"):
+            fresh_title = (discovered_by_id.get(s.get("session_id", "")) or {}).get("title", "")
+            if fresh_title and s.get("title") != fresh_title:
+                s["title"] = fresh_title
+                changed = True
     if changed:
         _save(indexed_sessions)
 
@@ -89,7 +102,7 @@ def list_sessions() -> list[dict]:
         if s.get("session_id") and s.get("session_id") not in hidden
     }
 
-    for discovered in discover_local_sessions():
+    for discovered in discovered_list:
         sid = discovered.get("session_id")
         if not sid or sid in hidden:
             continue
@@ -144,50 +157,68 @@ def discover_local_sessions() -> list[dict]:
     return sessions
 
 
-def parse_session_jsonl(jsonl_path: Path) -> dict | None:
-    session_id = jsonl_path.stem
-    cwd = ""
-    model = ""
-    title = ""
-    last_prompt = ""
-    first_ts = ""
-    last_ts = ""
+_PARSE_CACHE: dict[str, tuple[float, int, "dict | None"]] = {}
 
+
+def parse_session_jsonl(jsonl_path: Path) -> dict | None:
+    """从 jsonl 提取会话元数据（标题/cwd/model/时间），只读头尾各一小段，不读整文件。
+
+    结果按 (path, mtime, size) 缓存：会话列表频繁刷新时命中缓存，不再读文件。
+    """
     try:
         stat = jsonl_path.stat()
         mtime = stat.st_mtime
-        updated_at = datetime.fromtimestamp(mtime).isoformat(timespec="seconds")
-        with jsonl_path.open("r", encoding="utf-8") as f:
-            for line in f:
-                line = line.strip()
-                if not line:
-                    continue
-                try:
-                    obj = json.loads(line)
-                except json.JSONDecodeError:
-                    continue
+        size = stat.st_size
+    except OSError:
+        return None
 
-                session_id = obj.get("sessionId") or obj.get("session_id") or session_id
-                if obj.get("cwd") and not cwd:
-                    cwd = obj.get("cwd", "")
-                timestamp = obj.get("timestamp")
-                if timestamp:
-                    if not first_ts:
-                        first_ts = timestamp
-                    last_ts = timestamp
+    cache_key = str(jsonl_path)
+    cached = _PARSE_CACHE.get(cache_key)
+    if cached and cached[0] == mtime and cached[1] == size:
+        return cached[2]
+
+    session_id = jsonl_path.stem
+    updated_at = datetime.fromtimestamp(mtime).isoformat(timespec="seconds")
+
+    cap = 1 << 20  # 1MB：小文件一次读完，大文件只读头尾各 1MB
+    if size <= cap:
+        cwd = model = first_ts = ""
+        last_text = last_prompt = ""
+        try:
+            with jsonl_path.open("rb") as f:
+                data = f.read()
+        except OSError:
+            return None
+        for raw in data.split(b"\n"):
+            raw = raw.strip()
+            if not raw:
+                continue
+            try:
+                obj = json.loads(raw)
+            except (json.JSONDecodeError, ValueError):
+                continue
+            if not cwd and obj.get("cwd"):
+                cwd = obj.get("cwd", "")
+            if not first_ts and obj.get("timestamp"):
+                first_ts = obj.get("timestamp", "")
+            if not model:
                 msg = obj.get("message", {})
                 if isinstance(msg, dict) and msg.get("model"):
                     model = msg.get("model", "")
-                if obj.get("type") == "user":
-                    text = _extract_user_text(obj)
-                    if text:
-                        title = text[:50]
-                elif obj.get("type") == "last-prompt":
-                    prompt = _clean_user_text(obj.get("lastPrompt", ""))
-                    if prompt:
-                        last_prompt = prompt[:50]
-    except OSError:
-        return None
+            mtype = obj.get("type", "")
+            if mtype == "user":
+                text = _extract_user_text(obj)
+                if text:
+                    last_text = text
+            elif mtype == "last-prompt":
+                prompt = _clean_user_text(obj.get("lastPrompt", ""))
+                if prompt:
+                    last_prompt = prompt
+    else:
+        cwd, model, first_ts = _read_head_meta(jsonl_path, cap)
+        last_text, last_prompt = _scan_tail_meta(jsonl_path, cap)
+
+    title = (last_prompt or last_text)[:50]
 
     # 探测类启动（如读取 slash 命令的 /help 短命会话）只会留下没有真实用户
     # 消息、也没有 last-prompt 的空 jsonl。跳过它们，避免列表里冒出空"新会话"。
@@ -195,11 +226,12 @@ def parse_session_jsonl(jsonl_path: Path) -> dict | None:
         not last_prompt
         and (not title or title == "Unknown skill: help")
     ):
+        _PARSE_CACHE[cache_key] = (mtime, size, None)
         return None
 
-    return {
+    entry = {
         "session_id": session_id,
-        "title": last_prompt or title or "新会话",
+        "title": title or "新会话",
         "model": model,
         "cwd": cwd,
         "total_cost_usd": 0,
@@ -209,6 +241,8 @@ def parse_session_jsonl(jsonl_path: Path) -> dict | None:
         "mtime": mtime,
         "source": "local",
     }
+    _PARSE_CACHE[cache_key] = (mtime, size, entry)
+    return entry
 
 
 def save_session(session_id: str, title: str, model: str, cwd: str,
@@ -675,7 +709,7 @@ def _extract_tool_results(obj: dict) -> dict[str, dict]:
 
 
 def get_last_user_message(session_id: str, cwd: str) -> str:
-    """读取会话文件中的最后一条用户消息。"""
+    """读取会话文件中的最后一条用户消息（只读文件尾部，不读整文件）。"""
     if not session_id:
         return ""
 
@@ -683,106 +717,363 @@ def get_last_user_message(session_id: str, cwd: str) -> str:
     if not jsonl_path:
         return ""
 
-    last_text = ""
-    last_prompt = ""
-    try:
-        with jsonl_path.open("r", encoding="utf-8") as f:
-            for line in f:
-                line = line.strip()
-                if not line:
-                    continue
-                try:
-                    obj = json.loads(line)
-                except json.JSONDecodeError:
-                    continue
-                if obj.get("type", "") == "user":
-                    text = _extract_user_text(obj)
-                    if text:
-                        last_text = text
-                elif obj.get("type") == "last-prompt":
-                    prompt = _clean_user_text(obj.get("lastPrompt", ""))
-                    if prompt:
-                        last_prompt = prompt
-    except OSError:
-        return ""
-
+    last_text, last_prompt = _scan_tail_meta(jsonl_path)
     return last_prompt or last_text
 
 
-def load_session_history(session_id: str, cwd: str, max_messages: int = 50) -> list[dict]:
-    """从 ccb 的 .jsonl 文件中加载历史消息"""
-    jsonl_path = _find_jsonl_path(session_id, cwd)
+def _iter_lines_reversed(path):
+    """从文件末尾向前逐行 yield (line_start_byte_offset, raw_bytes)。
 
-    if not jsonl_path:
-        return []
+    只读末尾需要的行，避免对超长会话整文件解析。跳过空行。
+    """
+    chunk_size = 1 << 16  # 64KB
+    with path.open("rb") as f:
+        f.seek(0, os.SEEK_END)
+        pos = f.tell()
+        leftover = b""
+        while pos > 0:
+            read_size = min(chunk_size, pos)
+            new_pos = pos - read_size
+            f.seek(new_pos)
+            chunk = f.read(read_size)
+            data = chunk + leftover  # 老字节 + 上轮未处理的半行
+            parts = data.split(b"\n")
+            leftover = parts[0]  # 最老半行，留到下一轮拼接
+            running = new_pos + len(parts[0])
+            collected = []
+            for i in range(1, len(parts)):
+                running += 1  # 跨过上一个 \n
+                line = parts[i]
+                if line:
+                    collected.append((running, line))
+                running += len(line)
+            for item in reversed(collected):
+                yield item
+            pos = new_pos
+        if leftover:
+            yield (0, leftover)
 
-    messages = []
-    current_assistant_msg: dict | None = None
-    tool_blocks_by_id: dict[str, dict] = {}
-    pending_results: dict[str, dict] = {}
+
+def _scan_tail_meta(path, max_bytes: int = 1 << 20):
+    """反向扫描文件尾部，返回 (last_user_text, last_prompt)。
+
+    只读末尾 max_bytes 字节，用于会话列表展示的标题，不读整文件。
+    """
+    last_text = ""
+    last_prompt = ""
+    found_text = False
+    found_prompt = False
+    consumed = 0
     try:
-        with jsonl_path.open("r", encoding="utf-8") as f:
-            for line in f:
-                line = line.strip()
-                if not line:
-                    continue
-                try:
-                    obj = json.loads(line)
-                except json.JSONDecodeError:
-                    continue
-
-                msg_type = obj.get("type", "")
-
-                if msg_type == "user":
-                    results = _extract_tool_results(obj)
-                    for tool_id, result in results.items():
-                        block = tool_blocks_by_id.get(tool_id)
-                        if block is not None:
-                            block["result"] = result
-                        else:
-                            pending_results[tool_id] = result
+        for _pos, raw in _iter_lines_reversed(path):
+            consumed += len(raw) + 1
+            if consumed > max_bytes:
+                break
+            try:
+                obj = json.loads(raw)
+            except (json.JSONDecodeError, ValueError):
+                continue
+            mtype = obj.get("type", "")
+            if mtype == "user":
+                if not found_text:
                     text = _extract_user_text(obj)
                     if text:
-                        current_assistant_msg = None
-                        message = {"role": "user", "text": text}
-                        raw_text = _extract_raw_user_text(obj)
-                        _, context_trace = _split_injected_context(raw_text)
-                        if context_trace:
-                            message["context_trace"] = context_trace
-                        messages.append(message)
+                        last_text = text
+                        found_text = True
+            elif mtype == "last-prompt":
+                if not found_prompt:
+                    prompt = _clean_user_text(obj.get("lastPrompt", ""))
+                    if prompt:
+                        last_prompt = prompt
+                        found_prompt = True
+            if found_text and found_prompt:
+                break
+    except OSError:
+        pass
+    return last_text, last_prompt
 
-                elif msg_type == "assistant":
-                    if obj.get("parent_tool_use_id"):
-                        continue
-                    content = obj.get("message", {}).get("content", [])
-                    blocks = current_assistant_msg["blocks"] if current_assistant_msg else []
-                    if current_assistant_msg is None:
-                        current_assistant_msg = {"role": "assistant", "blocks": blocks}
-                    before_count = len(blocks)
-                    if isinstance(content, list):
-                        for block in content:
-                            if block.get("type") == "text" and block.get("text"):
-                                blocks.append({"type": "text", "text": block["text"]})
-                            elif block.get("type") == "thinking" and block.get("thinking"):
-                                blocks.append({"type": "thinking", "thinking": block["thinking"]})
-                            elif block.get("type") == "tool_use":
-                                tool_id = block.get("id", "")
-                                item = {
-                                    "type": "tool_use",
-                                    "id": tool_id,
-                                    "name": block.get("name", ""),
-                                    "input": block.get("input", {}),
-                                }
-                                if tool_id:
-                                    tool_blocks_by_id[tool_id] = item
-                                    if tool_id in pending_results:
-                                        item["result"] = pending_results.pop(tool_id)
-                                blocks.append(item)
-                    if len(blocks) > before_count and current_assistant_msg not in messages:
-                        messages.append(current_assistant_msg)
 
+def _read_head_meta(path, max_bytes: int = 1 << 20):
+    """正向读取文件头部，返回 {cwd, model, first_ts}，只读头部 max_bytes 字节。"""
+    cwd = ""
+    model = ""
+    first_ts = ""
+    try:
+        with path.open("rb") as f:
+            data = f.read(max_bytes)
+    except OSError:
+        return cwd, model, first_ts
+    # 丢弃末尾可能被截断的不完整行
+    parts = data.split(b"\n")
+    if not data.endswith(b"\n"):
+        parts = parts[:-1]
+    for raw in parts:
+        raw = raw.strip()
+        if not raw:
+            continue
+        try:
+            obj = json.loads(raw)
+        except (json.JSONDecodeError, ValueError):
+            continue
+        if not cwd and obj.get("cwd"):
+            cwd = obj.get("cwd", "")
+        if not first_ts and obj.get("timestamp"):
+            first_ts = obj.get("timestamp", "")
+        if not model:
+            msg = obj.get("message", {})
+            if isinstance(msg, dict) and msg.get("model"):
+                model = msg.get("model", "")
+        if cwd and model and first_ts:
+            break
+    return cwd, model, first_ts
+
+
+def _aggregate_messages(f_bin):
+    """正向聚合二进制文件句柄中的消息（从当前指针读到 EOF）。"""
+    messages = []
+    current_assistant_msg: dict | None = None
+    current_turn_appended = False  # 当前 turn 是否已 append（避免用值相等比较误判重复 turn）
+    tool_blocks_by_id: dict[str, dict] = {}
+    pending_results: dict[str, dict] = {}
+    for raw_line in f_bin:
+        line = raw_line.decode("utf-8", "replace").strip()
+        if not line:
+            continue
+        try:
+            obj = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        msg_type = obj.get("type", "")
+        if msg_type == "user":
+            results = _extract_tool_results(obj)
+            for tool_id, result in results.items():
+                block = tool_blocks_by_id.get(tool_id)
+                if block is not None:
+                    block["result"] = result
+                else:
+                    pending_results[tool_id] = result
+            text = _extract_user_text(obj)
+            if text:
+                current_assistant_msg = None
+                current_turn_appended = False
+                message = {"role": "user", "text": text}
+                raw_text = _extract_raw_user_text(obj)
+                _, context_trace = _split_injected_context(raw_text)
+                if context_trace:
+                    message["context_trace"] = context_trace
+                messages.append(message)
+        elif msg_type == "assistant":
+            if obj.get("parent_tool_use_id"):
+                continue
+            content = obj.get("message", {}).get("content", [])
+            blocks = current_assistant_msg["blocks"] if current_assistant_msg else []
+            if current_assistant_msg is None:
+                current_assistant_msg = {"role": "assistant", "blocks": blocks}
+                current_turn_appended = False
+            before_count = len(blocks)
+            if isinstance(content, list):
+                for block in content:
+                    if block.get("type") == "text" and block.get("text"):
+                        blocks.append({"type": "text", "text": block["text"]})
+                    elif block.get("type") == "thinking" and block.get("thinking"):
+                        blocks.append({"type": "thinking", "thinking": block["thinking"]})
+                    elif block.get("type") == "tool_use":
+                        tool_id = block.get("id", "")
+                        item = {
+                            "type": "tool_use",
+                            "id": tool_id,
+                            "name": block.get("name", ""),
+                            "input": block.get("input", {}),
+                        }
+                        if tool_id:
+                            tool_blocks_by_id[tool_id] = item
+                            if tool_id in pending_results:
+                                item["result"] = pending_results.pop(tool_id)
+                        blocks.append(item)
+            if len(blocks) > before_count and not current_turn_appended:
+                messages.append(current_assistant_msg)
+                current_turn_appended = True
+    return messages
+
+
+def _aggregate_tail_messages(path, need: int):
+    """反向聚合文件末尾的消息，最多 need+1 条。
+
+    用与 _aggregate_messages 一致的聚合状态机，但从文件末尾反向遍历，
+    只读末尾所需的行，超长会话也能快速返回末尾若干条。
+
+    返回 (messages_forward, has_more)：
+    - messages_forward: 正向顺序的末尾消息（最多 need+1 条）
+    - has_more: 是否还存在更早的消息（实际消息数 > need）
+    """
+    msgs_rev: list = []  # 从末尾往前收集
+    pending_turn_blocks: list = []  # 当前 assistant turn 的 blocks（正向更晚方向），保持正向顺序
+    pending_results: dict[str, dict] = {}  # tool_id -> result，等更早的 tool_use 配对
+    stopped = False
+    try:
+        for _pos, raw in _iter_lines_reversed(path):
+            try:
+                obj = json.loads(raw)
+            except (json.JSONDecodeError, ValueError):
+                continue
+            mtype = obj.get("type", "")
+            if mtype == "assistant":
+                if obj.get("parent_tool_use_id"):
+                    continue
+                content = obj.get("message", {}).get("content", [])
+                if isinstance(content, list):
+                    new_blocks: list = []
+                    for block in content:
+                        btype = block.get("type")
+                        if btype == "text" and block.get("text"):
+                            new_blocks.append({"type": "text", "text": block["text"]})
+                        elif btype == "thinking" and block.get("thinking"):
+                            new_blocks.append({"type": "thinking", "thinking": block["thinking"]})
+                        elif btype == "tool_use":
+                            tool_id = block.get("id", "")
+                            item = {
+                                "type": "tool_use",
+                                "id": tool_id,
+                                "name": block.get("name", ""),
+                                "input": block.get("input", {}),
+                            }
+                            if tool_id and tool_id in pending_results:
+                                item["result"] = pending_results.pop(tool_id)
+                            new_blocks.append(item)
+                    if new_blocks:
+                        # 反向遇到，prepend 以保持 turn 内 block 的正向顺序
+                        pending_turn_blocks = new_blocks + pending_turn_blocks
+                continue
+            if mtype == "user":
+                results = _extract_tool_results(obj)
+                for tool_id, result in results.items():
+                    pending_results[tool_id] = result
+                text = _extract_user_text(obj)
+                if text:
+                    # user(text) 关闭当前 turn：先输出 turn（正向更晚），再输出 user 自身
+                    if pending_turn_blocks:
+                        msgs_rev.append({"role": "assistant", "blocks": pending_turn_blocks})
+                        pending_turn_blocks = []
+                    message = {"role": "user", "text": text}
+                    raw_text = _extract_raw_user_text(obj)
+                    _, context_trace = _split_injected_context(raw_text)
+                    if context_trace:
+                        message["context_trace"] = context_trace
+                    msgs_rev.append(message)
+                    if len(msgs_rev) > need:
+                        stopped = True
+                        break
+                # 无 text 的 user（纯 tool_result）：已关联 result，不产生消息、不关闭 turn
+    except OSError:
+        pass
+    if not stopped and pending_turn_blocks:
+        msgs_rev.append({"role": "assistant", "blocks": pending_turn_blocks})
+
+    has_more = len(msgs_rev) > need
+    msgs_forward = list(reversed(msgs_rev))
+    return msgs_forward, has_more
+
+
+def _load_history_fallback(path, limit: int, offset: int):
+    """兜底：正向全量聚合后切片（与旧版逻辑一致，反向扫描异常时不返回错误数据）。"""
+    try:
+        with path.open("rb") as f:
+            messages = _aggregate_messages(f)
+    except OSError:
+        return {"messages": [], "total": 0, "has_more": False}
+    total = len(messages)
+    if offset > 0:
+        end = total - offset
+        if end <= 0:
+            return {"messages": [], "total": total, "has_more": False}
+        page = messages[max(0, end - limit):end]
+    else:
+        page = messages[max(0, total - limit):]
+    has_more = (total - offset - len(page)) > 0
+    return {"messages": page, "total": total, "has_more": has_more}
+
+
+def _load_all_messages_cached(jsonl_path: Path) -> list:
+    """全量解析并缓存会话消息列表。mtime/size 不变时直接返回缓存。"""
+    try:
+        st = jsonl_path.stat()
+        key = (str(jsonl_path), st.st_mtime, st.st_size)
     except OSError:
         return []
+    if key in _history_cache:
+        _history_cache.move_to_end(key)
+        return _history_cache[key]
+    try:
+        with jsonl_path.open("rb") as f:
+            messages = _aggregate_messages(f)
+    except OSError:
+        return []
+    _history_cache[key] = messages
+    if len(_history_cache) > _HISTORY_CACHE_MAX:
+        _history_cache.popitem(last=False)
+    return messages
 
-    # 只返回最后 max_messages 条
-    return messages[-max_messages:]
+
+def invalidate_history_cache(session_id: str, cwd: str = "") -> None:
+    """会话写入新消息后主动失效缓存（路径匹配即删除）。"""
+    jsonl_path = _find_jsonl_path(session_id, cwd)
+    if not jsonl_path:
+        return
+    path_str = str(jsonl_path)
+    for key in list(_history_cache.keys()):
+        if key[0] == path_str:
+            del _history_cache[key]
+            break
+
+
+def load_session_history(
+    session_id: str,
+    cwd: str,
+    limit: int = 20,
+    offset: int = 0,
+) -> dict:
+    """从 ccb 的 .jsonl 文件中加载历史消息，返回 {messages, total, has_more}
+
+    反向从文件末尾聚合，只读末尾所需行，超长会话也能秒级返回。
+    offset: 从末尾倒数跳过的条数（0 表示从最末尾开始取 limit 条）
+    limit:  本次返回的最大条数
+    """
+    jsonl_path = _find_jsonl_path(session_id, cwd)
+    if not jsonl_path:
+        return {"messages": [], "total": 0, "has_more": False}
+
+    # 全量缓存命中：直接切片，无 IO
+    try:
+        st = jsonl_path.stat()
+        cache_key = (str(jsonl_path), st.st_mtime, st.st_size)
+    except OSError:
+        return {"messages": [], "total": 0, "has_more": False}
+
+    if cache_key in _history_cache:
+        _history_cache.move_to_end(cache_key)
+        messages = _history_cache[cache_key]
+        total = len(messages)
+        if offset > 0:
+            end = total - offset
+            if end <= 0:
+                return {"messages": [], "total": total, "has_more": False}
+            page = messages[max(0, end - limit):end]
+        else:
+            page = messages[max(0, total - limit):]
+        has_more = (total - offset - len(page)) > 0
+        return {"messages": page, "total": total, "has_more": has_more}
+
+    # 反向聚合末尾 offset+limit+1 条（正向旧→新），跳过最新 offset 条取前面 limit 条
+    need = offset + limit
+    try:
+        msgs_forward, has_more = _aggregate_tail_messages(jsonl_path, need)
+    except Exception:
+        return _load_history_fallback(jsonl_path, limit, offset)
+
+    n = len(msgs_forward)
+    end = n - offset  # 跳过最新 offset 条后的边界
+    if end <= 0:
+        return {"messages": [], "total": n if not has_more else (need + 1), "has_more": False}
+    page = msgs_forward[max(0, end - limit):end]
+    total = n if not has_more else (need + 1)
+    return {"messages": page, "total": total, "has_more": has_more}

@@ -2749,6 +2749,7 @@ function getSessionResumeOptions() {
     hasModelOption,
     updateRemoteMutateRow,
     renderStaticHistory,
+    loadSessionHistory,
     sendAction,
     isCwdError,
     promptCwdForSession,
@@ -2823,6 +2824,7 @@ function getHistoryLoaderOptions() {
     },
     resetAssistantStreamState,
     renderHistory,
+    prependHistory,
     toolResults,
     toolStartTimes,
     captureActiveWorkspaceSnapshot,
@@ -2850,6 +2852,10 @@ async function reloadSessionHistory(sessionId, cwd) {
 
 function renderHistory(history) {
   return window.CCBridge.chatRenderer?.renderHistory?.(history, getChatRendererOptions());
+}
+
+function prependHistory(history) {
+  return window.CCBridge.chatRenderer?.prependHistory?.(history, { ...getChatRendererOptions(), messagesEl });
 }
 
 function renderHistoryToolCard(block) {
