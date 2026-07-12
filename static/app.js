@@ -399,6 +399,8 @@ function activateWorkspaceSession(sessionId, opts = {}) {
   activeWorkspaceSessionId = sessionId;
   // 恢复新标签页的流式状态
   _restoreStreamState(sessionId);
+  // 确保 currentSessionId 同步指向新页签，避免竞态窗口内 SSE 事件归属误判
+  currentSessionId = sessionId;
   releaseInactiveWorkspaceSession(previousSessionId);
   const session = workspaceSessions.get(sessionId);
   if (session) {
@@ -1258,6 +1260,7 @@ function getSseLifecycleOptions() {
     remoteTargetSelect,
     getCurrentRunId: () => currentRunId,
     getCurrentSessionId: () => currentSessionId,
+    getActiveWorkspaceSessionId: () => activeWorkspaceSessionId,
     getSessionActive: () => sessionActive,
     getIsViewer: () => isViewer,
     setCurrentRunId: (value) => { currentRunId = value; },
@@ -1412,7 +1415,20 @@ function bindSSEEvents(source = eventSource) {
 
   source.addEventListener('session_id_captured', (e) => {
     const data = JSON.parse(e.data);
-    if (data.session_id && currentSessionId && data.session_id !== currentSessionId && data.run_id !== currentRunId) {
+    // 判定是否属于当前活跃页签：active 为空 / pending- 前缀 / 已等于该 session
+    const isActiveSession = !activeWorkspaceSessionId
+      || activeWorkspaceSessionId.startsWith('pending-')
+      || activeWorkspaceSessionId === data.session_id
+      || (currentSessionId && currentSessionId === data.session_id);
+    if (!isActiveSession) {
+      // 后台会话的 session_id_captured：仅同步元数据，不抢 currentSessionId / active
+      ensureWorkspaceSession(data.session_id, {
+        cwd: cwdInput.value.trim() || '',
+        model: modelSelect.value || '',
+        cli: document.getElementById('cli-select')?.value || '',
+        status: 'running',
+        runId: data.run_id || '',
+      });
       scheduleCompletionHistorySync(data.session_id);
       return;
     }

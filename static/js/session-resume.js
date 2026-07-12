@@ -82,6 +82,13 @@
       return;
     }
 
+    // 检查本次 resume 是否仍然属于当前活跃页签。
+    // 用户在 resume 过程中切换页签后，旧 resume 的异步回调不应再写入状态或 DOM。
+    const isStillActive = () => {
+      const current = ctx.getState?.() || {};
+      return current.currentSessionId === sessionId;
+    };
+
     ctx.clearQuotedMessagesForSend();
     if (ctx.messagesEl) ctx.messagesEl.innerHTML = '';
     ctx.setState({
@@ -120,14 +127,18 @@
 
     ctx.addSystemMsg(ctx.t('restoring'));
     await loadSessionHistory(sessionId, cwd, ctx);
+    // 历史加载期间用户可能已切换到其他页签，后续操作不应再写入当前 DOM/状态
+    if (!isStillActive()) return;
 
     let resumeCwd = cwd || ctx.cwdInput?.value?.trim() || null;
     const notifyPlatforms = ctx.notifyFeishu?.checked ? ['feishu'] : [];
     let result = await ctx.sendAction('resume_session', buildResumePayload(ctx, sessionId, model, cli, resumeCwd, remoteTargetId, notifyPlatforms));
+    if (!isStillActive()) return;
 
     if (result && !result.ok && ctx.isCwdError(result.error || '')) {
       ctx.addSystemMsg(ctx.t('cwdNotExist', { path: resumeCwd || '(空)' }), true);
       const newCwd = await ctx.promptCwdForSession(resumeCwd);
+      if (!isStillActive()) return;
       if (newCwd) {
         const updateResult = await ctx.updateSessionCwd(sessionId, newCwd);
         if (updateResult.ok) {
@@ -136,6 +147,7 @@
           ctx.updateRuntimeSummary();
           resumeCwd = newCwd;
           result = await ctx.sendAction('resume_session', buildResumePayload(ctx, sessionId, model, cli, resumeCwd, remoteTargetId, notifyPlatforms));
+          if (!isStillActive()) return;
         } else {
           ctx.addSystemMsg(ctx.t('cwdNotChanged', { message: formatMessage(updateResult) }), true);
         }

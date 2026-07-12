@@ -93,20 +93,31 @@
   }
 
   function handleSessionStarted(data = {}, options = {}) {
-    if (data.session_id) options.setCurrentSessionId?.(data.session_id);
-    options.setCurrentRunId?.(data.run_id || null);
+    // 仅当事件属于当前活跃页签时才更新 currentSessionId，
+    // 否则后台会话的 session_started 会把 currentSessionId 抢走，
+    // 导致后续事件被渲染进错误的页签。
+    const activeId = options.getActiveWorkspaceSessionId?.() || '';
+    const isPending = activeId.startsWith('pending-');
+    const isActiveSession = !activeId || isPending || activeId === data.session_id
+      || (options.getCurrentSessionId?.() && options.getCurrentSessionId() === data.session_id);
+    if (data.session_id && isActiveSession) {
+      options.setCurrentSessionId?.(data.session_id);
+    }
+    if (isActiveSession) {
+      options.setCurrentRunId?.(data.run_id || null);
+    }
     const wasActive = options.getSessionActive?.();
     options.setSessionActive?.(true);
     options.setIsViewer?.(!!data.viewing);
     options.updateUI?.();
     const modelLabel = options.getDisplayModelName?.(data.model || '') || '';
-    options.renderTopbarMeta?.(data.model || '');
-    if (data.remote_target_id && options.remoteTargetSelect) {
+    if (isActiveSession) options.renderTopbarMeta?.(data.model || '');
+    if (data.remote_target_id && options.remoteTargetSelect && isActiveSession) {
       options.remoteTargetSelect.value = data.remote_target_id;
       options.updateRemoteMutateRow?.();
     }
     const cliSelectEl = document.getElementById('cli-select');
-    if (data.cli && cliSelectEl && [...cliSelectEl.options].some(o => o.value === data.cli)) {
+    if (data.cli && cliSelectEl && [...cliSelectEl.options].some(o => o.value === data.cli) && isActiveSession) {
       cliSelectEl.value = data.cli;
       options.renderTopbarMeta?.(data.model || '');
     }
@@ -114,8 +125,10 @@
       const welcome = options.messagesEl?.querySelector?.('.welcome-msg');
       if (welcome) welcome.remove();
       if (data.session_id) {
-        options.setCurrentSessionId?.(data.session_id);
-        options.setCurrentRunId?.(data.run_id || options.getCurrentRunId?.());
+        if (isActiveSession) {
+          options.setCurrentSessionId?.(data.session_id);
+          options.setCurrentRunId?.(data.run_id || options.getCurrentRunId?.());
+        }
         options.ensureWorkspaceSession?.(data.session_id, {
           title: data.title || undefined,
           cwd: data.cwd || options.cwdInput?.value?.trim?.() || '',
@@ -124,18 +137,25 @@
           status: data.running === false ? 'idle' : 'running',
           runId: data.run_id || '',
         });
-        options.setActiveWorkspaceSessionId?.(data.session_id);
-        if (data.cwd) {
+        // 仅在 active 还未确定（空或 pending- 前缀）或本就是该会话时才认领 active。
+        if (isActiveSession) {
+          options.setActiveWorkspaceSessionId?.(data.session_id);
+        }
+        if (data.cwd && isActiveSession) {
           options.cwdInput.value = data.cwd;
           options.updateRuntimeSummary?.();
         }
-        options.refreshRightPaneFiles?.();
+        if (isActiveSession) options.refreshRightPaneFiles?.();
         options.showPage?.('chat');
-        options.loadSessionHistory?.(data.session_id, data.cwd || '');
+        if (isActiveSession) {
+          options.loadSessionHistory?.(data.session_id, data.cwd || '');
+        }
         if (options.getIsViewer?.()) {
-          options.addSystemMsg?.(options.t?.('viewingSession'));
+          if (isActiveSession) options.addSystemMsg?.(options.t?.('viewingSession'));
         } else {
-          options.addSystemMsg?.(modelLabel ? options.t?.('sessionStarted', { model: modelLabel }) : options.t?.('sessionStartedPlain'));
+          if (isActiveSession) {
+            options.addSystemMsg?.(modelLabel ? options.t?.('sessionStarted', { model: modelLabel }) : options.t?.('sessionStartedPlain'));
+          }
         }
       } else if (options.getIsViewer?.()) {
         options.addSystemMsg?.(options.t?.('viewingSession'));

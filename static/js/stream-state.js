@@ -40,7 +40,7 @@
       ctx.setState({
         isResponding: saved.isResponding,
         currentRunId: saved.currentRunId,
-        currentSessionId: saved.currentSessionId,
+        currentSessionId: saved.currentSessionId || sessionId,
         currentContent: saved.currentContent,
         streamBlocks: saved.streamBlocks,
         currentAssistantMessageId: saved.currentAssistantMessageId,
@@ -56,7 +56,9 @@
       ctx.setState({
         isResponding: false,
         currentRunId: null,
-        currentSessionId: null,
+        // 保留指向目标会话，避免竞态窗口内 currentSessionId 为 null
+        // 导致后台会话的 session_id_captured 等事件误认领为当前会话
+        currentSessionId: sessionId,
         currentContent: [],
         streamBlocks: {},
         currentAssistantMessageId: null,

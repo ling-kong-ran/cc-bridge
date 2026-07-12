@@ -143,7 +143,7 @@
           status: item.classList.contains('active') ? 'running' : 'idle',
         });
         showPage('chat');
-        resumeSession(sid, item.dataset.cwd, item.dataset.model, Number(item.dataset.cost || 0), item.dataset.remoteTarget || '', tokens, item.dataset.cli || '');
+        activateWorkspaceSession(sid);
       });
     });
   }
@@ -197,7 +197,7 @@
           status: item.classList.contains('active') ? 'running' : 'idle',
         });
         showPage('chat');
-        resumeSession(sid, item.dataset.cwd, item.dataset.model, Number(item.dataset.cost || 0), item.dataset.remoteTarget || '', tokens, item.dataset.cli || '');
+        activateWorkspaceSession(sid);
       });
     });
     el.querySelectorAll('.session-action').forEach(btn => {
@@ -479,15 +479,7 @@
     if (activeWorkspaceSessionId && workspaceSessions.has(activeWorkspaceSessionId)) {
       const session = workspaceSessions.get(activeWorkspaceSessionId);
       showPage('chat');
-      resumeSession(
-        session.sessionId,
-        session.cwd || '',
-        session.model || '',
-        Number(session.cost || 0),
-        session.remoteTargetId || '',
-        session.tokens || null,
-        session.cli || '',
-      );
+      activateWorkspaceSession(session.sessionId);
       return;
     }
     if (!sessionsLoaded) {
@@ -498,15 +490,17 @@
       .sort(compareSessionsByPinAndTime)[0];
     showPage('chat');
     if (latest?.session_id) {
-      resumeSession(
-        latest.session_id,
-        latest.cwd || '',
-        latest.model || '',
-        Number(latest.total_cost_usd || 0),
-        latest.remote_target_id || '',
-        latest.total_tokens || null,
-        latest.cli || '',
-      );
+      ensureWorkspaceSession(latest.session_id, {
+        title: latest.title || t('newChat'),
+        cwd: latest.cwd || '',
+        model: latest.model || '',
+        cli: latest.cli || '',
+        cost: Number(latest.total_cost_usd || 0),
+        tokens: latest.total_tokens || null,
+        remoteTargetId: latest.remote_target_id || '',
+        status: 'idle',
+      });
+      activateWorkspaceSession(latest.session_id);
       return;
     }
     createNewSession('');
