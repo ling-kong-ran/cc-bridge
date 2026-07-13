@@ -1,7 +1,7 @@
 {
   "name": "cc-bridge-desktop",
   "productName": "CC Bridge",
-  "version": "0.1.13",
+  "version": "0.1.14",
   "description": "CC Bridge 桌面应用壳。",
   "author": {
     "name": "kongran Ling",
