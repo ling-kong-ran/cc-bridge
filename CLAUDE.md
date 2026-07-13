@@ -35,7 +35,7 @@ For GitHub all-platform packaging, use the workflow file name and pass the inten
 gh workflow run release-desktop.yml --ref master -f version=0.1.6
 ```
 
-If `version` is omitted, the workflow uses the current `package.json` version. If `version` is provided, the workflow bumps `package.json` / `package-lock.json`, commits and pushes that version bump to the workflow ref, builds all desktop artifacts, then tags the built commit as `v<version>` before publishing the GitHub release. Existing tags are only accepted when they already point at that commit. Check the run and release with:
+If `version` is omitted, the workflow uses the current `package.json` version. If `version` is provided, the workflow bumps `package.json` / `package-lock.json`, commits and pushes that version bump to the workflow ref, builds all desktop artifacts, then tags the built commit as `v<version>` before publishing the GitHub release. Existing tags are only accepted when they already point at that commit. **The release workflow already performs the required version-file commit and push; when publishing through `release-desktop.yml`, do not create or push a separate manual Git commit.** Check the run and release with:
 
 ```bash
 gh run list --workflow release-desktop.yml --branch master --limit 3
