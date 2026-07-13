@@ -121,16 +121,23 @@ def find_server_python(allow_install: bool = True) -> Path:
     online = _check_internet() if allow_install else False
     log(f"网络状态：{'在线' if online else '离线'}")
 
-    # 1. 项目 .venv
+    # 1. 持久化虚拟环境。不能只检查 python 文件是否存在：跨机器复制的标准 venv
+    # 可能仍引用创建机器的基础 Python，此时执行会报 "No Python at ..."。
     venv_python = venv_python_path()
+    invalid_venv = False
     if venv_python.exists():
-        log(f"使用虚拟环境：{venv_python}")
-        if online:
-            _install_deps(venv_python)
-        return venv_python
+        venv_version = _python_version(venv_python)
+        if venv_version and venv_version >= _MIN_PYTHON:
+            log(f"使用虚拟环境：{venv_python}")
+            if online:
+                _install_deps(venv_python)
+            return venv_python
+        invalid_venv = True
+        log(f"虚拟环境不可用或 Python 版本过低，跳过：{venv_python}")
 
-    # 2. 有网：创建 .venv
-    if online:
+    # 2. 有网且没有损坏的现有环境时创建虚拟环境。
+    # 损坏环境可能来自其他机器，不能直接覆盖其非空目录；先回退到本机 Python。
+    if online and not invalid_venv:
         log(f"创建虚拟环境：{VENV_DIR}")
         _create_venv()
         venv_python = venv_python_path()
@@ -230,9 +237,8 @@ def _check_internet(timeout: float = 3.0) -> bool:
 def _create_venv() -> None:
     """在持久化运行时目录中创建虚拟环境。
 
-    使用 --copies：把 Python 核心复制进 venv 而非生成指向源 Python 的 redirector。
-    这样生成的 venv 可随 runtime 目录整体拷贝到其他机器（离线分发），不依赖源机器
-    的 Python 仍在原路径。代价是体积略大。
+    使用 --copies 避免符号链接，并提高同一机器上的稳定性。标准 venv 的 pyvenv.cfg
+    仍可能记录基础 Python 的绝对路径，因此不能把它视为可跨机器搬迁的完整 Python runtime。
     """
     venv_dir = VENV_DIR
     try:

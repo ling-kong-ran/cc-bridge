@@ -70,7 +70,7 @@ node --check desktop/electron-builder.config.cjs
 
 ### 制作压缩包
 
-1. 在一台有网的机器上首次运行桌面端，bootstrap 会在 `CC Bridge Runtime/` 下生成 `venv/`（用 `--copies` 创建，可跨机器拷贝）和 `npm-global/`（含 claude CLI）。
+1. 在一台有网的机器上首次运行桌面端，bootstrap 会在 `CC Bridge Runtime/` 下生成 `venv/` 和 `npm-global/`（含 claude CLI）。标准 Python venv 即使用 `--copies` 创建，也可能在 `pyvenv.cfg` 中引用创建机器的基础 Python 绝对路径，因此不能保证跨机器直接运行；离线目标机应安装兼容的 Python 3.10+，bootstrap 会验证并跳过不可用的复制 venv。
 2. 把整个 `CC Bridge Runtime/` 目录压缩成 `CC Bridge Runtime.zip`（zip 内可以是顶层 `CC Bridge Runtime/` 目录，也可以直接是 `venv/`、`npm-global/`，两种结构 bootstrap 都能识别）。
 
 ### 离线机器使用
@@ -81,7 +81,7 @@ node --check desktop/electron-builder.config.cjs
    - 检测到该 zip（按文件名触发，不做 hash 校验）；
    - 解压到 `CC Bridge Runtime/`；
    - 写入 `.unpacked_from`（zip 的 sha256，仅作「zip 是否变过」的判重），后续启动命中则跳过（幂等）。
-4. 解压后 `venv/`、`npm-global/` 齐备，离线机器无需联网即可复用。
+4. 解压后 bootstrap 会验证 `venv/` 中的 Python 是否可执行；可用时直接复用，不可用时跳过并回退到离线机器已安装的兼容 Python。`npm-global/` 可继续离线复用。
 
 ### 降级与容错
 
