@@ -429,12 +429,16 @@ client_last_msg: dict[str, str] = {}
 
 # 每个 client 当前轮的助手回复文本（用于通知摘要）
 client_response_buf: dict[str, str] = {}
+run_response_buf: dict[str, str] = {}
 
 # 每个 client 最后一条完整用户消息（用于通知中的"问"）
 client_last_prompt: dict[str, str] = {}
+run_last_prompt: dict[str, str] = {}
 
 # 每个 client 当前轮的启动时间（用于通知耗时）
 client_start_time: dict[str, float] = {}
+run_start_time: dict[str, float] = {}
+run_last_msg: dict[str, str] = {}
 
 # 每个 client 关联的 ccb session id
 client_session_ids: dict[str, str] = {}
@@ -1403,13 +1407,13 @@ async def schedule_memory_consolidation(client_id: str, session_id: str = "", ru
         settings = get_gui_settings()
         if settings.get("memoryAutoConsolidate", "auto") == "off":
             return
-        prompt = client_last_prompt.get(client_id, "") or client_last_msg.get(client_id, "")
+        prompt = run_last_prompt.get(run_id, "") or client_last_prompt.get(client_id, "") or client_last_msg.get(client_id, "")
         if not prompt:
             return
         meta = client_meta.get(client_id, {}) or {}
         cwd = meta.get("cwd") or DEFAULT_CWD
         # 提前捕获本轮助手回复，避免 _notify_summary pop 缓冲区后读到空值
-        assistant_summary = client_response_buf.get(client_id, "")[:1200]
+        assistant_summary = run_response_buf.get(run_id, client_response_buf.get(client_id, ""))[:1200]
         job_id = memory_consolidator.enqueue_consolidation(
             session_id=session_id,
             cwd=cwd,
@@ -2434,6 +2438,10 @@ async def handle_action(body: bytes, writer: asyncio.StreamWriter):
                 client_last_prompt[client_id] = content.strip()
                 client_start_time[client_id] = time.time()
                 client_response_buf.pop(client_id, None)
+                run_last_msg[run_id] = title
+                run_last_prompt[run_id] = content.strip()
+                run_start_time[run_id] = client_start_time[client_id]
+                run_response_buf.pop(run_id, None)
                 session._notified = False
                 if sid:
                     save_session(sid, title, meta.get("model", ""), meta.get("cwd", ""),
@@ -2460,6 +2468,8 @@ async def handle_action(body: bytes, writer: asyncio.StreamWriter):
                 await send_response(writer, 400, "application/json; charset=utf-8", err)
                 return
         elif session and session.is_running and content:
+            sid = client_session_ids.get(client_id)
+            run_id = session_run_ids.get(sid, "") if sid else ""
             _notify_log.info(f"send_message reusing running session cid={client_id} sid={sid}")
             if requested_model and requested_model != session.model:
                 session.model = requested_model
@@ -2488,9 +2498,12 @@ async def handle_action(body: bytes, writer: asyncio.StreamWriter):
             client_last_prompt[client_id] = content.strip()
             client_start_time[client_id] = time.time()
             client_response_buf.pop(client_id, None)  # 清除上一轮可能残留的文本
+            if run_id:
+                run_last_msg[run_id] = title
+                run_last_prompt[run_id] = content.strip()
+                run_start_time[run_id] = client_start_time[client_id]
+                run_response_buf.pop(run_id, None)
             session._notified = False  # 常驻进程会复用同一个 session，每轮消息都要重置通知状态
-            sid = client_session_ids.get(client_id)
-            run_id = session_run_ids.get(sid, "") if sid else ""
             if sid:
                 meta = client_meta.get(client_id, {})
                 save_session(sid, title, meta.get("model", ""), meta.get("cwd", ""),
@@ -2705,7 +2718,7 @@ def make_owner_event_handler(client_id: str, run_id: str, session, model: str, c
         elif evt_type == "result":
             await push_event(client_id, evt_type, persist_result_usage(client_id, event))
             await schedule_memory_consolidation(client_id, sid, run_id)
-            await _notify_turn_complete_once(client_id, sid, session, model, default_title)
+            await _notify_turn_complete_once(client_id, sid, session, model, default_title, run_id=run_id)
             await release_session_lock_for_session(sid, client_id)
         elif evt_type == "user":
             results = extract_tool_results(event)
@@ -2718,26 +2731,26 @@ def make_owner_event_handler(client_id: str, run_id: str, session, model: str, c
                 })
         elif evt_type == "process_ended":
             await push_event(client_id, evt_type, event)
-            await _notify_turn_complete_once(client_id, sid, session, model, default_title)
+            await _notify_turn_complete_once(client_id, sid, session, model, default_title, run_id=run_id)
             await release_session_lock_for_session(sid, client_id)
             session_manager.finish_run(run_id)
             if sid and session_run_ids.get(sid) == run_id:
                 session_run_ids.pop(sid, None)
         elif evt_type == "error":
             await push_event(client_id, evt_type, event)
-            await _notify_turn_complete_once(client_id, sid, session, model, default_title, error=event.get("message", ""))
+            await _notify_turn_complete_once(client_id, sid, session, model, default_title, error=event.get("message", ""), run_id=run_id)
             await release_session_lock_for_session(sid, client_id)
             session_manager.finish_run(run_id)
             if sid and session_run_ids.get(sid) == run_id:
                 session_run_ids.pop(sid, None)
         elif evt_type in ("assistant", "stream_event", "system", "model_changed"):
-            _track_response_text(event, client_id)
+            _track_response_text(event, client_id, run_id)
             await push_event(client_id, evt_type, event)
 
     return on_event
 
 
-async def _notify_turn_complete_once(client_id: str, sid: str, session, model: str, default_title: str = "New session", error: str = "") -> bool:
+async def _notify_turn_complete_once(client_id: str, sid: str, session, model: str, default_title: str = "New session", error: str = "", run_id: str = "") -> bool:
     """会话完成时最多发送一次 GUI 通知；可由 result/process_ended/release 共同复用。"""
     if not client_id:
         return False
@@ -2749,11 +2762,11 @@ async def _notify_turn_complete_once(client_id: str, sid: str, session, model: s
     _notify_log.info(f"complete cid={client_id} sid={sid} platforms={platforms} via={'error' if error else 'done'}")
     if not platforms:
         return False
-    title = client_last_msg.get(client_id, default_title)
+    title = run_last_msg.get(run_id, "") or client_last_msg.get(client_id, default_title)
     if error:
         asyncio.create_task(_notify_gui_complete(title, model, platforms, error=error))
         return True
-    prompt, summary, elapsed = _notify_summary(client_id)
+    prompt, summary, elapsed = _notify_summary(client_id, run_id)
     asyncio.create_task(_notify_gui_complete(title, model, platforms, summary=summary, prompt=prompt, elapsed=elapsed))
     return True
 
@@ -2771,7 +2784,7 @@ def _extract_assistant_text(event: dict) -> str:
     return "\n\n".join(p.strip() for p in parts if p and p.strip()).strip()
 
 
-def _track_response_text(event: dict, client_id: str) -> None:
+def _track_response_text(event: dict, client_id: str, run_id: str = "") -> None:
     """从 stream_event / assistant 事件中提取文本，记录当前轮最后一条助手回复。"""
     try:
         if not isinstance(event, dict):
@@ -2779,6 +2792,8 @@ def _track_response_text(event: dict, client_id: str) -> None:
         if event.get("type") == "assistant":
             text = _extract_assistant_text(event)
             if text:
+                if run_id:
+                    run_response_buf[run_id] = text
                 client_response_buf[client_id] = text
             return
         inner = event.get("event", event) if isinstance(event.get("event"), dict) else event
@@ -2788,16 +2803,26 @@ def _track_response_text(event: dict, client_id: str) -> None:
             delta = inner.get("delta", {}) if isinstance(inner.get("delta"), dict) else {}
             t = delta.get("text") or ""
             if t:
+                if run_id:
+                    run_response_buf[run_id] = run_response_buf.get(run_id, "") + t
                 client_response_buf[client_id] = client_response_buf.get(client_id, "") + t
     except Exception:
         pass
 
 
-def _notify_summary(client_id: str) -> tuple[str, str, float]:
-    """读取并清空 client_response_buf、client_last_prompt 和 client_start_time，返回 (prompt, response, elapsed_seconds)。"""
-    prompt = client_last_prompt.pop(client_id, "")
-    response = client_response_buf.pop(client_id, "").strip()
-    start = client_start_time.pop(client_id, 0)
+def _notify_summary(client_id: str, run_id: str = "") -> tuple[str, str, float]:
+    """读取并清空当前轮回复、用户 prompt 和启动时间，返回 (prompt, response, elapsed_seconds)。"""
+    prompt = run_last_prompt.pop(run_id, "") if run_id else ""
+    response = run_response_buf.pop(run_id, "").strip() if run_id else ""
+    start = run_start_time.pop(run_id, 0) if run_id else 0
+    if not prompt:
+        prompt = client_last_prompt.pop(client_id, "")
+    if not response:
+        response = client_response_buf.pop(client_id, "").strip()
+    if not start:
+        start = client_start_time.pop(client_id, 0)
+    if run_id:
+        run_last_msg.pop(run_id, None)
     elapsed = time.time() - start if start > 0 else 0
     return prompt, response, elapsed
 

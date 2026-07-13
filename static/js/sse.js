@@ -98,8 +98,8 @@
     // 导致后续事件被渲染进错误的页签。
     const activeId = options.getActiveWorkspaceSessionId?.() || '';
     const isPending = activeId.startsWith('pending-');
-    const isActiveSession = !activeId || isPending || activeId === data.session_id
-      || (options.getCurrentSessionId?.() && options.getCurrentSessionId() === data.session_id);
+    const currentMatches = !options.strictActiveSession && options.getCurrentSessionId?.() && options.getCurrentSessionId() === data.session_id;
+    const isActiveSession = !activeId || isPending || activeId === data.session_id || currentMatches;
     if (data.session_id && isActiveSession) {
       options.setCurrentSessionId?.(data.session_id);
     }

@@ -57,6 +57,165 @@ function initUnhandledRejectionGuard() {
 }
 
 const _tabStreamState = new Map();
+const sessionUiStates = new Map();
+let _activeRenderSessionId = '';
+
+function createSessionMessagesEl(sessionId) {
+  const el = document.createElement('div');
+  el.className = 'messages workspace-session-messages';
+  el.dataset.sessionId = sessionId || '';
+  el.setAttribute('role', 'log');
+  el.setAttribute('aria-live', 'polite');
+  el.setAttribute('aria-relevant', 'additions text');
+  return el;
+}
+
+function createSessionUiState(sessionId) {
+  return {
+    sessionId,
+    sessionActive: false,
+    isResponding: false,
+    isViewer: false,
+    currentAssistantEl: null,
+    currentAssistantMessageId: null,
+    currentContent: [],
+    streamBlocks: {},
+    totalCost: 0,
+    totalTokens: emptyTokenUsage(),
+    currentSessionId: sessionId,
+    currentRunId: null,
+    currentTurnContent: '',
+    currentTurnHasAssistantOutput: false,
+    currentTurnStartedAt: 0,
+    currentTurnAttachmentCount: 0,
+    runningTasks: new Map(),
+    toolResults: new Map(),
+    toolStartTimes: new Map(),
+    finishedTaskIds: new Set(),
+    subagentBubbles: new Map(),
+    renderScheduled: false,
+    historyLoaded: false,
+    historyLoading: false,
+    messagesEl: createSessionMessagesEl(sessionId),
+  };
+}
+
+function getSessionUiState(sessionId) {
+  if (!sessionId) return null;
+  if (!sessionUiStates.has(sessionId)) sessionUiStates.set(sessionId, createSessionUiState(sessionId));
+  return sessionUiStates.get(sessionId);
+}
+
+function getRenderSessionId() {
+  return _activeRenderSessionId || currentSessionId || activeWorkspaceSessionId || '';
+}
+
+function getActiveMessagesEl() {
+  return getSessionUiState(getRenderSessionId())?.messagesEl || messagesEl;
+}
+
+function applySessionUiState(state) {
+  if (!state) return;
+  sessionActive = state.sessionActive;
+  isResponding = state.isResponding;
+  isViewer = state.isViewer;
+  currentAssistantEl = state.currentAssistantEl;
+  currentAssistantMessageId = state.currentAssistantMessageId;
+  currentContent = state.currentContent;
+  streamBlocks = state.streamBlocks;
+  totalCost = state.totalCost;
+  totalTokens = state.totalTokens;
+  currentSessionId = state.currentSessionId || state.sessionId;
+  currentRunId = state.currentRunId;
+  currentTurnContent = state.currentTurnContent;
+  currentTurnHasAssistantOutput = state.currentTurnHasAssistantOutput;
+  currentTurnStartedAt = state.currentTurnStartedAt;
+  currentTurnAttachmentCount = state.currentTurnAttachmentCount;
+}
+
+function captureSessionUiState(state) {
+  if (!state) return;
+  state.sessionActive = sessionActive;
+  state.isResponding = isResponding;
+  state.isViewer = isViewer;
+  state.currentAssistantEl = currentAssistantEl;
+  state.currentAssistantMessageId = currentAssistantMessageId;
+  state.currentContent = currentContent;
+  state.streamBlocks = streamBlocks;
+  state.totalCost = totalCost;
+  state.totalTokens = totalTokens;
+  state.currentSessionId = currentSessionId || state.sessionId;
+  state.currentRunId = currentRunId;
+  state.currentTurnContent = currentTurnContent;
+  state.currentTurnHasAssistantOutput = currentTurnHasAssistantOutput;
+  state.currentTurnStartedAt = currentTurnStartedAt;
+  state.currentTurnAttachmentCount = currentTurnAttachmentCount;
+}
+
+function withSessionUiState(sessionId, fn) {
+  const state = getSessionUiState(sessionId || currentSessionId || activeWorkspaceSessionId);
+  if (!state) return fn?.();
+  const previousRenderSessionId = _activeRenderSessionId;
+  const previousSnapshot = {
+    sessionActive, isResponding, isViewer, currentAssistantEl, currentAssistantMessageId,
+    currentContent, streamBlocks, totalCost, totalTokens, currentSessionId, currentRunId,
+    currentTurnContent, currentTurnHasAssistantOutput, currentTurnStartedAt, currentTurnAttachmentCount,
+  };
+  _activeRenderSessionId = state.sessionId;
+  applySessionUiState(state);
+  try {
+    return fn?.(state);
+  } finally {
+    captureSessionUiState(state);
+    _activeRenderSessionId = previousRenderSessionId;
+    sessionActive = previousSnapshot.sessionActive;
+    isResponding = previousSnapshot.isResponding;
+    isViewer = previousSnapshot.isViewer;
+    currentAssistantEl = previousSnapshot.currentAssistantEl;
+    currentAssistantMessageId = previousSnapshot.currentAssistantMessageId;
+    currentContent = previousSnapshot.currentContent;
+    streamBlocks = previousSnapshot.streamBlocks;
+    totalCost = previousSnapshot.totalCost;
+    totalTokens = previousSnapshot.totalTokens;
+    currentSessionId = previousSnapshot.currentSessionId;
+    currentRunId = previousSnapshot.currentRunId;
+    currentTurnContent = previousSnapshot.currentTurnContent;
+    currentTurnHasAssistantOutput = previousSnapshot.currentTurnHasAssistantOutput;
+    currentTurnStartedAt = previousSnapshot.currentTurnStartedAt;
+    currentTurnAttachmentCount = previousSnapshot.currentTurnAttachmentCount;
+    const activeState = getSessionUiState(activeWorkspaceSessionId);
+    if (activeState && !_activeRenderSessionId) applySessionUiState(activeState);
+  }
+}
+
+function routeSessionEvent(data = {}, handler) {
+  const sid = data.session_id || currentSessionId || activeWorkspaceSessionId;
+  if (!sid) return handler?.();
+  ensureWorkspaceSession(sid, { status: data.running === false ? 'idle' : undefined, runId: data.run_id || '' });
+  return withSessionUiState(sid, handler);
+}
+
+function getSessionScopedMap(name) {
+  const state = getSessionUiState(getRenderSessionId());
+  return state?.[name] || ({ runningTasks, toolResults, toolStartTimes, finishedTaskIds, subagentBubbles }[name]);
+}
+
+function attachSessionMessagesToPane(sessionId, pane) {
+  const state = getSessionUiState(sessionId);
+  if (!state || !pane) return;
+  pane.querySelectorAll(':scope > .messages:not(.workspace-session-messages), :scope > .workspace-snapshot-messages').forEach(el => el.remove());
+  let host = pane.querySelector('.workspace-pane-messages-host');
+  if (!host) {
+    host = document.createElement('div');
+    host.className = 'workspace-pane-messages-host';
+    pane.appendChild(host);
+  }
+  if (state.messagesEl.parentElement !== host) {
+    host.innerHTML = '';
+    host.appendChild(state.messagesEl);
+  }
+}
+
 
 function getStreamStateOptions() {
   return {
@@ -394,23 +553,21 @@ function activateWorkspaceSession(sessionId, opts = {}) {
   }
   captureActiveWorkspaceSnapshot();
   const previousSessionId = activeWorkspaceSessionId;
-  // 保存旧标签页的流式状态，以便切回时恢复
-  _saveStreamState(previousSessionId);
+  if (previousSessionId) captureSessionUiState(getSessionUiState(previousSessionId));
   activeWorkspaceSessionId = sessionId;
-  // 恢复新标签页的流式状态
-  _restoreStreamState(sessionId);
-  // 确保 currentSessionId 同步指向新页签，避免竞态窗口内 SSE 事件归属误判
+  const state = getSessionUiState(sessionId);
+  applySessionUiState(state);
   currentSessionId = sessionId;
   releaseInactiveWorkspaceSession(previousSessionId);
   const session = workspaceSessions.get(sessionId);
   if (session) {
     session.released = false;
-    messagesEl.innerHTML = '';
     if (opts.resume !== false) {
       resumeSession(session.sessionId, session.cwd, session.model, session.cost || 0, session.remoteTargetId || '', session.tokens || null, session.cli || '');
     }
   }
   renderWorkspace();
+  updateUI();
 }
 
 function setWorkspaceMode(mode) {
@@ -448,6 +605,15 @@ function renderWorkspace() {
   renderWorkspacePanes();
   workspacePanesEl.classList.toggle('workspace-grid', workspaceMode === 'grid');
   workspacePanesEl.classList.toggle('workspace-focus', workspaceMode !== 'grid');
+  workspacePanesEl.classList.toggle('workspace-card-grid', workspaceMode === 'grid' && workspaceSessions.size > 2);
+  attachSessionMessagesToPane(activeWorkspaceSessionId, workspaceLivePane);
+  // grid 模式下自动加载非活跃 session 的历史，避免空白 pane
+  if (workspaceMode === 'grid') {
+    for (const [sid, ws] of workspaceSessions) {
+      if (sid === activeWorkspaceSessionId) continue;
+      ensureSessionHistoryLoaded(sid, ws.cwd || '');
+    }
+  }
   workspaceFocusBtn?.classList.toggle('active', workspaceMode !== 'grid');
   workspaceGridBtn?.classList.toggle('active', workspaceMode === 'grid');
   workspaceFocusBtn?.setAttribute('aria-pressed', workspaceMode !== 'grid' ? 'true' : 'false');
@@ -534,6 +700,7 @@ function getWorkspacePanesOptions() {
     startWorkspaceResize,
     activateWorkspaceSession,
     releaseInactiveWorkspaceSession,
+    attachSessionMessagesToPane,
   };
 }
 
@@ -1254,7 +1421,7 @@ function extractMessagePreviewText(message) {
 function getSseLifecycleOptions() {
   return {
     t,
-    messagesEl,
+    messagesEl: getActiveMessagesEl(),
     cwdInput,
     modelSelect,
     remoteTargetSelect,
@@ -1282,6 +1449,7 @@ function getSseLifecycleOptions() {
     isEventForCurrentSession,
     addUserMessage,
     scrollToBottom,
+    strictActiveSession: true,
   };
 }
 
@@ -1316,49 +1484,48 @@ function bindSSEEvents(source = eventSource) {
 
   source.addEventListener('session_started', (e) => {
     const data = JSON.parse(e.data);
-    return window.CCBridge.sse?.handleSessionStarted?.(data, getSseLifecycleOptions());
+    routeSessionEvent(data, () => window.CCBridge.sse?.handleSessionStarted?.(data, getSseLifecycleOptions()));
   });
 
   source.addEventListener('session_stopped', (e) => {
     const data = JSON.parse(e.data || '{}');
-    return window.CCBridge.sse?.handleSessionStopped?.(data, getSseLifecycleOptions());
+    routeSessionEvent(data, () => window.CCBridge.sse?.handleSessionStopped?.(data, getSseLifecycleOptions()));
   });
 
   source.addEventListener('session_taken', (e) => {
     const data = JSON.parse(e.data);
-    return window.CCBridge.sse?.handleSessionTaken?.(data, getSseLifecycleOptions());
+    routeSessionEvent(data, () => window.CCBridge.sse?.handleSessionTaken?.(data, getSseLifecycleOptions()));
   });
 
   source.addEventListener('user_message', (e) => {
     const data = JSON.parse(e.data);
-    return window.CCBridge.sse?.handleUserMessage?.(data, getSseLifecycleOptions());
+    routeSessionEvent(data, () => window.CCBridge.sse?.handleUserMessage?.(data, getSseLifecycleOptions()));
   });
 
   source.addEventListener('generation_started', (e) => {
-    // 刷新后重连到正在回复的会话，恢复响应状态和 server 端真实耗时。
-    // 未收到实际 assistant 输出前不创建空回复气泡，避免历史加载/进程结束竞态造成短暂流式闪烁。
     const data = JSON.parse(e.data || '{}');
-    if (!isEventForCurrentSession(data)) return;
     if (data.running === false) return;
-    currentRunId = data.run_id || currentRunId;
-    isResponding = true;
-    currentTurnStartedAt = data.started_at ? data.started_at * 1000 : Date.now() - Number(data.elapsed_ms || 0);
-    currentTurnContent = data.prompt || currentTurnContent || '';
-    currentTurnHasAssistantOutput = !!data.has_output;
-    updateWorkspaceSessionStatus(currentSessionId, 'running', t('streamingReply'));
-    if (currentTurnHasAssistantOutput) {
-      if (!currentAssistantEl) {
-        currentAssistantEl = createAssistantBubble();
-        currentContent = [];
-        streamBlocks = {};
-        renderCurrentState();
-      } else {
-        currentAssistantEl.classList.add('streaming');
+    routeSessionEvent(data, () => {
+      currentRunId = data.run_id || currentRunId;
+      isResponding = true;
+      currentTurnStartedAt = data.started_at ? data.started_at * 1000 : Date.now() - Number(data.elapsed_ms || 0);
+      currentTurnContent = data.prompt || currentTurnContent || '';
+      currentTurnHasAssistantOutput = !!data.has_output;
+      updateWorkspaceSessionStatus(currentSessionId, 'running', t('streamingReply'));
+      if (currentTurnHasAssistantOutput) {
+        if (!currentAssistantEl) {
+          currentAssistantEl = createAssistantBubble();
+          currentContent = [];
+          streamBlocks = {};
+          renderCurrentState();
+        } else {
+          currentAssistantEl.classList.add('streaming');
+        }
+        scrollToBottom(true);
       }
-      scrollToBottom(true);
-    }
-    startTurnTimer();
-    updateUI();
+      startTurnTimer();
+      updateUI();
+    });
   });
 
   source.addEventListener('system', (e) => {
@@ -1376,14 +1543,12 @@ function bindSSEEvents(source = eventSource) {
 
   source.addEventListener('stream_event', (e) => {
     const data = JSON.parse(e.data);
-    if (noteBackgroundSessionEvent(data)) return;
-    handleStreamEvent(data);
+    routeSessionEvent(data, () => handleStreamEvent(data));
   });
 
   source.addEventListener('assistant', (e) => {
     const data = JSON.parse(e.data);
-    if (noteBackgroundSessionEvent(data)) return;
-    handleAssistantFinal(data);
+    routeSessionEvent(data, () => handleAssistantFinal(data));
   });
 
   source.addEventListener('context_injected', (e) => {
@@ -1491,73 +1656,75 @@ function bindSSEEvents(source = eventSource) {
 
   source.addEventListener('result', (e) => {
     const data = JSON.parse(e.data);
-    if (noteBackgroundSessionEvent(data)) return;
     handleResult(data);
   });
 
   source.addEventListener('tool_result', (e) => {
     const data = JSON.parse(e.data);
-    if (noteBackgroundSessionEvent(data)) return;
-    // 存结果，更新工具卡片
-    if (data.results) {
-      for (const r of data.results) {
-        toolResults.set(r.tool_use_id, r);
-        updateToolResult(r.tool_use_id, r.content, r.is_error);
+    routeSessionEvent(data, () => {
+      if (data.results) {
+        const scopedToolResults = getSessionScopedMap('toolResults');
+        for (const r of data.results) {
+          scopedToolResults.set(r.tool_use_id, r);
+          updateToolResult(r.tool_use_id, r.content, r.is_error);
+        }
+        updateWorkspaceSessionStatus(currentSessionId, 'running', t('streamingReply'));
       }
-      updateWorkspaceSessionStatus(currentSessionId, 'running', t('streamingReply'));
-    }
-    finishTasks(data.results ? data.results.map(r => r.tool_use_id) : []);
+      finishTasks(data.results ? data.results.map(r => r.tool_use_id) : []);
+    });
   });
 
   source.addEventListener('session_lock_changed', (e) => {
     const data = JSON.parse(e.data || '{}');
-    if (data.session_id && currentSessionId && data.session_id !== currentSessionId) return;
-    const wasResponding = isResponding;
-    isResponding = !!data.locked;
-    if (!isResponding && wasResponding) {
-      finishCurrentTurnFromProcess();
-      updateWorkspaceSessionStatus(data.session_id || currentSessionId, 'done');
-      scheduleCompletionHistorySync(data.session_id || currentSessionId);
-    }
-    updateUI();
+    routeSessionEvent(data, () => {
+      const wasResponding = isResponding;
+      isResponding = !!data.locked;
+      if (!isResponding && wasResponding) {
+        finishCurrentTurnFromProcess();
+        updateWorkspaceSessionStatus(data.session_id || currentSessionId, 'done');
+        scheduleCompletionHistorySync(data.session_id || currentSessionId);
+      }
+      updateUI();
+    });
   });
 
   source.addEventListener('process_ended', (e) => {
-    // ccb 进程结束 —— 确保前端退出 responding 状态；即使锁事件已先到达，也要补齐清理/通知。
     const data = JSON.parse(e.data || '{}');
-    if (noteBackgroundSessionEvent(data)) return;
-    const finishedTurn = finishCurrentTurnFromProcess();
-    updateWorkspaceSessionStatus(data.session_id || currentSessionId, Number(data.exit_code || 0) === 0 ? 'done' : 'error');
-    if (isSlashCommand(finishedTurn.prompt) && !finishedTurn.hadAssistantOutput) {
-      const command = getSlashCommandName(finishedTurn.prompt);
-      if (Number(data.exit_code || 0) === 0) {
-        addSystemMsg(t('commandCompleted', { command }));
-      } else {
-        addSystemMsg(t('commandEnded', { command }), true);
+    routeSessionEvent(data, () => {
+      const finishedTurn = finishCurrentTurnFromProcess();
+      updateWorkspaceSessionStatus(data.session_id || currentSessionId, Number(data.exit_code || 0) === 0 ? 'done' : 'error');
+      if (isSlashCommand(finishedTurn.prompt) && !finishedTurn.hadAssistantOutput) {
+        const command = getSlashCommandName(finishedTurn.prompt);
+        if (Number(data.exit_code || 0) === 0) {
+          addSystemMsg(t('commandCompleted', { command }));
+        } else {
+          addSystemMsg(t('commandEnded', { command }), true);
+        }
       }
-    }
-    scheduleCompletionHistorySync(data.session_id || currentSessionId);
-    currentRunId = null;
+      scheduleCompletionHistorySync(data.session_id || currentSessionId);
+      currentRunId = null;
+    });
   });
 
   source.addEventListener('generation_interrupted', (e) => {
     const data = JSON.parse(e.data || '{}');
-    if (!isEventForCurrentSession(data)) return;
-    const hadAssistantOutput = currentTurnHasAssistantOutput;
-    isResponding = false;
-    if (currentAssistantEl) currentAssistantEl.classList.remove('streaming');
-    currentTurnContent = '';
-    currentTurnHasAssistantOutput = false;
-    stopTurnTimer();
-    removePendingAssistantBubble(hadAssistantOutput);
-    currentAssistantEl = null;
-    currentAssistantMessageId = null;
-    currentRunId = null;
-    updateWorkspaceSessionStatus(data.session_id || currentSessionId, 'idle');
-    clearRunningTasks({ keepFinished: true });
-    clearSubagentBubbles();
-    updateUI();
-    addSystemMsg(t('interrupted'));
+    routeSessionEvent(data, () => {
+      const hadAssistantOutput = currentTurnHasAssistantOutput;
+      isResponding = false;
+      if (currentAssistantEl) currentAssistantEl.classList.remove('streaming');
+      currentTurnContent = '';
+      currentTurnHasAssistantOutput = false;
+      stopTurnTimer();
+      removePendingAssistantBubble(hadAssistantOutput);
+      currentAssistantEl = null;
+      currentAssistantMessageId = null;
+      currentRunId = null;
+      updateWorkspaceSessionStatus(data.session_id || currentSessionId, 'idle');
+      clearRunningTasks({ keepFinished: true });
+      clearSubagentBubbles();
+      updateUI();
+      addSystemMsg(t('interrupted'));
+    });
   });
 
   source.addEventListener('scheduled_task_started', () => {
@@ -1589,21 +1756,21 @@ function bindSSEEvents(source = eventSource) {
   source.addEventListener('error', (e) => {
     if (e.data) {
       const data = JSON.parse(e.data);
-      if (noteBackgroundSessionEvent(data)) return;
-      addSystemMsg(data.message || t('unknownError'), true);
-      // 收到错误事件也要退出 responding 状态
-      isResponding = false;
-      if (currentAssistantEl) currentAssistantEl.classList.remove('streaming');
-      currentTurnContent = '';
-      currentTurnHasAssistantOutput = false;
-      stopTurnTimer();
-      removePendingAssistantBubble(false);
-      currentAssistantEl = null;
-      currentAssistantMessageId = null;
-      currentRunId = null;
-      updateWorkspaceSessionStatus(data.session_id || currentSessionId, 'error');
-      updateUI();
-      notifyComplete('process');
+      routeSessionEvent(data, () => {
+        addSystemMsg(data.message || t('unknownError'), true);
+        isResponding = false;
+        if (currentAssistantEl) currentAssistantEl.classList.remove('streaming');
+        currentTurnContent = '';
+        currentTurnHasAssistantOutput = false;
+        stopTurnTimer();
+        removePendingAssistantBubble(false);
+        currentAssistantEl = null;
+        currentAssistantMessageId = null;
+        currentRunId = null;
+        updateWorkspaceSessionStatus(data.session_id || currentSessionId, 'error');
+        updateUI();
+        notifyComplete('process');
+      });
     }
     if (source.readyState === EventSource.CLOSED) {
       setConnectionStatus(false);
@@ -1769,13 +1936,14 @@ function getChatRendererOptions() {
     t,
     renderMd,
     sanitizeLinkHref,
-    runningTasks,
-    toolResults,
-    toolStartTimes,
+    runningTasks: getSessionScopedMap('runningTasks'),
+    toolResults: getSessionScopedMap('toolResults'),
+    toolStartTimes: getSessionScopedMap('toolStartTimes'),
     addUserMessage,
     renderContextTrace,
     createAssistantBubble,
     scrollToBottom,
+    messagesEl: getActiveMessagesEl(),
   };
 }
 
@@ -1897,11 +2065,11 @@ function getTaskActivityOptions() {
     getCurrentAssistantEl: () => currentAssistantEl,
     getIsResponding: () => isResponding,
     scheduleRender,
-    runningTasks,
-    finishedTaskIds,
-    subagentBubbles,
+    runningTasks: getSessionScopedMap('runningTasks'),
+    finishedTaskIds: getSessionScopedMap('finishedTaskIds'),
+    subagentBubbles: getSessionScopedMap('subagentBubbles'),
     agentStatusBar: document.getElementById('agent-status-bar'),
-    messagesEl,
+    messagesEl: getActiveMessagesEl(),
     colors: SUBAGENT_COLORS,
   };
 }
@@ -2090,7 +2258,7 @@ function getResultHandlerModule() {
 }
 
 function handleResult(data) {
-  return getResultHandlerModule()?.handleResult?.(data, getResultHandlerOptions());
+  return routeSessionEvent(data, () => getResultHandlerModule()?.handleResult?.(data, getResultHandlerOptions()));
 }
 
 function getMessageUiOptions() {
@@ -2099,7 +2267,7 @@ function getMessageUiOptions() {
     esc,
     quoteDisplayText,
     scrollToBottom,
-    messagesEl,
+    messagesEl: getActiveMessagesEl(),
   };
 }
 
@@ -2450,7 +2618,7 @@ function updateUI() {
 
 function getMessageScrollOptions() {
   return {
-    messagesEl,
+    messagesEl: getActiveMessagesEl(),
     btnScrollLatest,
     requestAnimationFrame: window.requestAnimationFrame.bind(window),
   };
@@ -2846,7 +3014,7 @@ function resetAssistantStreamState() {
 
 function getHistoryLoaderOptions() {
   return {
-    messagesEl,
+    messagesEl: getActiveMessagesEl(),
     getCwd: () => cwdInput.value.trim() || '',
     getAssistantState: () => ({
       currentAssistantEl,
@@ -2863,8 +3031,8 @@ function getHistoryLoaderOptions() {
     resetAssistantStreamState,
     renderHistory,
     prependHistory,
-    toolResults,
-    toolStartTimes,
+    toolResults: getSessionScopedMap('toolResults'),
+    toolStartTimes: getSessionScopedMap('toolStartTimes'),
     captureActiveWorkspaceSnapshot,
     addSystemMsg,
   };
@@ -2884,6 +3052,24 @@ async function loadSessionHistory(sessionId, cwd) {
   return getHistoryLoaderModule()?.loadSessionHistory?.(sessionId, cwd, getHistoryLoaderOptions());
 }
 
+async function ensureSessionHistoryLoaded(sessionId, cwd) {
+  if (!sessionId) return;
+  const state = getSessionUiState(sessionId);
+  if (!state || state.historyLoaded || state.historyLoading) return;
+  state.historyLoading = true;
+  const prevRenderSessionId = _activeRenderSessionId;
+  _activeRenderSessionId = sessionId;
+  try {
+    await loadSessionHistory(sessionId, cwd);
+    state.historyLoaded = true;
+  } catch (e) {
+    console.error('[ensureSessionHistoryLoaded]', e);
+  } finally {
+    state.historyLoading = false;
+    _activeRenderSessionId = prevRenderSessionId;
+  }
+}
+
 async function reloadSessionHistory(sessionId, cwd) {
   return getHistoryLoaderModule()?.reloadSessionHistory?.(sessionId, cwd, getHistoryLoaderOptions());
 }
@@ -2893,7 +3079,7 @@ function renderHistory(history) {
 }
 
 function prependHistory(history) {
-  return window.CCBridge.chatRenderer?.prependHistory?.(history, { ...getChatRendererOptions(), messagesEl });
+  return window.CCBridge.chatRenderer?.prependHistory?.(history, { ...getChatRendererOptions(), messagesEl: getActiveMessagesEl() });
 }
 
 function renderHistoryToolCard(block) {

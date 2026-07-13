@@ -251,14 +251,15 @@
   </div>`;
   }
 
-  function findToolCard(toolId) {
-    return Array.from(document.querySelectorAll('.tool-card'))
+  function findToolCard(toolId, options = {}) {
+    const rootEl = options.messagesEl || document;
+    return Array.from(rootEl.querySelectorAll('.tool-card'))
       .find(card => card.dataset.toolId === String(toolId || '')) || null;
   }
 
   function updateToolResult(toolId, content, isError, options = {}) {
     const { toolStartTimes } = getContext(options);
-    const card = findToolCard(toolId);
+    const card = findToolCard(toolId, options);
     if (!card) return;
     card.classList.remove('tool-card-running');
     const startTime = toolStartTimes.get(toolId);

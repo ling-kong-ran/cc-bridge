@@ -240,6 +240,7 @@
       startWorkspaceResize: options.startWorkspaceResize || (() => {}),
       activateWorkspaceSession: options.activateWorkspaceSession || (() => {}),
       releaseInactiveWorkspaceSession: options.releaseInactiveWorkspaceSession || (() => {}),
+      attachSessionMessagesToPane: options.attachSessionMessagesToPane || (() => {}),
     };
   }
 
@@ -303,21 +304,8 @@
       const paneMessages = pane.querySelector('.workspace-snapshot-messages');
       if (paneTitle) paneTitle.textContent = session.title || ctx.t('newChat');
       if (paneStatus) paneStatus.textContent = ctx.getStatusLabel(session.status);
-      const previewText = ctx.getSessionPreview(session);
-      ctx.releaseInactiveWorkspaceSession(session.sessionId);
-      if (paneMessages && paneMessages.dataset.previewText !== previewText) {
-        paneMessages.dataset.previewText = previewText;
-        if (previewText) {
-          let previewEl = paneMessages.querySelector('.workspace-live-preview');
-          if (!previewEl) {
-            paneMessages.innerHTML = '<div class="workspace-live-preview"></div>';
-            previewEl = paneMessages.querySelector('.workspace-live-preview');
-          }
-          previewEl.textContent = previewText;
-        } else {
-          paneMessages.innerHTML = `<div class="workspace-snapshot-empty">${ctx.esc(ctx.t('workspaceOpenSession'))}</div>`;
-        }
-      }
+      if (paneMessages) paneMessages.remove();
+      ctx.attachSessionMessagesToPane(session.sessionId, pane);
       ctx.applyPaneWidth(pane, session.sessionId);
       panesEl.appendChild(pane);
     }

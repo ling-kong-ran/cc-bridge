@@ -3020,7 +3020,14 @@ body.pane-right-collapsed .chat-sidebar {
 .workspace-panes.workspace-grid {
   gap: 8px;
   padding: 8px;
-  overflow-x: auto;
+  overflow: auto;
+  align-content: stretch;
+}
+
+.workspace-panes.workspace-card-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(360px, 1fr));
+  grid-auto-rows: minmax(320px, 1fr);
 }
 
 .workspace-pane {
@@ -3041,6 +3048,11 @@ body.pane-right-collapsed .chat-sidebar {
   background:
     linear-gradient(180deg, rgba(var(--accent-rgb), 0.045), transparent 95px),
     color-mix(in srgb, var(--bg-surface) 80%, var(--bg-main));
+}
+
+.workspace-card-grid .workspace-pane {
+  min-width: 0;
+  min-height: 320px;
 }
 
 .workspace-grid .workspace-pane.active {
@@ -3105,6 +3117,20 @@ body.pane-right-collapsed .chat-sidebar {
   color: var(--text-ghost);
   text-transform: uppercase;
   letter-spacing: 0.08em;
+}
+
+.workspace-snapshot-messages,
+.workspace-pane-messages-host {
+  min-height: 0;
+  flex: 1;
+  overflow: hidden;
+}
+
+.workspace-pane-messages-host > .messages {
+  display: block;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
 }
 
 .workspace-snapshot-messages {
@@ -9324,6 +9350,22 @@ body .workspace-panes {
   flex: 1 1 auto;
   min-height: 0;
   overflow: hidden;
+}
+
+body .workspace-panes.workspace-grid {
+  overflow: auto;
+}
+
+body .workspace-panes.workspace-card-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(360px, 1fr));
+  grid-auto-rows: minmax(320px, 1fr);
+  align-content: stretch;
+}
+
+body .workspace-panes.workspace-card-grid .workspace-pane {
+  min-width: 0;
+  min-height: 320px;
 }
 
 body .workspace-pane {
