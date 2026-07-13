@@ -96,14 +96,13 @@
         currentTurnStartedAt: Date.now(),
         currentTurnHasAssistantOutput: false,
         isResponding: true,
-        currentAssistantEl: ctx.createAssistantBubble(),
+        currentAssistantEl: null,
         currentAssistantMessageId: null,
         currentContent: [],
         streamBlocks: {},
       });
       ctx.updateWorkspaceSessionStatus(currentSessionId, 'running', ctx.t('streamingReply'));
       ctx.startTurnTimer();
-      ctx.renderCurrentState();
       if (isSlashCommand(originalContent)) {
         ctx.addSystemMsg(ctx.t('commandRunning', { command: getSlashCommandName(originalContent) }));
       }
