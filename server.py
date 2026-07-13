@@ -1867,7 +1867,18 @@ async def handle_sse(query: dict, writer: asyncio.StreamWriter):
                 await _sse_write(writer, "generation_started", gen_state)
             await push_current_session_lock(client_id, sid)
         elif sid:
-            # 重连时会话已结束：推送 locked=false，消除前端可能残留的 isResponding 状态
+            # 后台标签页可能被浏览器丢弃并重新加载，前端内存中的 sessionActive 会恢复为默认 false。
+            # 即使会话当前空闲，也要完整同步 session_started，不能只发送解锁事件，否则输入框和发送按钮会一直禁用。
+            state = {
+                "model": existing_session.model,
+                "resumed": True,
+                "session_id": sid,
+                "remote_target_id": meta.get("remote_target_id", ""),
+                "cli": existing_session.cli or get_current_cli(),
+                "cwd": existing_session.cwd or meta.get("cwd", ""),
+                "running": False,
+            }
+            await _sse_write(writer, "session_started", state)
             await _sse_write(writer, "session_lock_changed", {
                 "session_id": sid,
                 "locked": False,
