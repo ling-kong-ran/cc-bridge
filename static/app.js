@@ -3012,29 +3012,38 @@ function resetAssistantStreamState() {
   return getStreamStateModule()?.resetAssistantStreamState?.(getStreamStateOptions());
 }
 
-function getHistoryLoaderOptions() {
+function getHistoryLoaderOptions(sessionId = '') {
+  const state = getSessionUiState(sessionId || getRenderSessionId());
+  const runInSession = (fn) => state ? withSessionUiState(state.sessionId, fn) : fn();
   return {
-    messagesEl: getActiveMessagesEl(),
+    messagesEl: state?.messagesEl || getActiveMessagesEl(),
     getCwd: () => cwdInput.value.trim() || '',
     getAssistantState: () => ({
-      currentAssistantEl,
-      currentAssistantMessageId,
-      currentContent,
-      streamBlocks,
+      currentAssistantEl: state?.currentAssistantEl || null,
+      currentAssistantMessageId: state?.currentAssistantMessageId || null,
+      currentContent: state?.currentContent || [],
+      streamBlocks: state?.streamBlocks || {},
     }),
-    setAssistantState: (state = {}) => {
-      currentAssistantEl = state.currentAssistantEl;
-      currentAssistantMessageId = state.currentAssistantMessageId;
-      currentContent = state.currentContent;
-      streamBlocks = state.streamBlocks;
+    setAssistantState: (next = {}) => {
+      if (!state) return;
+      state.currentAssistantEl = next.currentAssistantEl;
+      state.currentAssistantMessageId = next.currentAssistantMessageId;
+      state.currentContent = next.currentContent;
+      state.streamBlocks = next.streamBlocks;
     },
-    resetAssistantStreamState,
-    renderHistory,
-    prependHistory,
-    toolResults: getSessionScopedMap('toolResults'),
-    toolStartTimes: getSessionScopedMap('toolStartTimes'),
+    resetAssistantStreamState: () => {
+      if (!state) return;
+      state.currentAssistantEl = null;
+      state.currentAssistantMessageId = null;
+      state.currentContent = [];
+      state.streamBlocks = {};
+    },
+    renderHistory: (history) => runInSession(() => renderHistory(history)),
+    prependHistory: (history, options = {}) => runInSession(() => prependHistory(history, options)),
+    toolResults: state?.toolResults || getSessionScopedMap('toolResults'),
+    toolStartTimes: state?.toolStartTimes || getSessionScopedMap('toolStartTimes'),
     captureActiveWorkspaceSnapshot,
-    addSystemMsg,
+    addSystemMsg: (text, isError = false) => runInSession(() => addSystemMsg(text, isError)),
   };
 }
 
@@ -3049,7 +3058,7 @@ function renderStaticHistory(history) {
 }
 
 async function loadSessionHistory(sessionId, cwd) {
-  return getHistoryLoaderModule()?.loadSessionHistory?.(sessionId, cwd, getHistoryLoaderOptions());
+  return getHistoryLoaderModule()?.loadSessionHistory?.(sessionId, cwd, getHistoryLoaderOptions(sessionId));
 }
 
 async function ensureSessionHistoryLoaded(sessionId, cwd) {
@@ -3071,7 +3080,7 @@ async function ensureSessionHistoryLoaded(sessionId, cwd) {
 }
 
 async function reloadSessionHistory(sessionId, cwd) {
-  return getHistoryLoaderModule()?.reloadSessionHistory?.(sessionId, cwd, getHistoryLoaderOptions());
+  return getHistoryLoaderModule()?.reloadSessionHistory?.(sessionId, cwd, getHistoryLoaderOptions(sessionId));
 }
 
 function renderHistory(history) {
