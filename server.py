@@ -568,6 +568,17 @@ def get_owned_session(owner_id: str, session_id: str = ""):
     return session_manager.get_session(owner_id)
 
 
+def is_valid_native_session_id(session_id: str) -> bool:
+    """校验 Claude CLI 可用于 --resume 的原生 UUID 会话 ID。"""
+    if not session_id:
+        return False
+    try:
+        uuid.UUID(str(session_id))
+        return True
+    except (TypeError, ValueError):
+        return False
+
+
 async def push_generation_started(client_id: str, session):
     state = build_generation_state(session)
     if state:
@@ -2495,7 +2506,10 @@ async def handle_action(body: bytes, writer: asyncio.StreamWriter):
         session = get_current_session(client_id)
         sid = client_session_ids.get(client_id, "")
         _notify_log.info(f"send_message cid={client_id} sid={sid} session_exists={session is not None} is_running={session.is_running if session else 'N/A'} has_content={bool(content)}")
-        if (not session or not session.is_running) and sid and content:
+        if sid and not is_valid_native_session_id(sid):
+            client_session_ids.pop(client_id, None)
+            sid = ""
+        if (not session or not session.is_running) and content:
             meta = client_meta.setdefault(client_id, {})
             if requested_model:
                 meta["model"] = requested_model
@@ -2504,11 +2518,12 @@ async def handle_action(body: bytes, writer: asyncio.StreamWriter):
             if "remote_target_id" in data:
                 meta["remote_target_id"] = data.get("remote_target_id") or ""
             run_id, session = session_manager.create_session(client_id)
-            session.session_id = sid
-            session_owner[sid] = client_id
-            session_run_ids[sid] = run_id
-            session_manager.bind_native_session(sid, run_id)
-            attach_viewers_to_session(client_id, sid, session)
+            if sid:
+                session.session_id = sid
+                session_owner[sid] = client_id
+                session_run_ids[sid] = run_id
+                session_manager.bind_native_session(sid, run_id)
+                attach_viewers_to_session(client_id, sid, session)
             remote_target = remote_manager.get_target(meta.get("remote_target_id") or "")
             on_event = make_owner_event_handler(
                 client_id,
@@ -2524,7 +2539,7 @@ async def handle_action(body: bytes, writer: asyncio.StreamWriter):
                 await session.start(
                     model=meta.get("model") or get_default_model(),
                     cwd=meta.get("cwd"),
-                    resume_id=sid,
+                    resume_id=sid or None,
                     on_event=on_event,
                     skip_permissions=True,
                     remote_target=remote_target,
@@ -2544,8 +2559,9 @@ async def handle_action(body: bytes, writer: asyncio.StreamWriter):
                 if sid:
                     save_session(sid, title, meta.get("model", ""), meta.get("cwd", ""),
                                  remote_target_id=meta.get("remote_target_id", ""), cli=meta.get("cli", ""))
-                await broadcast_session_lock(sid, True, client_id)
-                await broadcast_user_message(sid, content, client_id)
+                if sid:
+                    await broadcast_session_lock(sid, True, client_id)
+                    await broadcast_user_message(sid, content, client_id)
                 final_content = await prepare_contextual_message(
                     client_id,
                     content,
