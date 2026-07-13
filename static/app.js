@@ -395,6 +395,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   initSSE();
   initMessageAutoScroll();
   initInput();
+  initImageGeneration();
   initModelPill();
   initCliInstallModal();
   initUpdateModal();
@@ -2328,6 +2329,13 @@ function getMessageExtrasOptions() {
 
 function initInput() {
   window.CCBridge.input?.initInput?.();
+}
+
+function initImageGeneration() {
+  if (window.CCBridge.imageGeneration) {
+    window.CCBridge.imageGeneration.getMessagesEl = getActiveMessagesEl;
+    window.CCBridge.imageGeneration.initImageGeneration?.();
+  }
 }
 
 function initModelPill() {

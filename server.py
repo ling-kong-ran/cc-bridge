@@ -67,6 +67,7 @@ from backend.routes.remote_routes import handle_remote_get, handle_remote_post
 from backend.responses import send_response
 from backend.services.sessions_service import list_gui_sessions
 from backend.services.memory_service import apply_memory_organize, preview_memory_organize
+from image_generation import ImageGenerationError, ImageGenerationService
 from bootstrap.probe import NPM_PREFIX
 # 飞书模块延迟加载 — 避免 lark_oapi SDK 拖慢 server 启动
 class _LazyFeishu:
@@ -741,6 +742,92 @@ def artifact_href(value: str) -> str:
 def get_default_model() -> str:
     models = get_available_models()
     return models[0] if models else "claude-sonnet-4-6"
+
+
+def get_image_generation_env_config() -> dict:
+    """读取图片生成专用环境变量，优先使用 GUI 自有配置。"""
+    env = dict(get_env_config())
+    gui_env = get_gui_settings().get("image_generation_env") or {}
+    if isinstance(gui_env, dict):
+        env.update({str(key): str(value) for key, value in gui_env.items()})
+    return env
+
+
+def get_image_generation_service() -> ImageGenerationService:
+    """创建图片生成服务，合并图片生成专用配置与当前进程环境。"""
+    return ImageGenerationService(env=get_image_generation_env_config(), default_cwd=DEFAULT_CWD)
+
+
+def image_error_response(exc: Exception) -> tuple[int, dict]:
+    """把生图异常转换成统一 JSON 响应。"""
+    if isinstance(exc, ImageGenerationError):
+        return exc.status, {"ok": False, "error": str(exc)}
+    return 500, {"ok": False, "error": str(exc)}
+
+
+def get_image_generation_settings() -> dict:
+    """读取图片生成 GUI 偏好，不包含任何密钥。"""
+    settings = get_gui_settings().get("image_generation") or {}
+    return settings if isinstance(settings, dict) else {}
+
+
+def save_image_generation_settings(data: dict) -> dict:
+    """保存图片生成 GUI 偏好，不接受 API key 等敏感配置。"""
+    current = get_image_generation_settings()
+    allowed = {"provider", "model", "size", "aspect_ratio", "quality", "n"}
+    next_settings = dict(current)
+    for key in allowed:
+        if key not in data:
+            continue
+        value = data.get(key)
+        if key == "n":
+            try:
+                next_settings[key] = max(1, min(4, int(value or 1)))
+            except (TypeError, ValueError):
+                next_settings[key] = 1
+        else:
+            next_settings[key] = str(value or "").strip()
+    update_gui_settings({"image_generation": next_settings})
+    return next_settings
+
+
+IMAGE_GENERATION_ENV_KEYS = {
+    "OPENAI_API_KEY",
+    "OPENAI_BASE_URL",
+    "OPENAI_IMAGE_MODELS",
+    "GEMINI_API_KEY",
+    "GOOGLE_API_KEY",
+    "GEMINI_BASE_URL",
+    "GEMINI_IMAGE_MODELS",
+}
+
+
+def get_image_generation_env_payload() -> dict:
+    """返回图片生成专用配置。只服务本地 GUI，不写 Claude 全局 env。"""
+    gui_env = get_gui_settings().get("image_generation_env") or {}
+    if not isinstance(gui_env, dict):
+        gui_env = {}
+    data = {key: str(gui_env.get(key) or "") for key in sorted(IMAGE_GENERATION_ENV_KEYS)}
+    inherited = get_env_config()
+    inherited_keys = [key for key in sorted(IMAGE_GENERATION_ENV_KEYS) if not data.get(key) and inherited.get(key)]
+    return {"env": data, "inherited_keys": inherited_keys}
+
+
+def save_image_generation_env_config(data: dict) -> dict:
+    """保存图片生成专用 env 到 ~/.ccb/gui_settings.json。"""
+    raw_env = data.get("env") if isinstance(data.get("env"), dict) else data
+    next_env = {}
+    for key in sorted(IMAGE_GENERATION_ENV_KEYS):
+        value = str(raw_env.get(key) or "").strip() if isinstance(raw_env, dict) else ""
+        if value:
+            next_env[key] = value
+    update_gui_settings({"image_generation_env": next_env})
+    return get_image_generation_env_payload()
+
+
+async def send_json(writer: asyncio.StreamWriter, status: int, data: dict):
+    resp = json.dumps(data, ensure_ascii=False).encode("utf-8")
+    await send_response(writer, status, "application/json; charset=utf-8", resp)
 
 
 def resolve_memory_assistant_model(settings: dict, client_id: str) -> str:
@@ -2909,6 +2996,12 @@ async def handle_api_get(path: str, writer: asyncio.StreamWriter, query: dict = 
         data = list_mcp_servers(cwd)
     elif path == "/api/models":
         data = get_available_models_with_profiles()
+    elif path == "/api/images/models":
+        data = get_image_generation_service().models_payload()
+    elif path == "/api/images/settings":
+        data = get_image_generation_settings()
+    elif path == "/api/images/env":
+        data = get_image_generation_env_payload()
     elif path == "/api/slash-commands":
         if not is_request_allowed(writer):
             await send_response(writer, 403, "application/json", b'{"error":"LAN access disabled"}')
@@ -3059,6 +3152,21 @@ async def handle_api_post(path: str, body: bytes, writer: asyncio.StreamWriter):
         return
     elif path == "/api/env":
         update_env_config(data)
+    elif path == "/api/images/generate":
+        try:
+            service = get_image_generation_service()
+            result = await service.generate(data)
+            await send_json(writer, 200, service.result_to_dict(result))
+        except Exception as exc:
+            status, result = image_error_response(exc)
+            await send_json(writer, status, result)
+        return
+    elif path == "/api/images/settings":
+        await send_json(writer, 200, save_image_generation_settings(data))
+        return
+    elif path == "/api/images/env":
+        await send_json(writer, 200, save_image_generation_env_config(data))
+        return
     elif path.startswith("/api/feishu-gateway/"):
         status, result = await handle_gateway_post(path, data, feishu=_f, get_gateway=get_feishu_gateway)
         if status == 0:
