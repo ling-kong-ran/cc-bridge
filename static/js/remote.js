@@ -10,6 +10,10 @@
     document.getElementById('btn-remote-cancel')?.addEventListener('click', hideForm);
     document.getElementById('btn-remote-save')?.addEventListener('click', saveTarget);
     document.getElementById('btn-remote-test')?.addEventListener('click', () => testConnection(readForm()));
+    document.getElementById('remote-target-form')?.addEventListener('submit', (event) => {
+      event.preventDefault();
+      saveTarget();
+    });
     document.getElementById('remote-form-auth')?.addEventListener('change', updateAuthVisibility);
     loadTargets();
   }

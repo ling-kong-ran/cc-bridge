@@ -59,6 +59,17 @@
     const isLiveFollowup = !!state.isResponding;
     const attachedFiles = ctx.getAttachedFiles();
     if ((!content && attachedFiles.length === 0 && quotesForThisTurn.length === 0) || !state.sessionActive) return;
+    if (root.imageGeneration?.isImageModeActive?.()) {
+      if (!content || attachedFiles.length > 0 || quotesForThisTurn.length > 0 || state.isResponding) return;
+      if (ctx.inputEl) ctx.inputEl.value = '';
+      ctx.updateUI();
+      await root.imageGeneration.generateFromPrompt(content, {
+        sessionId: state.currentSessionId || '',
+        cwd: document.getElementById('cwd-input')?.value.trim() || '',
+      });
+      ctx.captureActiveWorkspaceSnapshot();
+      return;
+    }
     if (state.isViewer && !isLiveFollowup) {
       ctx.setState({ isViewer: false });
       ctx.updateUI();

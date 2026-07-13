@@ -548,8 +548,15 @@ function releaseInactiveWorkspaceSession(sessionId) {
 }
 
 function activateWorkspaceSession(sessionId, opts = {}) {
-  if (!sessionId || sessionId === activeWorkspaceSessionId) {
+  if (!sessionId) {
     renderWorkspace();
+    return;
+  }
+  if (sessionId === activeWorkspaceSessionId) {
+    const session = workspaceSessions.get(sessionId);
+    renderWorkspace();
+    ensureSessionHistoryLoaded(sessionId, session?.cwd || cwdInput?.value?.trim() || '');
+    updateUI();
     return;
   }
   captureActiveWorkspaceSnapshot();

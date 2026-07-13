@@ -50,9 +50,12 @@
     if (ctx.inputEl) {
       ctx.inputEl.disabled = !state.sessionActive;
       ctx.inputEl.style.opacity = state.sessionActive ? '1' : '0.5';
+      const imageMode = !!window.CCBridge?.imageGeneration?.isImageModeActive?.();
       ctx.inputEl.placeholder = state.isResponding
         ? (ctx.t('respondingPlaceholder') || 'Waiting for response...')
-        : (ctx.t('messagePlaceholder') || 'Type a message...');
+        : imageMode
+          ? (ctx.t('imageModePlaceholder') || 'Describe the image to generate...')
+          : (ctx.t('messagePlaceholder') || 'Type a message...');
     }
   }
 

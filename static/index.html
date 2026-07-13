@@ -638,7 +638,7 @@
                 <input id="feishu-event-url" type="hidden" readonly value="/api/feishu-gateway/events">
               </section>
 
-              <section class="gateway-required-form feishu-gateway-panel">
+              <form id="feishu-required-form" class="gateway-required-form feishu-gateway-panel" autocomplete="off">
                 <div class="gateway-required-form-head">
                   <h3 data-i18n="gatewayRequiredParams">Required parameters</h3>
                   <p data-i18n="feishuRequiredParamsHint">Only App ID and App Secret are required in the main flow.</p>
@@ -655,7 +655,7 @@
                 </div>
                 <button id="btn-feishu-gateway-save" class="btn btn-primary feishu-scan-save" type="button"><span class="btn-prefix">&gt;</span> <span data-i18n="save">Save</span></button>
                 <div id="feishu-gateway-form-status" class="remote-form-status" style="display:none"></div>
-              </section>
+              </form>
             </div>
 
             <details id="feishu-manual-config" class="feishu-gateway-panel feishu-advanced-panel">
@@ -663,37 +663,39 @@
                 <span data-i18n="gatewayAdvancedSettings">Advanced settings</span>
                 <small data-i18n="gatewayAdvancedSettingsHint">Event subscription, allowlist, and runtime behavior.</small>
               </summary>
-              <div class="feishu-copy-row feishu-manual-url-row">
-                <input class="input" readonly value="/api/feishu-gateway/events" aria-label="Event URL">
-              </div>
-              <div class="feishu-form-grid">
-                <div class="settings-row span-all">
-                  <label class="field-label" for="feishu-connection-mode" data-i18n="feishuConnectionMode">Connection mode</label>
-                  <select id="feishu-connection-mode" class="select">
-                    <option value="websocket" data-i18n="feishuConnectionWs">WebSocket (recommended, no public URL needed)</option>
-                    <option value="webhook" data-i18n="feishuConnectionWebhook">Webhook (requires reachable HTTP endpoint)</option>
-                  </select>
+              <form id="feishu-advanced-form" autocomplete="off">
+                <div class="feishu-copy-row feishu-manual-url-row">
+                  <input class="input" readonly value="/api/feishu-gateway/events" aria-label="Event URL">
                 </div>
-                <div class="settings-row span-all">
-                  <label class="field-label" for="feishu-verification-token" data-i18n="feishuVerificationToken">Verification Token</label>
-                  <input id="feishu-verification-token" class="input" type="password" autocomplete="off" spellcheck="false">
+                <div class="feishu-form-grid">
+                  <div class="settings-row span-all">
+                    <label class="field-label" for="feishu-connection-mode" data-i18n="feishuConnectionMode">Connection mode</label>
+                    <select id="feishu-connection-mode" class="select">
+                      <option value="websocket" data-i18n="feishuConnectionWs">WebSocket (recommended, no public URL needed)</option>
+                      <option value="webhook" data-i18n="feishuConnectionWebhook">Webhook (requires reachable HTTP endpoint)</option>
+                    </select>
+                  </div>
+                  <div class="settings-row span-all">
+                    <label class="field-label" for="feishu-verification-token" data-i18n="feishuVerificationToken">Verification Token</label>
+                    <input id="feishu-verification-token" class="input" type="password" autocomplete="off" spellcheck="false">
+                  </div>
+                  <div class="settings-row">
+                    <label class="field-label" for="feishu-busy-mode" data-i18n="feishuBusyMode">Busy mode</label>
+                    <select id="feishu-busy-mode" class="select">
+                      <option value="queue" data-i18n="feishuBusyQueue">Queue new messages</option>
+                      <option value="reject" data-i18n="feishuBusyReject">Reject while running</option>
+                    </select>
+                  </div>
+                  <div class="settings-row align-top span-all">
+                    <label class="field-label" for="feishu-allowed-users" data-i18n="feishuAllowedUsers">Allowed users</label>
+                    <textarea id="feishu-allowed-users" class="input feishu-textarea" rows="3" spellcheck="false" data-i18n-placeholder="feishuAllowedUsersPlaceholder" placeholder="ou_xxx, ou_yyy"></textarea>
+                  </div>
+                  <div class="settings-row align-top span-all">
+                    <label class="field-label" for="feishu-allowed-chats" data-i18n="feishuAllowedChats">Allowed chats</label>
+                    <textarea id="feishu-allowed-chats" class="input feishu-textarea" rows="3" spellcheck="false" data-i18n-placeholder="feishuAllowedChatsPlaceholder" placeholder="oc_xxx, oc_yyy"></textarea>
+                  </div>
                 </div>
-                <div class="settings-row">
-                  <label class="field-label" for="feishu-busy-mode" data-i18n="feishuBusyMode">Busy mode</label>
-                  <select id="feishu-busy-mode" class="select">
-                    <option value="queue" data-i18n="feishuBusyQueue">Queue new messages</option>
-                    <option value="reject" data-i18n="feishuBusyReject">Reject while running</option>
-                  </select>
-                </div>
-                <div class="settings-row align-top span-all">
-                  <label class="field-label" for="feishu-allowed-users" data-i18n="feishuAllowedUsers">Allowed users</label>
-                  <textarea id="feishu-allowed-users" class="input feishu-textarea" rows="3" spellcheck="false" data-i18n-placeholder="feishuAllowedUsersPlaceholder" placeholder="ou_xxx, ou_yyy"></textarea>
-                </div>
-                <div class="settings-row align-top span-all">
-                  <label class="field-label" for="feishu-allowed-chats" data-i18n="feishuAllowedChats">Allowed chats</label>
-                  <textarea id="feishu-allowed-chats" class="input feishu-textarea" rows="3" spellcheck="false" data-i18n-placeholder="feishuAllowedChatsPlaceholder" placeholder="oc_xxx, oc_yyy"></textarea>
-                </div>
-              </div>
+              </form>
             </details>
 
             <details id="feishu-gateway-sessions" class="feishu-gateway-panel feishu-scope-panel">
@@ -859,6 +861,7 @@
           <nav class="settings-tabs">
             <button class="settings-tab active" data-tab="general" data-i18n="settingsTabGeneral">General</button>
             <button class="settings-tab" data-tab="env" data-i18n="settingsTabEnv">Environment</button>
+            <button class="settings-tab" data-tab="image" data-i18n="settingsTabImage">Image</button>
             <button class="settings-tab" data-tab="remote" data-i18n="settingsTabRemote">Remote</button>
           </nav>
 
@@ -959,6 +962,49 @@
               </section>
             </div>
 
+            <!-- 生图 -->
+            <div class="config-tab-panel" data-tab="image">
+              <section class="config-section">
+                <h3 class="config-title" data-i18n="imageSettingsTitle">Image Generation</h3>
+                <div class="config-card ui-settings-card image-settings-card">
+                  <div class="settings-row">
+                    <label class="field-label" for="image-settings-provider" data-i18n="imageProvider">Provider</label>
+                    <select id="image-settings-provider" class="select"></select>
+                  </div>
+                  <div class="settings-row">
+                    <label class="field-label" for="image-settings-model" data-i18n="imageModel">Image model</label>
+                    <select id="image-settings-model" class="select"></select>
+                  </div>
+                  <div class="settings-row">
+                    <label class="field-label" id="image-settings-size-label" for="image-settings-size" data-i18n="imageSize">Size</label>
+                    <select id="image-settings-size" class="select"></select>
+                  </div>
+                  <div class="settings-row" id="image-settings-quality-row">
+                    <label class="field-label" for="image-settings-quality" data-i18n="imageQuality">Quality</label>
+                    <select id="image-settings-quality" class="select"></select>
+                  </div>
+                  <div class="settings-row">
+                    <label class="field-label" for="image-settings-count" data-i18n="imageCount">Count</label>
+                    <select id="image-settings-count" class="select">
+                      <option value="1">1</option>
+                      <option value="2">2</option>
+                      <option value="3">3</option>
+                      <option value="4">4</option>
+                    </select>
+                  </div>
+                  <div class="image-settings-env-title" data-i18n="imageApiConfigTitle">Image API config</div>
+                  <div class="image-settings-env-desc" data-i18n="imageSettingsDesc">These settings are used when the image button is active and the main input is sent.</div>
+                  <div id="image-settings-env-fields" class="image-settings-env-fields"></div>
+                  <div class="image-settings-actions">
+                    <button id="btn-save-image-settings" class="btn-save" type="button">
+                      <span class="btn-prefix">&gt;</span> <span data-i18n="saveConfig">Save Config</span>
+                    </button>
+                    <span id="image-settings-status" class="image-settings-status" style="display:none"></span>
+                  </div>
+                </div>
+              </section>
+            </div>
+
             <!-- 远程 -->
             <div class="config-tab-panel" data-tab="remote">
               <section class="config-section">
@@ -975,7 +1021,7 @@
 
               <section class="config-section" id="remote-form-section" style="display:none">
                 <h3 class="config-title" id="remote-form-title" data-i18n="remoteNewTarget">New Target</h3>
-                <div class="config-card ui-settings-card">
+                <form id="remote-target-form" class="config-card ui-settings-card" autocomplete="off">
                   <input type="hidden" id="remote-form-id">
                   <div class="settings-row">
                     <label class="field-label" for="remote-form-name" data-i18n="remoteName">Name</label>
@@ -1034,7 +1080,7 @@
                     <button id="btn-remote-cancel" class="btn-save" type="button"><span data-i18n="cancel">Cancel</span></button>
                   </div>
                   <div id="remote-form-status" class="remote-form-status" style="display:none"></div>
-                </div>
+                </form>
               </section>
 
               <section class="config-section">

@@ -4,6 +4,7 @@
   let modelsData = null;
   let settingsData = null;
   let generating = false;
+  let imageModeActive = false;
 
   function t(key, vars = {}) {
     return root.i18n?.t?.(key, vars) || key;
@@ -32,166 +33,20 @@
     }
   }
 
-  function createPanel() {
-    let panel = document.getElementById('image-generation-panel');
-    if (panel) return panel;
-
-    panel = document.createElement('div');
-    panel.id = 'image-generation-panel';
-    panel.className = 'image-generation-panel is-hidden';
-    panel.setAttribute('role', 'dialog');
-    panel.setAttribute('aria-modal', 'false');
-    panel.innerHTML = `
-      <div class="image-generation-head">
-        <div>
-          <h2 class="image-generation-title">${esc(t('imageGenerationTitle'))}</h2>
-          <div class="image-generation-subtitle">${esc(t('imageGenerationSubtitle'))}</div>
-        </div>
-        <button type="button" class="btn-icon-mini image-generation-close" data-i18n-title="close" aria-label="${esc(t('close'))}">×</button>
-      </div>
-      <div class="image-generation-grid">
-        <label class="image-generation-field">
-          <span class="image-generation-label">${esc(t('imageProvider'))}</span>
-          <select id="image-generation-provider" class="select"></select>
-        </label>
-        <label class="image-generation-field">
-          <span class="image-generation-label">${esc(t('imageModel'))}</span>
-          <select id="image-generation-model" class="select"></select>
-        </label>
-        <label class="image-generation-field" id="image-generation-size-field">
-          <span class="image-generation-label" id="image-generation-size-text">${esc(t('imageSize'))}</span>
-          <select id="image-generation-size" class="select"></select>
-        </label>
-        <label class="image-generation-field" id="image-generation-quality-field">
-          <span class="image-generation-label">${esc(t('imageQuality'))}</span>
-          <select id="image-generation-quality" class="select"></select>
-        </label>
-        <label class="image-generation-field">
-          <span class="image-generation-label">${esc(t('imageCount'))}</span>
-          <select id="image-generation-count" class="select">
-            <option value="1">1</option>
-            <option value="2">2</option>
-            <option value="3">3</option>
-            <option value="4">4</option>
-          </select>
-        </label>
-        <label class="image-generation-field full">
-          <span class="image-generation-label">${esc(t('imagePrompt'))}</span>
-          <textarea id="image-generation-prompt" class="input image-generation-prompt" rows="4" placeholder="${esc(t('imagePromptPlaceholder'))}"></textarea>
-        </label>
-      </div>
-      <div class="image-generation-config is-hidden" id="image-generation-config">
-        <div class="image-generation-config-title">${esc(t('imageApiConfigTitle'))}</div>
-        <div class="image-generation-config-desc" id="image-generation-config-desc"></div>
-        <div class="image-generation-config-fields" id="image-generation-config-fields"></div>
-        <div class="image-generation-config-actions">
-          <button type="button" class="btn image-generation-config-close">${esc(t('close'))}</button>
-          <button type="button" class="btn btn-primary image-generation-config-save">${esc(t('imageApiConfigSave'))}</button>
-        </div>
-      </div>
-      <div class="image-generation-actions">
-        <span class="image-generation-hint">${esc(t('imagePanelHint'))}</span>
-        <span class="image-generation-error" style="display:none"></span>
-        <button type="button" class="btn image-generation-config-toggle">${esc(t('imageApiConfigButton'))}</button>
-        <button type="button" class="btn image-generation-cancel">${esc(t('cancel'))}</button>
-        <button type="button" class="btn btn-primary image-generation-submit">${esc(t('imageGenerateSubmit'))}</button>
-      </div>
-    `;
-    document.querySelector('.input-area')?.appendChild(panel);
-    panel.querySelector('.image-generation-close')?.addEventListener('click', (event) => {
-      event.preventDefault();
-      event.stopPropagation();
-      closeImagePanel();
-    });
-    panel.querySelector('.image-generation-cancel')?.addEventListener('click', (event) => {
-      event.preventDefault();
-      event.stopPropagation();
-      closeImagePanel();
-    });
-    panel.querySelector('.image-generation-submit')?.addEventListener('click', generateImage);
-    panel.querySelector('.image-generation-config-toggle')?.addEventListener('click', toggleApiConfig);
-    panel.querySelector('.image-generation-config-close')?.addEventListener('click', hideApiConfig);
-    panel.querySelector('.image-generation-config-save')?.addEventListener('click', saveApiConfig);
-    panel.querySelector('#image-generation-provider')?.addEventListener('change', () => renderProviderOptions(panel));
-    return panel;
-  }
-
-  function addOption(select, value, label, selected = false) {
-    const opt = document.createElement('option');
-    opt.value = String(value || '');
-    opt.textContent = String(label || value || '');
-    opt.selected = !!selected;
-    select.appendChild(opt);
-  }
-
-  async function loadModels() {
-    if (modelsData) return modelsData;
+  async function loadModels(force = false) {
+    if (modelsData && !force) return modelsData;
     modelsData = await root.api.json('/api/images/models');
     return modelsData;
   }
 
-  async function loadSettings() {
-    if (settingsData) return settingsData;
+  async function loadSettings(force = false) {
+    if (settingsData && !force) return settingsData;
     try {
       settingsData = await root.api.json('/api/images/settings');
     } catch (e) {
       settingsData = {};
     }
     return settingsData;
-  }
-
-  function getDefaultProviderId() {
-    return settingsData?.provider || modelsData?.defaults?.provider || '';
-  }
-
-  function getDefaultModelId(provider) {
-    return settingsData?.model || modelsData?.defaults?.model || provider?.models?.find?.(model => model.default)?.id || provider?.models?.[0]?.id || '';
-  }
-
-  function getDefaultSizeValue(provider) {
-    return provider?.sizes ? (settingsData?.size || modelsData?.defaults?.size || '1024x1024') : (settingsData?.aspect_ratio || modelsData?.defaults?.aspect_ratio || '1:1');
-  }
-
-  function renderProviderOptions(panel) {
-    const providerId = panel.querySelector('#image-generation-provider')?.value || getDefaultProviderId();
-    const provider = (modelsData?.providers || []).find(item => item.id === providerId) || {};
-    const modelSelect = panel.querySelector('#image-generation-model');
-    const sizeSelect = panel.querySelector('#image-generation-size');
-    const qualitySelect = panel.querySelector('#image-generation-quality');
-    const countSelect = panel.querySelector('#image-generation-count');
-    const sizeText = panel.querySelector('#image-generation-size-text');
-    const qualityField = panel.querySelector('#image-generation-quality-field');
-
-    const defaultModel = getDefaultModelId(provider);
-    modelSelect.innerHTML = '';
-    (provider.models || []).forEach(model => addOption(modelSelect, model.id, model.name || model.id, model.id === defaultModel));
-    if (modelSelect.options.length && !modelSelect.value) modelSelect.selectedIndex = 0;
-
-    const sizes = provider.sizes || provider.aspect_ratios || [];
-    const defaultSize = getDefaultSizeValue(provider);
-    sizeSelect.innerHTML = '';
-    sizes.forEach(value => addOption(sizeSelect, value, value, value === defaultSize));
-    if (sizeSelect.options.length && !sizeSelect.value) sizeSelect.selectedIndex = 0;
-    if (sizeText) sizeText.textContent = provider.sizes ? t('imageSize') : t('imageAspectRatio');
-
-    const qualities = provider.qualities || [];
-    const defaultQuality = settingsData?.quality || modelsData?.defaults?.quality || '';
-    qualitySelect.innerHTML = '';
-    qualities.forEach(value => addOption(qualitySelect, value, value, value === defaultQuality));
-    if (qualitySelect.options.length && !qualitySelect.value) qualitySelect.selectedIndex = 0;
-    if (qualityField) qualityField.style.display = qualities.length ? '' : 'none';
-    if (countSelect && settingsData?.n) countSelect.value = String(settingsData.n);
-
-    const errorEl = panel.querySelector('.image-generation-error');
-    if (errorEl) {
-      errorEl.style.display = provider.configured === false ? '' : 'none';
-      errorEl.textContent = provider.configured === false ? t('imageProviderNotConfigured') : '';
-    }
-  }
-
-  function isImagePanelOpen() {
-    const panel = document.getElementById('image-generation-panel');
-    return !!panel && !panel.classList.contains('is-hidden') && !panel.hidden;
   }
 
   function providerConfigFields(providerId) {
@@ -209,150 +64,96 @@
     ];
   }
 
-  function renderApiConfig(panel, env = {}) {
-    const providerId = panel.querySelector('#image-generation-provider')?.value || getDefaultProviderId() || 'openai';
-    const provider = (modelsData?.providers || []).find(item => item.id === providerId) || {};
-    const desc = panel.querySelector('#image-generation-config-desc');
-    const fieldsEl = panel.querySelector('#image-generation-config-fields');
-    if (desc) desc.textContent = t('imageApiConfigDesc', { provider: provider.name || providerId });
-    if (!fieldsEl) return;
-    fieldsEl.innerHTML = '';
-    providerConfigFields(providerId).forEach(field => {
-      const row = document.createElement('label');
-      row.className = 'image-generation-config-field';
-      const label = document.createElement('span');
-      label.className = 'image-generation-label';
-      label.textContent = field.required ? `${field.key} *` : field.key;
-      const input = document.createElement('input');
-      input.className = 'input image-generation-config-input';
-      input.type = field.type || 'text';
-      input.dataset.envKey = field.key;
-      input.value = env[field.key] || '';
-      input.placeholder = field.placeholder || '';
-      input.autocomplete = 'off';
-      row.appendChild(label);
-      row.appendChild(input);
-      fieldsEl.appendChild(row);
-    });
+  function getDefaultProviderId() {
+    return settingsData?.provider || modelsData?.defaults?.provider || modelsData?.providers?.[0]?.id || '';
   }
 
-  async function showApiConfig() {
-    const panel = createPanel();
-    const box = panel.querySelector('#image-generation-config');
-    if (!box) return;
-    try {
-      const data = await root.api.json('/api/images/env');
-      renderApiConfig(panel, data?.env || {});
-    } catch (e) {
-      renderApiConfig(panel, {});
+  function getProvider(providerId = '') {
+    const id = providerId || getDefaultProviderId();
+    return (modelsData?.providers || []).find(item => item.id === id) || {};
+  }
+
+  function getDefaultModelId(provider) {
+    return settingsData?.model || modelsData?.defaults?.model || provider?.models?.find?.(model => model.default)?.id || provider?.models?.[0]?.id || '';
+  }
+
+  function getDefaultSizeValue(provider) {
+    return provider?.sizes ? (settingsData?.size || modelsData?.defaults?.size || '1024x1024') : (settingsData?.aspect_ratio || modelsData?.defaults?.aspect_ratio || '1:1');
+  }
+
+  function addOption(select, value, label, selected = false) {
+    const opt = document.createElement('option');
+    opt.value = String(value || '');
+    opt.textContent = String(label || value || '');
+    opt.selected = !!selected;
+    select.appendChild(opt);
+  }
+
+  function createModeBanner() {
+    let banner = document.getElementById('image-generation-mode-banner');
+    if (banner) return banner;
+    banner = document.createElement('div');
+    banner.id = 'image-generation-mode-banner';
+    banner.className = 'image-generation-mode-banner is-hidden';
+    banner.innerHTML = `
+      <span class="image-generation-mode-dot"></span>
+      <span class="image-generation-mode-text"></span>
+      <button type="button" class="btn-mini image-generation-mode-config"></button>
+      <button type="button" class="btn-icon-mini image-generation-mode-close" aria-label="${esc(t('close'))}">×</button>
+    `;
+    const inputArea = document.querySelector('.input-area');
+    const inputShell = inputArea?.querySelector(':scope > .input-shell');
+    if (inputArea) {
+      inputArea.insertBefore(banner, inputShell || inputArea.firstChild);
     }
-    box.classList.remove('is-hidden');
+    banner.querySelector('.image-generation-mode-close')?.addEventListener('click', () => setImageMode(false));
+    banner.querySelector('.image-generation-mode-config')?.addEventListener('click', () => openImageSettings());
+    return banner;
   }
 
-  function hideApiConfig() {
-    document.getElementById('image-generation-config')?.classList.add('is-hidden');
-  }
-
-  function toggleApiConfig(event) {
-    event?.preventDefault?.();
-    event?.stopPropagation?.();
-    const box = document.getElementById('image-generation-config');
-    if (box && !box.classList.contains('is-hidden')) hideApiConfig();
-    else showApiConfig();
-  }
-
-  async function saveApiConfig(event) {
-    event?.preventDefault?.();
-    event?.stopPropagation?.();
-    const panel = createPanel();
-    const button = panel.querySelector('.image-generation-config-save');
-    const errorEl = panel.querySelector('.image-generation-error');
-    if (button) button.disabled = true;
-    try {
-      const env = {};
-      panel.querySelectorAll('.image-generation-config-input').forEach(input => {
-        const key = input.dataset.envKey;
-        if (!key) return;
-        const value = input.value.trim();
-        if (value) env[key] = value;
-      });
-      await root.api.postJson('/api/images/env', { env });
-      modelsData = null;
-      await loadModels();
-      renderProviderOptions(panel);
-      hideApiConfig();
-      if (errorEl) {
-        errorEl.style.display = '';
-        errorEl.textContent = t('imageApiConfigSaved');
-      }
-    } catch (error) {
-      if (errorEl) {
-        errorEl.style.display = '';
-        errorEl.textContent = t('imageApiConfigSaveFailed', { message: error.message || t('unknownError') });
-      }
-    } finally {
-      if (button) button.disabled = false;
-    }
-  }
-
-  async function openImagePanel() {
-    const panel = createPanel();
-    panel.hidden = false;
-    panel.classList.remove('is-hidden');
-    document.getElementById('btn-generate-image')?.classList.add('active');
-    const promptEl = panel.querySelector('#image-generation-prompt');
-    if (promptEl && !promptEl.value.trim()) promptEl.value = document.getElementById('message-input')?.value || '';
-
-    try {
-      await loadModels();
-      await loadSettings();
-      const providerSelect = panel.querySelector('#image-generation-provider');
-      const defaultProvider = getDefaultProviderId();
-      providerSelect.innerHTML = '';
-      (modelsData.providers || []).forEach(provider => addOption(
-        providerSelect,
-        provider.id,
-        `${provider.name || provider.id}${provider.configured ? '' : ' · ' + t('gatewayUnconfigured')}`,
-        provider.id === defaultProvider
-      ));
-      renderProviderOptions(panel);
-      promptEl?.focus();
-    } catch (error) {
-      const errorEl = panel.querySelector('.image-generation-error');
-      if (errorEl) {
-        errorEl.style.display = '';
-        errorEl.textContent = error.message || t('artifactsLoadFailed');
-      }
-    }
-  }
-
-  function closeImagePanel() {
-    const panel = document.getElementById('image-generation-panel');
-    if (panel) {
-      panel.classList.add('is-hidden');
-      panel.hidden = true;
-    }
-    document.getElementById('btn-generate-image')?.classList.remove('active');
-  }
-
-  function toggleImagePanel() {
-    if (isImagePanelOpen()) {
-      closeImagePanel();
-      return;
-    }
-    openImagePanel();
-  }
-
-  function handleDocumentClick(event) {
-    const panel = document.getElementById('image-generation-panel');
+  function updateImageModeUi() {
     const button = document.getElementById('btn-generate-image');
-    if (!isImagePanelOpen() || !panel || !button) return;
-    if (panel.contains(event.target) || button.contains(event.target)) return;
-    closeImagePanel();
+    button?.classList.toggle('active', imageModeActive);
+    document.body?.classList.toggle('image-generation-mode-active', imageModeActive);
+    const banner = createModeBanner();
+    banner.classList.toggle('is-hidden', !imageModeActive);
+    const text = banner.querySelector('.image-generation-mode-text');
+    const config = banner.querySelector('.image-generation-mode-config');
+    if (text) text.textContent = t('imageModeActiveHint');
+    if (config) config.textContent = t('imageModeConfigLink');
+
+    const input = document.getElementById('message-input');
+    if (input) {
+      const hasActiveSession = !!document.body?.classList.contains('has-active-session');
+      if (hasActiveSession) {
+        input.disabled = false;
+        input.style.opacity = '1';
+      }
+      input.placeholder = imageModeActive ? t('imageModePlaceholder') : t('messagePlaceholder');
+    }
   }
 
-  function handleDocumentKeydown(event) {
-    if (event.key === 'Escape' && isImagePanelOpen()) closeImagePanel();
+  function setImageMode(active) {
+    imageModeActive = !!active;
+    updateImageModeUi();
+    if (imageModeActive) {
+      document.getElementById('message-input')?.focus();
+      loadModels().catch(() => {});
+      loadSettings().catch(() => {});
+      root.toast?.showToast?.(t('imageModeEnabled'), 'success');
+    } else {
+      root.toast?.showToast?.(t('imageModeDisabled'), 'info');
+    }
+  }
+
+  function toggleImageMode() {
+    setImageMode(!imageModeActive);
+  }
+
+  function openImageSettings() {
+    document.getElementById('btn-nav-settings')?.click();
+    const tab = document.querySelector('.settings-tab[data-tab="image"]');
+    tab?.click();
   }
 
   function createAssistantShell(extraClass = '') {
@@ -473,90 +274,206 @@
     if (content) content.textContent = t('imageGenerateFailed', { message });
   }
 
-  async function generateImage() {
-    if (generating) return;
-    const panel = createPanel();
-    const prompt = panel.querySelector('#image-generation-prompt')?.value.trim() || '';
-    if (!prompt) {
-      const errorEl = panel.querySelector('.image-generation-error');
-      if (errorEl) {
-        errorEl.style.display = '';
-        errorEl.textContent = t('imagePromptRequired');
-      }
-      panel.querySelector('#image-generation-prompt')?.focus();
-      return;
-    }
-
-    const provider = panel.querySelector('#image-generation-provider')?.value || '';
-    const providerInfo = (modelsData?.providers || []).find(item => item.id === provider) || {};
-    const sizeValue = panel.querySelector('#image-generation-size')?.value || '';
-    const payload = {
-      provider,
-      model: panel.querySelector('#image-generation-model')?.value || '',
+  async function buildPayload(prompt, options = {}) {
+    await loadModels();
+    await loadSettings();
+    const providerId = settingsData?.provider || modelsData?.defaults?.provider || '';
+    const provider = getProvider(providerId);
+    if (!provider?.id) throw new Error(t('imageNoProviders'));
+    if (provider.configured === false) throw new Error(t('imageProviderNotConfigured'));
+    const sizeValue = getDefaultSizeValue(provider);
+    return {
+      provider: provider.id,
+      model: getDefaultModelId(provider),
       prompt,
-      cwd: document.getElementById('cwd-input')?.value.trim() || '',
-      size: providerInfo.sizes ? sizeValue : '',
-      aspect_ratio: providerInfo.aspect_ratios ? sizeValue : '',
-      quality: panel.querySelector('#image-generation-quality')?.value || '',
-      n: Number(panel.querySelector('#image-generation-count')?.value || 1),
+      cwd: options.cwd || document.getElementById('cwd-input')?.value.trim() || '',
+      session_id: options.sessionId || '',
+      size: provider.sizes ? sizeValue : '',
+      aspect_ratio: provider.aspect_ratios ? sizeValue : '',
+      quality: settingsData?.quality || modelsData?.defaults?.quality || '',
+      n: Number(settingsData?.n || 1),
       extra: {},
     };
+  }
+
+  async function generateFromPrompt(prompt, options = {}) {
+    if (generating) return { ok: false, error: t('imageGenerating') };
+    const cleanPrompt = String(prompt || '').trim();
+    if (!cleanPrompt) return { ok: false, error: t('imagePromptRequired') };
 
     generating = true;
-    const submit = panel.querySelector('.image-generation-submit');
     const button = document.getElementById('btn-generate-image');
-    if (submit) submit.disabled = true;
     button?.classList.add('loading');
-
-    root.messageUi?.addUserMessage?.(`${t('generateImageShort')}: ${prompt}`, [], { messagesEl: getActiveMessagesEl() });
+    root.messageUi?.addUserMessage?.(`${t('generateImageShort')}: ${cleanPrompt}`, [], { messagesEl: getActiveMessagesEl() });
     const pendingEl = createPendingCard();
-    closeImagePanel();
 
     try {
+      const payload = await buildPayload(cleanPrompt, options);
       const data = await root.api.postJson('/api/images/generate', payload);
       if (!data?.ok) throw new Error(data?.error || t('unknownError'));
       data.size = payload.size;
       data.aspect_ratio = payload.aspect_ratio;
       data.n = payload.n;
-      settingsData = {
-        provider: payload.provider,
-        model: payload.model,
-        size: payload.size,
-        aspect_ratio: payload.aspect_ratio,
-        quality: payload.quality,
-        n: payload.n,
-      };
-      root.api.postJson('/api/images/settings', settingsData).catch(() => {});
       renderGeneratedImages(data, pendingEl);
-      const input = document.getElementById('message-input');
-      if (input && input.value.trim() === prompt) input.value = '';
+      return { ok: true, data };
     } catch (error) {
       showPendingError(pendingEl, error.message || t('unknownError'));
+      return { ok: false, error: error.message || t('unknownError') };
     } finally {
       generating = false;
-      if (submit) submit.disabled = false;
       button?.classList.remove('loading');
     }
   }
 
+  function populateSelect(select, values, selectedValue) {
+    if (!select) return;
+    select.innerHTML = '';
+    values.forEach(item => {
+      const value = typeof item === 'string' ? item : item.id;
+      const label = typeof item === 'string' ? item : (item.name || item.id);
+      addOption(select, value, label, value === selectedValue);
+    });
+    if (select.options.length && !select.value) select.selectedIndex = 0;
+  }
+
+  function selectedSettingsProvider() {
+    return getProvider(document.getElementById('image-settings-provider')?.value || getDefaultProviderId());
+  }
+
+  function renderSettingsProviderOptions(env = null) {
+    const provider = selectedSettingsProvider();
+    populateSelect(document.getElementById('image-settings-model'), provider.models || [], getDefaultModelId(provider));
+    populateSelect(document.getElementById('image-settings-size'), provider.sizes || provider.aspect_ratios || [], getDefaultSizeValue(provider));
+    const sizeLabel = document.getElementById('image-settings-size-label');
+    if (sizeLabel) sizeLabel.textContent = provider.sizes ? t('imageSize') : t('imageAspectRatio');
+    populateSelect(document.getElementById('image-settings-quality'), provider.qualities || [], settingsData?.quality || modelsData?.defaults?.quality || '');
+    const qualityRow = document.getElementById('image-settings-quality-row');
+    if (qualityRow) qualityRow.style.display = (provider.qualities || []).length ? '' : 'none';
+
+    const envFields = document.getElementById('image-settings-env-fields');
+    if (!envFields) return;
+    envFields.innerHTML = '';
+    providerConfigFields(provider.id).forEach(field => {
+      const row = document.createElement('label');
+      row.className = 'settings-row image-settings-env-row';
+      const label = document.createElement('span');
+      label.className = 'field-label';
+      label.textContent = field.required ? `${field.key} *` : field.key;
+      const input = document.createElement('input');
+      input.className = 'input';
+      input.type = field.type || 'text';
+      input.dataset.envKey = field.key;
+      input.value = env?.[field.key] || '';
+      input.placeholder = field.placeholder || '';
+      input.autocomplete = 'off';
+      row.appendChild(label);
+      row.appendChild(input);
+      envFields.appendChild(row);
+    });
+  }
+
+  async function loadImageSettingsForm() {
+    const providerSelect = document.getElementById('image-settings-provider');
+    if (!providerSelect) return;
+    try {
+      await loadModels(true);
+      await loadSettings(true);
+      const envPayload = await root.api.json('/api/images/env').catch(() => ({ env: {} }));
+      providerSelect.innerHTML = '';
+      const defaultProvider = getDefaultProviderId();
+      (modelsData.providers || []).forEach(provider => addOption(
+        providerSelect,
+        provider.id,
+        `${provider.name || provider.id}${provider.configured ? '' : ' · ' + t('gatewayUnconfigured')}`,
+        provider.id === defaultProvider
+      ));
+      document.getElementById('image-settings-count').value = String(settingsData?.n || 1);
+      renderSettingsProviderOptions(envPayload.env || {});
+    } catch (error) {
+      showImageSettingsStatus(t('artifactsLoadFailed'), true);
+    }
+  }
+
+  function collectImageSettingsForm() {
+    const provider = selectedSettingsProvider();
+    const sizeValue = document.getElementById('image-settings-size')?.value || '';
+    const env = {};
+    document.querySelectorAll('#image-settings-env-fields [data-env-key]').forEach(input => {
+      const value = input.value.trim();
+      if (value) env[input.dataset.envKey] = value;
+    });
+    return {
+      settings: {
+        provider: provider.id || document.getElementById('image-settings-provider')?.value || '',
+        model: document.getElementById('image-settings-model')?.value || '',
+        size: provider.sizes ? sizeValue : '',
+        aspect_ratio: provider.aspect_ratios ? sizeValue : '',
+        quality: document.getElementById('image-settings-quality')?.value || '',
+        n: Number(document.getElementById('image-settings-count')?.value || 1),
+      },
+      env,
+    };
+  }
+
+  function showImageSettingsStatus(message, isError = false) {
+    const status = document.getElementById('image-settings-status');
+    if (!status) return;
+    status.style.display = '';
+    status.classList.toggle('error', !!isError);
+    status.textContent = message || '';
+  }
+
+  async function saveImageSettingsForm() {
+    const button = document.getElementById('btn-save-image-settings');
+    if (button) button.disabled = true;
+    try {
+      const { settings, env } = collectImageSettingsForm();
+      await root.api.postJson('/api/images/settings', settings);
+      await root.api.postJson('/api/images/env', { env });
+      modelsData = null;
+      settingsData = null;
+      await loadImageSettingsForm();
+      showImageSettingsStatus(t('imageSettingsSaved'), false);
+    } catch (error) {
+      showImageSettingsStatus(t('imageSettingsSaveFailed', { message: error.message || t('unknownError') }), true);
+    } finally {
+      if (button) button.disabled = false;
+    }
+  }
+
+  function initImageSettingsForm() {
+    const providerSelect = document.getElementById('image-settings-provider');
+    if (!providerSelect || providerSelect.dataset.imageSettingsBound === '1') return;
+    providerSelect.dataset.imageSettingsBound = '1';
+    providerSelect.addEventListener('change', async () => {
+      const envPayload = await root.api.json('/api/images/env').catch(() => ({ env: {} }));
+      renderSettingsProviderOptions(envPayload.env || {});
+    });
+    document.getElementById('btn-save-image-settings')?.addEventListener('click', saveImageSettingsForm);
+    loadImageSettingsForm();
+  }
+
   function initImageGeneration() {
     const button = document.getElementById('btn-generate-image');
-    if (!button || button.dataset.imageGenerationBound === '1') return;
-    button.dataset.imageGenerationBound = '1';
-    button.addEventListener('click', (event) => {
-      event.preventDefault();
-      event.stopPropagation();
-      toggleImagePanel();
-    });
-    document.addEventListener('click', handleDocumentClick);
-    document.addEventListener('keydown', handleDocumentKeydown);
+    if (button && button.dataset.imageGenerationBound !== '1') {
+      button.dataset.imageGenerationBound = '1';
+      button.addEventListener('click', (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        toggleImageMode();
+      });
+    }
+    createModeBanner();
+    updateImageModeUi();
+    initImageSettingsForm();
   }
 
   root.imageGeneration = {
     initImageGeneration,
-    openImagePanel,
-    closeImagePanel,
-    generateImage,
+    toggleImageMode,
+    setImageMode,
+    isImageModeActive: () => imageModeActive,
+    generateFromPrompt,
     renderGeneratedImages,
     getMessagesEl: null,
   };

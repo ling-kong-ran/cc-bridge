@@ -302,6 +302,26 @@
     return esc(text).replace(/\n/g, '<br>');
   }
 
+  function renderGeneratedImageBlock(block, options = {}) {
+    const mod = window.CCBridge?.imageGeneration;
+    if (mod?.renderGeneratedImages) {
+      const wrapper = document.createElement('div');
+      const msg = document.createElement('div');
+      msg.className = 'message assistant generated-image-message';
+      const bubble = document.createElement('div');
+      bubble.className = 'msg-bubble';
+      const content = document.createElement('div');
+      content.className = 'msg-content';
+      bubble.appendChild(content);
+      msg.appendChild(bubble);
+      wrapper.appendChild(msg);
+      mod.renderGeneratedImages(block, msg);
+      return content.innerHTML;
+    }
+    const { esc, t } = getContext(options);
+    return `<div class="generated-image-title">${esc(t('imageGenerated'))}</div>`;
+  }
+
   function renderBlock(block, options = {}) {
     const { esc, t, renderMd, runningTasks } = getContext(options);
     if (block.type === 'thinking' && block.thinking) {
@@ -319,6 +339,8 @@
     } else if (block.type === 'tool_use') {
       const isRunningTask = block.name === 'Task' && block.id && runningTasks.has(block.id);
       return renderToolCard(block, { isRunning: isRunningTask }, options);
+    } else if (block.type === 'generated_image') {
+      return renderGeneratedImageBlock(block, options);
     }
     return '';
   }
@@ -366,6 +388,8 @@
             html += ctx.renderBlock(block);
           } else if (block.type === 'tool_use') {
             html += ctx.renderHistoryToolCard(block);
+          } else if (block.type === 'generated_image') {
+            html += ctx.renderBlock(block);
           }
         }
         contentEl.innerHTML = html;
@@ -410,6 +434,8 @@
             html += renderBlock(block, options);
           } else if (block.type === 'tool_use') {
             html += renderHistoryToolCard(block, options);
+          } else if (block.type === 'generated_image') {
+            html += renderBlock(block, options);
           }
         }
         contentEl.innerHTML = html;

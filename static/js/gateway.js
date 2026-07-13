@@ -12,6 +12,14 @@
   function init() {
     document.getElementById('btn-feishu-gateway-refresh')?.addEventListener('click', loadGateway);
     document.getElementById('btn-feishu-gateway-save')?.addEventListener('click', () => saveConfig());
+    document.getElementById('feishu-required-form')?.addEventListener('submit', (event) => {
+      event.preventDefault();
+      saveConfig();
+    });
+    document.getElementById('feishu-advanced-form')?.addEventListener('submit', (event) => {
+      event.preventDefault();
+      saveConfig();
+    });
     document.getElementById('btn-feishu-copy-url')?.addEventListener('click', copyEventUrl);
     document.getElementById('btn-feishu-onboard-start')?.addEventListener('click', beginOnboard);
     document.getElementById('btn-feishu-onboard-cancel')?.addEventListener('click', () => cancelOnboard(false));

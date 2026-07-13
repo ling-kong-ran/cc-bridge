@@ -285,7 +285,7 @@
     accessContext = { isLocalhost: Boolean(data.is_localhost), defaultCwd: data.default_cwd || '' };
     document.body.classList.toggle('pane-right-collapsed', data.right_panel_collapsed === true);
     try {
-      applyRightPaneWidth(data.right_panel_width);
+      root.rightPanel?.applyRightPaneWidth?.(data.right_panel_width);
     } catch (e) {
       console.warn('Apply right pane width failed:', e);
     }

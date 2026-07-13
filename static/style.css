@@ -4725,6 +4725,91 @@ html.light-theme body.resizing-workspace-pane .workspace-pane-resizer::after {
   color: var(--red);
 }
 
+.image-generation-mode-banner {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 8px;
+  padding: 8px 10px;
+  border: 1px solid rgba(var(--accent-rgb), 0.34);
+  border-radius: var(--radius-sm);
+  color: var(--text-bright);
+  background: rgba(var(--accent-rgb), 0.08);
+}
+
+.image-generation-mode-banner.is-hidden {
+  display: none !important;
+}
+
+.image-generation-mode-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--cyan);
+  box-shadow: 0 0 12px rgba(var(--accent-rgb), 0.7);
+  flex: 0 0 auto;
+}
+
+.image-generation-mode-text {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.image-generation-mode-config {
+  flex: 0 0 auto;
+}
+
+.image-generation-mode-active #message-input {
+  border-color: rgba(var(--accent-rgb), 0.46);
+  box-shadow: 0 0 0 1px rgba(var(--accent-rgb), 0.12);
+}
+
+.image-generation-mode-active .btn-generate-image.active {
+  color: var(--cyan);
+  border-color: rgba(var(--accent-rgb), 0.58);
+  background: rgba(var(--accent-rgb), 0.12);
+  box-shadow: 0 0 0 1px rgba(var(--accent-rgb), 0.16), 0 0 18px rgba(var(--accent-rgb), 0.14);
+}
+
+.image-settings-env-title {
+  margin-top: 14px;
+  color: var(--text-bright);
+  font-family: var(--font-ui);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.image-settings-env-desc,
+.image-settings-status {
+  color: var(--text-muted);
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.image-settings-env-desc {
+  margin-top: 4px;
+}
+
+.image-settings-env-fields {
+  display: grid;
+  gap: 0;
+  margin-top: 8px;
+}
+
+.image-settings-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 14px;
+  flex-wrap: wrap;
+}
+
+.image-settings-status.error {
+  color: var(--red);
+}
+
 .generated-image-card {
   margin-top: 8px;
   overflow: hidden;

@@ -80,6 +80,7 @@
         tab.classList.add('active');
         const panel = document.querySelector(`.config-tab-panel[data-tab="${tabName}"]`);
         if (panel) panel.classList.add('active');
+        if (tabName === 'image') window.CCBridge?.imageGeneration?.initImageGeneration?.();
       });
     });
   }

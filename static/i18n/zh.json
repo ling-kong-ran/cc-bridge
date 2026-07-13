@@ -581,6 +581,7 @@
   "mentionAllTag": "全部",
   "settingsTabGeneral": "通用",
   "settingsTabEnv": "环境",
+  "settingsTabImage": "生图",
   "settingsTabRemote": "远程",
   "settingsTabIntegrations": "集成",
   "settingsTabMemory": "记忆",
@@ -699,5 +700,14 @@
   "imageApiConfigDesc": "配置 {provider} 的 API Key 和可选参数。密钥会保存到本项目 GUI 配置 ~/.ccb/gui_settings.json 中。",
   "imageApiConfigSave": "保存配置",
   "imageApiConfigSaved": "生图 API 配置已保存",
-  "imageApiConfigSaveFailed": "生图 API 配置保存失败: {message}"
+  "imageApiConfigSaveFailed": "生图 API 配置保存失败: {message}",
+  "imageModeEnabled": "已进入生图模式",
+  "imageModeDisabled": "已退出生图模式",
+  "imageModeActiveHint": "当前为生图模式：输入图片描述并发送，将直接生成图片。",
+  "imageModeConfigLink": "生图配置",
+  "imageModePlaceholder": "描述你想生成的图片...",
+  "imageSettingsTitle": "图片生成配置",
+  "imageSettingsDesc": "这些配置会在生图按钮启用后，使用主输入框发送时生效。",
+  "imageSettingsSaved": "生图配置已保存",
+  "imageSettingsSaveFailed": "生图配置保存失败: {message}"
 }

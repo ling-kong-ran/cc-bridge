@@ -6,6 +6,7 @@ import html
 import json
 import os
 import re
+import uuid
 from collections import OrderedDict
 from datetime import datetime
 from pathlib import Path
@@ -593,6 +594,81 @@ def _find_jsonl_path(session_id: str, cwd: str) -> Path | None:
     return None
 
 
+def append_generated_image_message(session_id: str, cwd: str, prompt: str, result: dict) -> bool:
+    """把 GUI 生图结果追加到当前会话 JSONL，供历史恢复。"""
+    if not session_id:
+        return False
+    jsonl_path = _find_jsonl_path(session_id, cwd) or _jsonl_path(session_id, cwd)
+    now = datetime.utcnow().isoformat(timespec="milliseconds") + "Z"
+    user_message = {
+        "type": "user",
+        "message": {
+            "role": "user",
+            "content": [{"type": "text", "text": f"生图：{prompt}"}],
+        },
+        "uuid": str(uuid.uuid4()),
+        "timestamp": now,
+        "sessionId": session_id,
+        "isSidechain": False,
+    }
+    assistant_message = {
+        "type": "assistant",
+        "message": {
+            "role": "assistant",
+            "content": [{
+                "type": "ccb_generated_image",
+                "provider": result.get("provider", ""),
+                "model": result.get("model", ""),
+                "prompt": prompt,
+                "size": result.get("size", ""),
+                "aspect_ratio": result.get("aspect_ratio", ""),
+                "quality": result.get("quality", ""),
+                "images": result.get("images") or [],
+                "request_id": result.get("request_id", ""),
+                "usage": result.get("usage") or {},
+            }],
+        },
+        "uuid": str(uuid.uuid4()),
+        "timestamp": now,
+        "sessionId": session_id,
+        "isSidechain": False,
+    }
+    try:
+        jsonl_path.parent.mkdir(parents=True, exist_ok=True)
+        with jsonl_path.open("ab") as f:
+            f.write((json.dumps(user_message, ensure_ascii=False) + "\n").encode("utf-8"))
+            f.write((json.dumps(assistant_message, ensure_ascii=False) + "\n").encode("utf-8"))
+        invalidate_history_cache(session_id, cwd)
+        return True
+    except OSError:
+        return False
+
+
+def _generated_image_block(block: dict) -> dict:
+    return {
+        "type": "generated_image",
+        "provider": block.get("provider", ""),
+        "model": block.get("model", ""),
+        "prompt": block.get("prompt", ""),
+        "size": block.get("size", ""),
+        "aspect_ratio": block.get("aspect_ratio", ""),
+        "quality": block.get("quality", ""),
+        "images": block.get("images") or [],
+        "request_id": block.get("request_id", ""),
+        "usage": block.get("usage") or {},
+    }
+
+
+def _append_assistant_block(blocks: list, block: dict):
+    btype = block.get("type")
+    if btype == "text" and block.get("text"):
+        blocks.append({"type": "text", "text": block["text"]})
+    elif btype == "thinking" and block.get("thinking"):
+        blocks.append({"type": "thinking", "thinking": block["thinking"]})
+    elif btype == "ccb_generated_image":
+        blocks.append(_generated_image_block(block))
+
+
 def _extract_user_text(obj: dict) -> str:
     text = _extract_raw_user_text(obj)
     user_text, _ = _split_injected_context(text)
@@ -873,11 +949,7 @@ def _aggregate_messages(f_bin):
             before_count = len(blocks)
             if isinstance(content, list):
                 for block in content:
-                    if block.get("type") == "text" and block.get("text"):
-                        blocks.append({"type": "text", "text": block["text"]})
-                    elif block.get("type") == "thinking" and block.get("thinking"):
-                        blocks.append({"type": "thinking", "thinking": block["thinking"]})
-                    elif block.get("type") == "tool_use":
+                    if block.get("type") == "tool_use":
                         tool_id = block.get("id", "")
                         item = {
                             "type": "tool_use",
@@ -890,6 +962,8 @@ def _aggregate_messages(f_bin):
                             if tool_id in pending_results:
                                 item["result"] = pending_results.pop(tool_id)
                         blocks.append(item)
+                    else:
+                        _append_assistant_block(blocks, block)
             if len(blocks) > before_count and not current_turn_appended:
                 messages.append(current_assistant_msg)
                 current_turn_appended = True
@@ -924,12 +998,7 @@ def _aggregate_tail_messages(path, need: int):
                 if isinstance(content, list):
                     new_blocks: list = []
                     for block in content:
-                        btype = block.get("type")
-                        if btype == "text" and block.get("text"):
-                            new_blocks.append({"type": "text", "text": block["text"]})
-                        elif btype == "thinking" and block.get("thinking"):
-                            new_blocks.append({"type": "thinking", "thinking": block["thinking"]})
-                        elif btype == "tool_use":
+                        if block.get("type") == "tool_use":
                             tool_id = block.get("id", "")
                             item = {
                                 "type": "tool_use",
@@ -940,6 +1009,11 @@ def _aggregate_tail_messages(path, need: int):
                             if tool_id and tool_id in pending_results:
                                 item["result"] = pending_results.pop(tool_id)
                             new_blocks.append(item)
+                        else:
+                            before = len(new_blocks)
+                            _append_assistant_block(new_blocks, block)
+                            if len(new_blocks) == before:
+                                continue
                     if new_blocks:
                         # 反向遇到，prepend 以保持 turn 内 block 的正向顺序
                         pending_turn_blocks = new_blocks + pending_turn_blocks

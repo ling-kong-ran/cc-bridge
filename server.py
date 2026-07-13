@@ -50,7 +50,7 @@ from config_manager import (
     get_agent,
     get_agents_for_cli,
 )
-from session_store import list_sessions, save_session, add_session_usage, delete_session, load_session_history, rename_session, update_session_cwd, toggle_pin, invalidate_history_cache
+from session_store import list_sessions, save_session, add_session_usage, delete_session, load_session_history, rename_session, update_session_cwd, toggle_pin, invalidate_history_cache, append_generated_image_message
 from memory_index import save_memory_file, index_memory
 import wiki_store
 import context_orchestrator
@@ -3172,7 +3172,14 @@ async def handle_api_post(path: str, body: bytes, writer: asyncio.StreamWriter):
         try:
             service = get_image_generation_service()
             result = await service.generate(data)
-            await send_json(writer, 200, service.result_to_dict(result))
+            payload = service.result_to_dict(result)
+            payload["size"] = str(data.get("size") or "")
+            payload["aspect_ratio"] = str(data.get("aspect_ratio") or "")
+            payload["quality"] = str(data.get("quality") or "")
+            session_id = str(data.get("session_id") or "").strip()
+            if session_id:
+                append_generated_image_message(session_id, str(data.get("cwd") or ""), str(data.get("prompt") or ""), payload)
+            await send_json(writer, 200, payload)
         except Exception as exc:
             status, result = image_error_response(exc)
             await send_json(writer, status, result)

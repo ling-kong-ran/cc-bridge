@@ -581,6 +581,7 @@
   "mentionAllTag": "ALL",
   "settingsTabGeneral": "General",
   "settingsTabEnv": "Environment",
+  "settingsTabImage": "Image",
   "settingsTabRemote": "Remote",
   "settingsTabIntegrations": "Integrations",
   "settingsTabMemory": "Memory",
@@ -699,5 +700,14 @@
   "imageApiConfigDesc": "Configure the API key and optional settings for {provider}. Secrets are saved to this GUI's ~/.ccb/gui_settings.json config.",
   "imageApiConfigSave": "Save config",
   "imageApiConfigSaved": "Image API config saved",
-  "imageApiConfigSaveFailed": "Failed to save image API config: {message}"
+  "imageApiConfigSaveFailed": "Failed to save image API config: {message}",
+  "imageModeEnabled": "Image mode enabled",
+  "imageModeDisabled": "Image mode disabled",
+  "imageModeActiveHint": "Image mode is active: describe an image and send to generate it directly.",
+  "imageModeConfigLink": "Image settings",
+  "imageModePlaceholder": "Describe the image you want to generate...",
+  "imageSettingsTitle": "Image generation settings",
+  "imageSettingsDesc": "These settings are used when the image button is active and the main input is sent.",
+  "imageSettingsSaved": "Image settings saved",
+  "imageSettingsSaveFailed": "Failed to save image settings: {message}"
 }
