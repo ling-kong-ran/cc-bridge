@@ -74,10 +74,20 @@
       });
     });
 
-    // 网关通知复选框：变化时持久化到 gui_settings
+    // 网关通知复选框：只有对应网关已完成必备参数配置时才允许开启。
     if (notifyFeishu) {
-      notifyFeishu.addEventListener('change', () => {
-        applyNotifyFeishuPreference(notifyFeishu.checked, true);
+      notifyFeishu.addEventListener('change', async () => {
+        if (!notifyFeishu.checked) {
+          applyNotifyFeishuPreference(false, true);
+          return;
+        }
+        const configured = await isFeishuNotifyGatewayConfigured();
+        if (!configured) {
+          applyNotifyFeishuPreference(false, true);
+          showToast?.(t('gatewayNotifyUnconfigured'), 'error');
+          return;
+        }
+        applyNotifyFeishuPreference(true, true);
       });
     }
   }
@@ -118,6 +128,15 @@
       notificationsToggle.disabled = !supported;
     }
     if (persist) saveGuiSettings({ notifications_enabled: notificationsEnabled });
+  }
+
+  async function isFeishuNotifyGatewayConfigured() {
+    try {
+      const config = await root.gateway?.getConfig?.();
+      return Boolean(String(config?.app_id || '').trim() && String(config?.app_secret || '').trim());
+    } catch (e) {
+      return false;
+    }
   }
 
   function applyNotifyFeishuPreference(enabled, persist = false) {
@@ -256,7 +275,7 @@
       if (languageSelect) languageSelect.value = language;
     }
     applyNotificationPreference(Boolean(data.notifications_enabled));
-    applyNotifyFeishuPreference(data.notify_feishu === true);
+    applyNotifyFeishuPreference(data.notify_feishu === true && await isFeishuNotifyGatewayConfigured());
     try {
       await loadContextSettings();
     } catch (e) {

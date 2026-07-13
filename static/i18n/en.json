@@ -424,6 +424,7 @@
   "remoteTargetNone": "Local machine (no remote target)",
   "allowRemoteFix": "Allow remote writes",
   "gatewayNotify": "Gateway notify",
+  "gatewayNotifyUnconfigured": "Configure the matching message gateway before enabling gateway notifications.",
   "memoryAutoContext": "Automatic memory context",
   "memoryAutoContextDesc": "Retrieve Memory / Wiki before sending",
   "memoryAssistantModel": "Memory assistant model",

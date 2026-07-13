@@ -441,10 +441,17 @@
     return Array.isArray(value) ? value.join('\n') : String(value || '');
   }
 
+  async function getConfig() {
+    if (gatewayConfig) return gatewayConfig;
+    await loadConfig();
+    return gatewayConfig;
+  }
+
   root.gateway = {
     init,
     loadGateway,
     loadConfig,
     loadScopes,
+    getConfig,
   };
 })();
