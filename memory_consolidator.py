@@ -8,6 +8,7 @@ from __future__ import annotations
 import hashlib
 import json
 import re
+import threading
 import time
 from pathlib import Path
 from typing import Any
@@ -16,6 +17,7 @@ from memory_index import index_memory, save_memory_file, search_memory
 
 JOBS_PATH = Path.home() / ".ccb" / "memory_consolidation_jobs.json"
 JOBS_PATH.parent.mkdir(parents=True, exist_ok=True)
+_JOBS_LOCK = threading.RLock()
 
 _CONFIRM_RE = re.compile(r"(记住|记一下|以后|下次|每次|不要再|别再|不需要确认|无需确认|默认|偏好|习惯)")
 _SENSITIVE_RE = re.compile(
@@ -28,10 +30,11 @@ def enqueue_consolidation(session_id: str, cwd: str, run_id: str, client_id: str
     """创建后台沉淀任务，返回 job_id。"""
     key = f"{session_id}|{run_id}|{client_id}|{user_message[:120]}"
     job_id = "memjob_" + hashlib.sha1(key.encode("utf-8", "ignore")).hexdigest()[:16]
-    jobs = _load_jobs()
-    if job_id not in jobs:
-        now = time.time()
-        jobs[job_id] = {
+    with _JOBS_LOCK:
+        jobs = _load_jobs()
+        if job_id not in jobs:
+            now = time.time()
+            jobs[job_id] = {
             "job_id": job_id,
             "session_id": session_id,
             "run_id": run_id,
@@ -46,9 +49,9 @@ def enqueue_consolidation(session_id: str, cwd: str, run_id: str, client_id: str
             "written": 0,
             "skipped": 0,
             "files": [],
-            "error": "",
-        }
-        _save_jobs(jobs)
+                "error": "",
+            }
+            _save_jobs(jobs)
     return job_id
 
 
@@ -76,7 +79,7 @@ def run_consolidation_job(
         job["updated_at"] = time.time()
         _save_jobs(jobs)
 
-        mode = settings.get("memoryAutoConsolidate", "auto")
+        mode = settings.get("memoryAutoConsolidate", "safe")
         if mode == "off":
             job.update({"status": "skipped", "skipped": 1, "error": "memoryAutoConsolidate off"})
             job["updated_at"] = time.time()
@@ -84,18 +87,40 @@ def run_consolidation_job(
             _save_jobs(jobs)
             return job
 
-        # candidates=None → 纯正则兜底；否则用调用方传入的 LLM 候选
-        if candidates is None:
+        # candidates 支持旧 list 语义，也支持 memory_llm.ExtractionResult。
+        extraction_status = getattr(candidates, "status", None)
+        if extraction_status == "failed":
+            job["extraction_source"] = "regex_fallback"
+            job["extraction_error"] = getattr(candidates, "error", "")
+            candidates = extract_candidates(job, settings)
+        elif extraction_status == "ok":
+            job["extraction_source"] = "llm"
+            candidates = list(getattr(candidates, "candidates", []) or [])
+        elif candidates is None:
             candidates = extract_candidates(job, settings)
             job["extraction_source"] = "regex"
         else:
             job["extraction_source"] = "llm"
 
+        for idx, candidate in enumerate(candidates):
+            candidate.setdefault("session_id", job.get("session_id") or "")
+            candidate.setdefault("run_id", job.get("run_id") or "")
+            candidate.setdefault("source", job.get("extraction_source") or "")
+            candidate.setdefault("candidate_index", idx)
         candidates = filter_sensitive(candidates)
         job["candidates"] = len(candidates)
         written: list[dict[str, Any]] = []
         skipped = 0
+        pending: list[dict[str, Any]] = []
         for candidate in candidates:
+            if mode == "suggest":
+                pending.append(_candidate_to_pending(candidate, job))
+                skipped += 1
+                continue
+            if mode == "safe" and job.get("extraction_source") != "regex_fallback":
+                pending.append(_candidate_to_pending(candidate, job))
+                skipped += 1
+                continue
             result = resolve_and_write(candidate, job.get("cwd") or "")
             if result.get("ok"):
                 written.append(result)
@@ -109,6 +134,7 @@ def run_consolidation_job(
             "written": len(written),
             "skipped": skipped,
             "files": written,
+            "pending": pending,
             "updated_at": time.time(),
         })
     except Exception as exc:
@@ -116,6 +142,26 @@ def run_consolidation_job(
     jobs[job_id] = job
     _save_jobs(jobs)
     return job
+
+
+def _candidate_to_pending(candidate: dict[str, Any], job: dict[str, Any]) -> dict[str, Any]:
+    """把候选转成待审核记录，暂不写入 Markdown。"""
+    raw = f"{job.get('job_id', '')}|{candidate.get('candidate_index', 0)}|{candidate.get('content', '')}"
+    return {
+        "id": "memcand_" + hashlib.sha1(raw.encode("utf-8", "ignore")).hexdigest()[:16],
+        "status": "pending",
+        "type": candidate.get("type", "feedback"),
+        "title": candidate.get("title", ""),
+        "content": candidate.get("content", ""),
+        "confidence": candidate.get("confidence"),
+        "suggested_action": "create",
+        "suggested_target": "",
+        "source_session_id": job.get("session_id") or "",
+        "source_run_id": job.get("run_id") or "",
+        "created_at": time.time(),
+        "decision_at": None,
+        "decision_reason": "",
+    }
 
 
 def filter_sensitive(candidates: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -244,16 +290,19 @@ def _similar_title(a: str, b: str) -> bool:
 
 
 def _load_jobs() -> dict[str, Any]:
-    if not JOBS_PATH.exists():
-        return {}
-    try:
-        data = json.loads(JOBS_PATH.read_text(encoding="utf-8"))
-        return data if isinstance(data, dict) else {}
-    except Exception:
-        return {}
+    with _JOBS_LOCK:
+        if not JOBS_PATH.exists():
+            return {}
+        try:
+            data = json.loads(JOBS_PATH.read_text(encoding="utf-8"))
+            return data if isinstance(data, dict) else {}
+        except Exception:
+            return {}
 
 
 def _save_jobs(jobs: dict[str, Any]) -> None:
-    tmp = JOBS_PATH.with_suffix(".tmp")
-    tmp.write_text(json.dumps(jobs, ensure_ascii=False, indent=2), encoding="utf-8")
-    tmp.replace(JOBS_PATH)
+    with _JOBS_LOCK:
+        JOBS_PATH.parent.mkdir(parents=True, exist_ok=True)
+        tmp = JOBS_PATH.with_name(f"{JOBS_PATH.name}.{threading.get_ident()}.tmp")
+        tmp.write_text(json.dumps(jobs, ensure_ascii=False, indent=2), encoding="utf-8")
+        tmp.replace(JOBS_PATH)

@@ -1503,7 +1503,7 @@ async def schedule_memory_consolidation(client_id: str, session_id: str = "", ru
     """会话完成后异步沉淀明确的长期偏好，不阻塞聊天主链路。"""
     try:
         settings = get_gui_settings()
-        if settings.get("memoryAutoConsolidate", "auto") == "off":
+        if settings.get("memoryAutoConsolidate", "safe") == "off":
             return
         prompt = run_last_prompt.get(run_id, "") or client_last_prompt.get(client_id, "") or client_last_msg.get(client_id, "")
         if not prompt:
@@ -1527,7 +1527,7 @@ async def schedule_memory_consolidation(client_id: str, session_id: str = "", ru
             candidates: list[dict] | None = None
             try:
                 mem_model = resolve_memory_assistant_model(settings, client_id)
-                candidates = await asyncio.wait_for(
+                extraction = await asyncio.wait_for(
                     memory_llm.extract_memories_via_llm(
                         user_message=prompt,
                         assistant_summary=assistant_summary,
@@ -1538,6 +1538,12 @@ async def schedule_memory_consolidation(client_id: str, session_id: str = "", ru
                     ),
                     timeout=60.0,
                 )
+                for idx, candidate in enumerate(getattr(extraction, "candidates", []) or []):
+                    candidate.setdefault("session_id", session_id or "")
+                    candidate.setdefault("run_id", run_id or "")
+                    candidate.setdefault("source", "llm")
+                    candidate.setdefault("candidate_index", idx)
+                candidates = extraction
             except Exception as exc:
                 _notify_log.info("memory LLM extraction failed cid=%s sid=%s run=%s error=%s, falling back to regex", client_id, session_id or "-", run_id or "-", exc)
                 candidates = None

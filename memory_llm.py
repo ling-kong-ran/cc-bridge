@@ -13,7 +13,8 @@ from __future__ import annotations
 import asyncio
 import json
 import time
-from typing import Any
+from dataclasses import dataclass, field
+from typing import Any, Literal
 
 import ccb_bridge
 from ccb_bridge import get_current_cli, validate_cli, validate_cwd
@@ -21,6 +22,18 @@ from ccb_bridge import get_current_cli, validate_cli, validate_cwd
 # 与 extract_candidates 返回的候选 dict 形状保持一致（memory_consolidator.py:121），
 # 这样 resolve_and_write / _render_memory / _similar_title 等可原样复用。
 _VALID_TYPES = ("user", "feedback", "preference")
+
+
+@dataclass
+class ExtractionResult:
+    """记忆抽取结果，显式区分成功空结果与失败。"""
+    status: Literal["ok", "failed"]
+    candidates: list[dict[str, Any]] = field(default_factory=list)
+    error_code: str = ""
+    error: str = ""
+    model: str = ""
+    duration_ms: int = 0
+    rejected: int = 0
 
 _EXTRACT_PROMPT = """你是一个记忆提取助手。分析下面的【用户消息】和【助手回复】，提取出值得长期记住的用户偏好、协作规则、习惯或事实。
 
@@ -273,18 +286,19 @@ async def extract_memories_via_llm(
     cli: str | None = None,
     skip_permissions: bool = True,
     timeout: float = 60.0,
-) -> list[dict[str, Any]]:
-    """用记忆辅助模型抽取候选记忆，返回候选 dict 列表；任何失败返回 []。"""
+) -> ExtractionResult:
+    """用记忆辅助模型抽取候选记忆，显式返回成功/失败状态。"""
+    started = time.time()
     user_message = (user_message or "").strip()
     assistant_summary = (assistant_summary or "").strip()
     if not user_message or len(user_message) < 4:
-        return []
+        return ExtractionResult(status="ok", candidates=[], model=model, duration_ms=0)
 
     try:
-        cli_path = validate_cli(cli or get_current_cli())
-        run_cwd = validate_cwd(cwd or "")
-    except Exception:
-        return []
+        validate_cli(cli or get_current_cli())
+        validate_cwd(cwd or "")
+    except Exception as exc:
+        return ExtractionResult(status="failed", candidates=[], error_code="cli_or_cwd_invalid", error=str(exc), model=model, duration_ms=int((time.time() - started) * 1000))
 
     # 不能用 .format()：模板里的 JSON 示例 {"title": ...} 的花括号会被当成占位符，
     # 抛 KeyError。改用显式 replace 绕开 format 的花括号解析。
@@ -300,7 +314,13 @@ async def extract_memories_via_llm(
         skip_permissions=skip_permissions,
         timeout=timeout,
     )
-    return _parse_memory_json(text)
+    duration_ms = int((time.time() - started) * 1000)
+    if not text.strip():
+        return ExtractionResult(status="failed", candidates=[], error_code="empty_response", error="LLM 未返回内容", model=model, duration_ms=duration_ms)
+    parsed = _parse_memory_json(text, session_id="", run_id="")
+    if parsed is None:
+        return ExtractionResult(status="failed", candidates=[], error_code="invalid_json", error="LLM 返回无法解析为候选数组", model=model, duration_ms=duration_ms)
+    return ExtractionResult(status="ok", candidates=parsed, model=model, duration_ms=duration_ms)
 
 
 def _extract_text(event: dict) -> str:
@@ -355,11 +375,11 @@ def _parse_json_lenient(text: str) -> list | dict | None:
     return None
 
 
-def _parse_memory_json(text: str) -> list[dict[str, Any]]:
-    """把 LLM 返回的文本解析为候选 dict 列表；解析失败返回 []。"""
+def _parse_memory_json(text: str, session_id: str = "", run_id: str = "") -> list[dict[str, Any]] | None:
+    """把 LLM 返回的文本解析为候选 dict 列表；解析失败返回 None。"""
     data = _parse_json_lenient(text)
     if not isinstance(data, list):
-        return []
+        return None
 
     today = time.strftime("%Y-%m-%d")
     candidates: list[dict[str, Any]] = []
@@ -379,8 +399,9 @@ def _parse_memory_json(text: str) -> list[dict[str, Any]]:
             "type": mem_type,
             "title": title,
             "content": content,
-            "session_id": "",
-            "run_id": "",
+            "session_id": session_id or "",
+            "run_id": run_id or "",
+            "source": "llm",
             "created_at": today,
         })
     return candidates
