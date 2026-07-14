@@ -360,6 +360,8 @@ function initMemoryUI() {
   document.getElementById('memory-edit-close')?.addEventListener('click', closeMemoryEditor);
   document.getElementById('memory-edit-overlay')?.addEventListener('click', (e) => { if (e.target === e.currentTarget) closeMemoryEditor(); });
   document.getElementById('btn-memory-organize-apply')?.addEventListener('click', applySelectedMemoryOrganizeActions);
+  document.getElementById('btn-memory-organize-low-risk')?.addEventListener('click', () => setMemoryOrganizeSelection('low'));
+  document.getElementById('btn-memory-organize-clear')?.addEventListener('click', () => setMemoryOrganizeSelection('none'));
   document.getElementById('btn-memory-organize-cancel')?.addEventListener('click', closeMemoryOrganizeReview);
   document.getElementById('memory-organize-close')?.addEventListener('click', closeMemoryOrganizeReview);
   document.getElementById('memory-organize-overlay')?.addEventListener('click', (e) => { if (e.target === e.currentTarget && !memoryOrganizeState.applying) closeMemoryOrganizeReview(); });
@@ -448,6 +450,16 @@ async function organizeMemoryLinks() {
 
 function memoryOrganizeActionLabel(action) {
   return t('memoryAction' + String(action || '').charAt(0).toUpperCase() + String(action || '').slice(1));
+}
+
+function setMemoryOrganizeSelection(mode) {
+  const lowRisk = new Set(['link', 'refine']);
+  document.querySelectorAll('#memory-organize-list .memory-organize-item').forEach(item => {
+    const action = memoryOrganizeState.actions.find(a => Number(a.id) === Number(item.dataset.actionId));
+    const check = item.querySelector('.memory-organize-check');
+    if (!check || !action) return;
+    check.checked = mode === 'low' ? lowRisk.has(action.action) : false;
+  });
 }
 
 function openMemoryOrganizeLoading() {

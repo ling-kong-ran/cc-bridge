@@ -731,5 +731,7 @@
   "memoryLowRisk": "低风险",
   "memoryHighRisk": "需复核",
   "memoryGraphAria": "记忆知识图谱。拖拽可平移，滚轮可缩放，点击节点打开记忆文件。",
-  "directory": "目录"
+  "directory": "目录",
+  "selectLowRisk": "选择低风险",
+  "clearSelection": "清空选择"
 }

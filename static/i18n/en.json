@@ -731,5 +731,7 @@
   "memoryLowRisk": "Low risk",
   "memoryHighRisk": "Needs review",
   "memoryGraphAria": "Memory knowledge graph. Drag to pan, scroll to zoom, click nodes to open memory files.",
-  "directory": "Directory"
+  "directory": "Directory",
+  "selectLowRisk": "Select low risk",
+  "clearSelection": "Clear selection"
 }
