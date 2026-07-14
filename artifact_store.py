@@ -140,8 +140,19 @@ def collect_artifacts_from_record(obj: dict, session: dict, push):
             collect_artifacts_from_text(block.get("text") or "", lambda v, ts=timestamp: push(v, ts))
         elif msg_type == "assistant" and block_type == "tool_use":
             collect_string_values(block.get("input"), "tool_use.input", lambda v, ts=timestamp: push(v, ts))
+        elif msg_type == "assistant" and block_type == "ccb_generated_image":
+            collect_generated_image_artifacts(block, timestamp, push)
         elif msg_type == "user" and block_type == "tool_result":
             collect_tool_result_artifacts(block.get("content"), timestamp, push)
+
+
+def collect_generated_image_artifacts(block: dict, timestamp: str, push):
+    for image in block.get("images") or []:
+        if not isinstance(image, dict):
+            continue
+        value = image.get("path") or image.get("url") or ""
+        if value:
+            push(value, timestamp)
 
 
 def collect_tool_result_artifacts(result, timestamp: str, push):
