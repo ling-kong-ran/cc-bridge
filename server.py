@@ -68,6 +68,8 @@ from backend.responses import send_response
 from backend.services.sessions_service import list_gui_sessions
 from backend.services.memory_service import apply_memory_organize, preview_memory_organize
 from image_generation import ImageGenerationError, ImageGenerationService
+from workflow_runner import WorkflowRunner
+import workflow_store
 from bootstrap.probe import NPM_PREFIX
 # 飞书模块延迟加载 — 避免 lark_oapi SDK 拖慢 server 启动
 class _LazyFeishu:
@@ -455,6 +457,9 @@ client_session_agents: dict[str, list] = {}
 
 # 定时任务后台 runner
 scheduled_runner: ScheduledTaskRunner | None = None
+
+# 工作流模拟执行器
+workflow_runner: WorkflowRunner | None = None
 
 # 飞书消息网关
 feishu_gateway = None
@@ -1499,6 +1504,25 @@ async def push_event(client_id: str, event_type: str, data: dict):
         await queue.put({"event": event_type, "data": data})
 
 
+async def broadcast_event(event_type: str, data: dict):
+    """向所有 SSE 客户端广播事件。"""
+    for queue in list(sse_clients.values()):
+        await queue.put({"event": event_type, "data": data})
+
+
+async def publish_workflow_event(data: dict):
+    """发布工作流运行事件，复用现有 SSE 通道。"""
+    await broadcast_event("workflow_event", data)
+
+
+def get_workflow_runner() -> WorkflowRunner:
+    """惰性创建工作流执行器，避免导入阶段依赖事件循环。"""
+    global workflow_runner
+    if workflow_runner is None:
+        workflow_runner = WorkflowRunner(session_manager=session_manager, event_sink=publish_workflow_event)
+    return workflow_runner
+
+
 async def schedule_memory_consolidation(client_id: str, session_id: str = "", run_id: str = "") -> None:
     """会话完成后异步沉淀明确的长期偏好，不阻塞聊天主链路。"""
     try:
@@ -1871,6 +1895,12 @@ async def handle_http(reader: asyncio.StreamReader, writer: asyncio.StreamWriter
 
         elif method == "POST" and route_path.startswith("/api/"):
             await handle_api_post(route_path, body, writer)
+
+        elif method == "PUT" and route_path.startswith("/api/"):
+            await handle_api_put(route_path, body, writer)
+
+        elif method == "DELETE" and route_path.startswith("/api/"):
+            await handle_api_delete(route_path, writer)
 
         else:
             await handle_static(route_path, writer)
@@ -2964,6 +2994,92 @@ async def _notify_gui_complete(title: str, model: str, platforms: list, error: s
 
 
 # ─── REST API ──────────────────────────────────────────────
+async def handle_workflow_get(path: str, query: dict | None = None) -> tuple[int, dict]:
+    """处理工作流 GET API。"""
+    query = query or {}
+    if path == "/api/workflows":
+        return 200, {"workflows": workflow_store.list_workflows()}
+    if path == "/api/workflows/runs":
+        workflow_id = query.get("workflow_id", [""])[0] or None
+        limit_text = query.get("limit", ["100"])[0]
+        try:
+            limit = int(limit_text)
+        except (TypeError, ValueError):
+            limit = 100
+        return 200, {"runs": workflow_store.list_runs(workflow_id=workflow_id, limit=limit)}
+    if path.startswith("/api/workflows/runs/"):
+        run_id = path.removeprefix("/api/workflows/runs/").strip("/")
+        run = workflow_store.get_run(run_id)
+        if not run:
+            return 404, {"error": "not found"}
+        return 200, run
+    if path.startswith("/api/workflows/"):
+        workflow_id = path.removeprefix("/api/workflows/").strip("/")
+        workflow = workflow_store.get_workflow(workflow_id)
+        if not workflow:
+            return 404, {"error": "not found"}
+        return 200, workflow
+    return 404, {"error": "not found"}
+
+
+async def handle_workflow_post(path: str, data: dict) -> tuple[int, dict]:
+    """处理工作流 POST API。"""
+    if path == "/api/workflows":
+        try:
+            return 200, workflow_store.save_workflow(data)
+        except ValueError as exc:
+            return 400, {"error": str(exc)}
+    if path.startswith("/api/workflows/runs/") and path.endswith("/cancel"):
+        run_id = path.removeprefix("/api/workflows/runs/")[:-len("/cancel")].strip("/")
+        run = await get_workflow_runner().cancel_run(run_id)
+        if not run:
+            return 404, {"error": "not found"}
+        return 200, run
+    if path.startswith("/api/workflows/runs/") and path.endswith("/approve"):
+        run_id = path.removeprefix("/api/workflows/runs/")[:-len("/approve")].strip("/")
+        approved = bool(data.get("approved", True))
+        approval_id = str(data.get("approval_id") or data.get("node_id") or "")
+        run = await get_workflow_runner().approve_run(run_id, approval_id=approval_id, approved=approved)
+        if not run:
+            return 404, {"error": "not found"}
+        return 200, run
+    if path.startswith("/api/workflows/") and path.endswith("/runs"):
+        workflow_id = path.removeprefix("/api/workflows/")[:-len("/runs")].strip("/")
+        inputs = data.get("inputs") if isinstance(data.get("inputs"), dict) else data
+        try:
+            run = await get_workflow_runner().start_run(workflow_id, inputs=inputs)
+        except ValueError as exc:
+            return 404, {"error": str(exc)}
+        return 200, run
+    return 404, {"error": "not found"}
+
+
+async def handle_workflow_put(path: str, data: dict) -> tuple[int, dict]:
+    """处理工作流 PUT API。"""
+    if not path.startswith("/api/workflows/") or path.startswith("/api/workflows/runs/"):
+        return 404, {"error": "not found"}
+    workflow_id = path.removeprefix("/api/workflows/").strip("/")
+    if not workflow_id or "/" in workflow_id:
+        return 404, {"error": "not found"}
+    payload = dict(data or {})
+    payload["id"] = workflow_id
+    try:
+        return 200, workflow_store.save_workflow(payload)
+    except ValueError as exc:
+        return 400, {"error": str(exc)}
+
+
+async def handle_workflow_delete(path: str) -> tuple[int, dict]:
+    """处理工作流 DELETE API。"""
+    if not path.startswith("/api/workflows/") or path.startswith("/api/workflows/runs/"):
+        return 404, {"error": "not found"}
+    workflow_id = path.removeprefix("/api/workflows/").strip("/")
+    if not workflow_id or "/" in workflow_id:
+        return 404, {"error": "not found"}
+    ok = workflow_store.delete_workflow(workflow_id)
+    return (200, {"ok": True}) if ok else (404, {"error": "not found"})
+
+
 async def handle_api_get(path: str, writer: asyncio.StreamWriter, query: dict = None):
     if path == "/api/health":
         data = {"ok": True, "app": "cc-bridge", "mode": "desktop" if DESKTOP_MODE else "web"}
@@ -2973,6 +3089,10 @@ async def handle_api_get(path: str, writer: asyncio.StreamWriter, query: dict = 
                 "app_root": str(APP_ROOT).replace("\\", "/"),
                 "shutdown_token": DESKTOP_SHUTDOWN_TOKEN,
             })
+    elif path.startswith("/api/workflows"):
+        status, data = await handle_workflow_get(path, query)
+        await send_json(writer, status, data)
+        return
     elif path == "/api/settings":
         data = get_settings()
     elif path == "/api/gui-settings":
@@ -3139,6 +3259,11 @@ async def handle_api_post(path: str, body: bytes, writer: asyncio.StreamWriter):
         data = json.loads(body.decode("utf-8"))
     except json.JSONDecodeError:
         await send_response(writer, 400, "application/json", b'{"error":"invalid json"}')
+        return
+
+    if path.startswith("/api/workflows"):
+        status, result = await handle_workflow_post(path, data)
+        await send_json(writer, status, result)
         return
 
     if path == "/api/shutdown":
@@ -3465,6 +3590,27 @@ async def handle_api_post(path: str, body: bytes, writer: asyncio.StreamWriter):
 
 
 # ─── 静态文件 ──────────────────────────────────────────────
+async def handle_api_put(path: str, body: bytes, writer: asyncio.StreamWriter):
+    try:
+        data = json.loads(body.decode("utf-8"))
+    except json.JSONDecodeError:
+        await send_response(writer, 400, "application/json", b'{"error":"invalid json"}')
+        return
+    if path.startswith("/api/workflows"):
+        status, result = await handle_workflow_put(path, data)
+        await send_json(writer, status, result)
+        return
+    await send_response(writer, 404, "application/json", b'{"error":"not found"}')
+
+
+async def handle_api_delete(path: str, writer: asyncio.StreamWriter):
+    if path.startswith("/api/workflows"):
+        status, result = await handle_workflow_delete(path)
+        await send_json(writer, status, result)
+        return
+    await send_response(writer, 404, "application/json", b'{"error":"not found"}')
+
+
 async def handle_static(path: str, writer: asyncio.StreamWriter):
     if path == "/" or path == "":
         path = "/index.html"
@@ -3510,7 +3656,7 @@ async def handle_static(path: str, writer: asyncio.StreamWriter):
 
 
 async def main(start_port: int | None = None, desktop: bool = False, host: str | None = None):
-    global scheduled_runner, HOST, DESKTOP_MODE, DESKTOP_SHUTDOWN_TOKEN, CURRENT_PORT
+    global scheduled_runner, workflow_runner, HOST, DESKTOP_MODE, DESKTOP_SHUTDOWN_TOKEN, CURRENT_PORT
     DESKTOP_MODE = desktop or DESKTOP_MODE
     if DESKTOP_MODE:
         HOST = host or "127.0.0.1"
@@ -3570,6 +3716,7 @@ async def main(start_port: int | None = None, desktop: bool = False, host: str |
 
     scheduled_runner = ScheduledTaskRunner(publish_scheduled_event)
     scheduled_task = asyncio.create_task(scheduled_runner.start())
+    workflow_runner = WorkflowRunner(session_manager=session_manager, event_sink=publish_workflow_event)
 
     # 如果之前已启用飞书 WebSocket 模式，启动时自动重连
     _f.ws_log("server.py: 启动时调用 ensure_ws_running()")

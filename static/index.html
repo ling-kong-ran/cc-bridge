@@ -90,6 +90,10 @@
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path><path d="M3.27 6.96 12 12.01l8.73-5.05"></path><path d="M12 22.08V12"></path></svg>
             <span data-i18n="artifacts">Artifacts</span>
           </button>
+          <button class="nav-btn" data-page="workflows" title="Workflows" data-i18n-title="workflows" aria-label="Workflows">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h5v5H4z"></path><path d="M15 4h5v5h-5z"></path><path d="M15 15h5v5h-5z"></path><path d="M9 8.5h3.5a2.5 2.5 0 0 1 2.5 2.5v4"></path><path d="M12 17.5H9"></path></svg>
+            <span data-i18n="workflows">Workflows</span>
+          </button>
         </div>
 
         <div class="nav-group" aria-label="Extensions">
@@ -710,6 +714,109 @@
                 <p class="empty-state" data-i18n="loading">Loading...</p>
               </div>
             </details>
+          </section>
+        </div>
+      </div>
+
+      <!-- 工作流页 -->
+      <div id="page-workflows" class="page workflows-page">
+        <div class="workflow-shell">
+          <header class="workflow-hero">
+            <div>
+              <div class="workflow-kicker" data-i18n="workflowsKicker">Agent orchestration</div>
+              <h2 data-i18n="workflowStudio">Workflow Studio</h2>
+              <p data-i18n="workflowStudioSubtitle">可视化编排、运行并审批多节点 Agent 工作流。</p>
+            </div>
+            <div class="workflow-hero-actions">
+              <button id="btn-workflow-template" class="btn-mini" type="button" data-i18n="workflowTemplateLibrary">Templates</button>
+              <button id="btn-workflow-save" class="btn-mini" type="button" data-i18n="workflowSaveDraft">Save draft</button>
+              <button id="btn-workflow-cancel" class="btn btn-danger btn-medium" type="button" data-i18n="workflowCancelRun">Cancel run</button>
+              <button id="btn-workflow-approve" class="btn btn-primary btn-medium" type="button" data-i18n="workflowApproveContinue">Approve & continue</button>
+              <button id="btn-workflow-run" class="btn btn-primary btn-medium" type="button"><span class="btn-prefix">▶</span> <span data-i18n="workflowRun">Run workflow</span></button>
+            </div>
+          </header>
+
+          <section class="workflow-runbar" aria-live="polite">
+            <div class="workflow-run-chip">
+              <span class="workflow-label" data-i18n="workflowRunId">Run ID</span>
+              <strong id="workflow-run-id">—</strong>
+            </div>
+            <div class="workflow-run-chip">
+              <span class="workflow-label" data-i18n="workflowRunStatus">Status</span>
+              <strong id="workflow-run-status">idle</strong>
+            </div>
+            <div class="workflow-run-chip">
+              <span class="workflow-label" data-i18n="workflowCompletedNodes">Completed</span>
+              <strong id="workflow-run-progress">0 / 0</strong>
+            </div>
+            <div class="workflow-run-chip">
+              <span class="workflow-label" data-i18n="totalCost">Total Cost</span>
+              <strong id="workflow-run-cost">$0.0000</strong>
+            </div>
+            <div id="workflow-status-message" class="workflow-status-message" data-i18n="workflowBackendHint">Backend not connected yet; showing local preview when unavailable.</div>
+          </section>
+
+          <div class="workflow-workbench">
+            <aside class="workflow-list-panel" aria-label="Workflows">
+              <div class="workflow-panel-head">
+                <div>
+                  <div class="workflow-panel-kicker" data-i18n="workflows">Workflows</div>
+                  <h3 data-i18n="workflowDefinitions">Definitions</h3>
+                </div>
+                <button id="btn-workflows-refresh" class="btn-mini" type="button" data-i18n="refresh">Refresh</button>
+              </div>
+              <input id="workflow-search" class="input workflow-search" type="search" placeholder="Search workflows..." data-i18n-placeholder="workflowSearchPlaceholder">
+              <div id="workflow-list" class="workflow-list" aria-live="polite"></div>
+            </aside>
+
+            <section class="workflow-canvas-panel" aria-label="Live workflow DAG">
+              <div class="workflow-canvas-head">
+                <div>
+                  <div class="workflow-panel-kicker" data-i18n="workflowLiveDag">Live DAG</div>
+                  <h3 id="workflow-canvas-title">—</h3>
+                </div>
+                <div id="workflow-canvas-summary" class="workflow-canvas-summary">0 nodes</div>
+              </div>
+              <div id="workflow-canvas" class="workflow-canvas" tabindex="0">
+                <svg id="workflow-edges" class="workflow-edges" aria-hidden="true"></svg>
+                <div id="workflow-nodes" class="workflow-nodes"></div>
+                <div id="workflow-empty" class="workflow-empty" data-i18n="workflowNoWorkflows">No workflows yet.</div>
+              </div>
+            </section>
+
+            <aside class="workflow-inspector" aria-label="Workflow inspector">
+              <div class="workflow-panel-head">
+                <div>
+                  <div class="workflow-panel-kicker" data-i18n="workflowInspector">Inspector</div>
+                  <h3 id="workflow-inspector-title" data-i18n="workflowSelectNode">Select a node</h3>
+                </div>
+                <span id="workflow-inspector-status" class="workflow-node-pill">pending</span>
+              </div>
+              <div id="workflow-inspector-body" class="workflow-inspector-body"></div>
+              <div id="workflow-approval-card" class="workflow-approval-card" hidden>
+                <div class="workflow-approval-title" data-i18n="workflowApprovalRequired">Approval required</div>
+                <p id="workflow-approval-message">—</p>
+                <div class="workflow-approval-actions">
+                  <button id="btn-workflow-approve-card" class="btn btn-primary btn-medium" type="button" data-i18n="workflowApproveContinue">Approve & continue</button>
+                  <button id="btn-workflow-reject-card" class="btn btn-danger btn-medium" type="button" data-i18n="workflowReject">Reject</button>
+                </div>
+              </div>
+            </aside>
+          </div>
+
+          <section class="workflow-timeline-panel" aria-label="Workflow timeline">
+            <div class="workflow-timeline-summary">
+              <div class="workflow-panel-kicker" data-i18n="workflowTimeline">Run timeline</div>
+              <div id="workflow-timeline-title" class="workflow-timeline-title">idle</div>
+              <div class="workflow-progress-track"><div id="workflow-progress-bar" class="workflow-progress-bar"></div></div>
+            </div>
+            <div class="workflow-log-panel">
+              <div class="workflow-log-head">
+                <span data-i18n="workflowLogs">SSE logs</span>
+                <button id="btn-workflow-clear-log" class="btn-mini" type="button" data-i18n="clear">Clear</button>
+              </div>
+              <div id="workflow-log" class="workflow-log" aria-live="polite"></div>
+            </div>
           </section>
         </div>
       </div>
