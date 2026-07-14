@@ -6,7 +6,7 @@ const memoryState = {
   files: [],
   selectedPath: '',
   query: '',
-  filters: { type: 'all', source: 'all', inject: 'all' },
+  filters: { directory: 'all', type: 'all', source: 'all', inject: 'all' },
   view: 'browse',
 };
 
@@ -51,10 +51,16 @@ function updateMemoryStatus(files) {
 }
 
 function renderMemoryFilterOptions() {
-  [['type', 'memory-filter-type'], ['source', 'memory-filter-source'], ['inject', 'memory-filter-inject']].forEach(([field, id]) => {
+  [['directory', 'memory-filter-directory'], ['type', 'memory-filter-type'], ['source', 'memory-filter-source'], ['inject', 'memory-filter-inject']].forEach(([field, id]) => {
     const select = document.getElementById(id);
     if (!select) return;
-    const values = Array.from(new Set(memoryState.files.map(f => String(f[field] || '').trim()).filter(Boolean))).sort();
+    const values = Array.from(new Set(memoryState.files.map(f => {
+      if (field === 'directory') {
+        const path = memoryItemPath(f);
+        return path.includes('/') ? path.split('/').slice(0, -1).join('/') : '/';
+      }
+      return String(f[field] || '').trim();
+    }).filter(Boolean))).sort();
     const current = memoryState.filters[field] || 'all';
     select.innerHTML = `<option value="all">${esc(t('all'))}</option>` + values.map(v => `<option value="${esc(v)}">${esc(v)}</option>`).join('');
     select.value = values.includes(current) ? current : 'all';
@@ -65,6 +71,11 @@ function renderMemoryFilterOptions() {
 function filteredMemoryFiles() {
   const query = (memoryState.query || '').trim().toLowerCase();
   return memoryState.files.filter(f => {
+    if (memoryState.filters.directory !== 'all') {
+      const path = memoryItemPath(f);
+      const dir = path.includes('/') ? path.split('/').slice(0, -1).join('/') : '/';
+      if (dir !== memoryState.filters.directory) return false;
+    }
     if (memoryState.filters.type !== 'all' && String(f.type || '') !== memoryState.filters.type) return false;
     if (memoryState.filters.source !== 'all' && String(f.source || '') !== memoryState.filters.source) return false;
     if (memoryState.filters.inject !== 'all' && String(f.inject || '') !== memoryState.filters.inject) return false;
@@ -358,7 +369,7 @@ function initMemoryUI() {
     clearTimeout(memorySearchTimer);
     memorySearchTimer = setTimeout(() => { memoryState.query = e.target.value || ''; renderMemoryList(); }, 300);
   });
-  ['type', 'source', 'inject'].forEach(field => {
+  ['directory', 'type', 'source', 'inject'].forEach(field => {
     document.getElementById(`memory-filter-${field}`)?.addEventListener('change', e => { memoryState.filters[field] = e.target.value || 'all'; renderMemoryList(); });
   });
   document.addEventListener('keydown', (e) => {

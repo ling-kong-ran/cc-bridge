@@ -730,5 +730,6 @@
   "retry": "Retry",
   "memoryLowRisk": "Low risk",
   "memoryHighRisk": "Needs review",
-  "memoryGraphAria": "Memory knowledge graph. Drag to pan, scroll to zoom, click nodes to open memory files."
+  "memoryGraphAria": "Memory knowledge graph. Drag to pan, scroll to zoom, click nodes to open memory files.",
+  "directory": "Directory"
 }

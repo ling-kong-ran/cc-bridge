@@ -730,5 +730,6 @@
   "retry": "重试",
   "memoryLowRisk": "低风险",
   "memoryHighRisk": "需复核",
-  "memoryGraphAria": "记忆知识图谱。拖拽可平移，滚轮可缩放，点击节点打开记忆文件。"
+  "memoryGraphAria": "记忆知识图谱。拖拽可平移，滚轮可缩放，点击节点打开记忆文件。",
+  "directory": "目录"
 }
