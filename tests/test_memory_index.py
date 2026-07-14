@@ -61,6 +61,14 @@ class MemoryIndexTests(unittest.TestCase):
         self.assertTrue(results)
         self.assertIn('提交', results[0]['snippet'])
 
+    def test_search_rerank_prefers_specific_topic_over_index(self):
+        self.write_memory('MEMORY.md', '# Memory Index\n\n记忆 系统 检索 命中 质量 优化 项目 功能 说明。')
+        self.write_memory('feedback_token.md', '---\nname: 收紧记忆检索\ntype: feedback\n---\n\n记忆检索应更精准，避免普通语句命中过多记忆浪费 token。')
+        memory_index.index_memory(self.cwd, force=True)
+        results = memory_index.search_memory('记忆检索命中不高质量', self.cwd)
+        self.assertTrue(results)
+        self.assertEqual(results[0]['file'], 'feedback_token.md')
+
 
 if __name__ == '__main__':
     unittest.main()

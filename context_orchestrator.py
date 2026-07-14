@@ -323,15 +323,19 @@ def _rank_relevant_candidates(query: str, candidates: list[dict[str, Any]]) -> l
         query_size = max(1, len(query_terms))
         recall = len(overlap) / query_size
         precision = len(overlap) / max(1, min(len(item_terms), 80))
-        title_boost = len(title_overlap) * 0.18
+        title_boost = min(len(title_overlap) * 0.18, 0.45)
         phrase_boost = _phrase_overlap_score(query, f"{title}\n{content}")
         type_boost = 0.12 if item.get("source") == "project-memory" else 0.0
-        source_score = float(item.get("score") or 0) * 0.15
-        score = recall * 0.48 + precision * 0.18 + title_boost + phrase_boost + type_boost + source_score
+        source_score = float(item.get("score") or 0) * 0.12
+        index_penalty = 0.16 if Path(path).name.upper() in {"MEMORY.MD", "INDEX.MD"} else 0.0
+        score = recall * 0.55 + precision * 0.20 + title_boost + phrase_boost + type_boost + source_score - index_penalty
 
         required_hits = 2 if query_size < 6 else 3
-        min_score = 0.42 if query_size < 6 else 0.36
+        min_score = 0.40 if query_size < 6 else 0.34
+        has_strong_signal = bool(title_overlap or phrase_boost >= 0.14)
         if len(overlap) < required_hits or score < min_score:
+            continue
+        if query_size >= 4 and not has_strong_signal and recall < 0.45:
             continue
 
         adjusted = dict(item)
@@ -365,6 +369,7 @@ def _semantic_terms(text: str) -> set[str]:
         "the", "and", "for", "with", "from", "this", "that", "have", "will", "just", "into", "your",
         "现在", "刚刚", "这个", "那个", "一下", "感觉", "似乎", "另外", "注意", "项目", "功能", "问题", "时候",
         "需要", "可以", "没有", "不是", "比较", "还是", "已经", "进行", "当前", "相关", "内容", "文件",
+        "查看", "代码", "实现", "优化", "系统", "记忆", "检索", "命中", "质量", "记录", "说明", "默认", "用户",
     }
     for word in re.findall(r"[a-zA-Z0-9_]{3,}", text):
         if word not in stopwords:

@@ -282,40 +282,65 @@ def _build_fts_query(query: str) -> str:
 
 
 def _rerank_by_overlap(rows: list[tuple], query: str, limit: int) -> list[tuple]:
-    """按 query 与命中文本的真实 bigram 覆盖度重排，压低只蹭到常见 bigram 的噪声。
+    """按多信号相关性重排，压低只蹭到常见词的噪声。
 
-    FTS5 的 bm25 rank 在中文 bigram 索引下区分度低：只要命中任一常见双字（已经/消息/重启）
-    就能排进来，且排序几乎随机。这里在拿回候选后逐条统计它实际命中了 query 的多少个
-    bigram，按命中覆盖度（去重后）重排；命中过少的丢弃。重叠度相同时保留 FTS rank 作 tiebreak。
+    FTS5 的 OR 查询负责召回；这里再用关键词覆盖、标题/文件名命中、连续短语命中
+    做二次过滤。这样既保留中文宽召回，又避免 MEMORY 索引页、泛项目说明等只因包含
+    「记忆/系统/问题」这类高频词就进入自动注入上下文。
     """
     if not rows:
         return rows
 
-    # 复用与查询一致的 bigram 切分，得到 query 的 token 集合
     q_terms = _extract_memory_terms(query, "", Path(query).stem)
-    q_bigrams = {t for t in q_terms if len(t) >= 2}
-    if not q_bigrams:
+    if not q_terms:
         return rows[:limit]
+    query_size = len(q_terms)
+    query_text = str(query or "").lower()
 
-    def _row_overlap(row: tuple) -> int:
-        # row: (file_path, name, title, snippet, rank, content)；用 title+content 估计命中面。
-        # content 是索引时 bigram 化后的全文，能反映该记忆真正覆盖了 query 的多少语义片段。
+    def _row_score(row: tuple) -> tuple[float, int]:
+        # row: (file_path, name, title, snippet, rank, content)；content 是分词后的索引文本。
+        path = str(row[0] or "")
+        name = str(row[1] or "")
         title = str(row[2] or "")
+        rank = float(row[4] or 0)
         content = str(row[5] or "") if len(row) > 5 else ""
         text = f"{title} {content}"
-        terms = _extract_memory_terms(text, "", Path(str(row[1] or "")).stem)
-        return len(q_bigrams & {t for t in terms if len(t) >= 2})
+        item_terms = _extract_memory_terms(text, "", Path(name).stem)
+        title_terms = _extract_memory_terms(title, "", Path(name).stem)
+        overlap = q_terms & item_terms
+        title_overlap = q_terms & title_terms
 
-    scored = [(_row_overlap(r), r) for r in rows]
-    # 只保留至少命中 2 个 query bigram 的候选；query 本身 bigram 不足 2 个时不做过滤
-    if len(q_bigrams) >= 2:
-        scored = [s for s in scored if s[0] >= 2]
-        # 全被过滤掉时退回原 FTS 排序（保底有召回），但只取覆盖度最高的若干条
-        if not scored:
-            scored = sorted(((_row_overlap(r), r) for r in rows), key=lambda s: -s[0])[:limit]
-    # 覆盖度降序；同覆盖度按原 FTS rank 升序（rank 越小越相关）
-    scored.sort(key=lambda s: (-s[0], s[1][4]))
-    return [r for _, r in scored[:limit]]
+        overlap_count = len(overlap)
+        recall = overlap_count / max(1, query_size)
+        precision = overlap_count / max(1, min(len(item_terms), 80))
+        phrase_boost = _memory_phrase_score(query_text, f"{title}\n{content}".lower())
+        title_boost = min(len(title_overlap) * 0.18, 0.45)
+        type_boost = 0.12 if path.split("/", 1)[0] in {"user", "feedback", "project", "reference"} else 0.0
+        index_penalty = 0.18 if Path(path).name.upper() in {"MEMORY.MD", "INDEX.MD"} else 0.0
+        rank_boost = max(0.0, min(0.12, -rank * 0.02))
+        score = recall * 0.55 + precision * 0.20 + phrase_boost + title_boost + type_boost + rank_boost - index_penalty
+        return score, overlap_count
+
+    scored = [(_row_score(r), r) for r in rows]
+    required_hits = 2 if query_size <= 5 else 3
+    min_score = 0.34 if query_size <= 5 else 0.30
+    filtered = [(score, r) for score, r in scored if score[1] >= required_hits and score[0] >= min_score]
+
+    # 召回全被过滤时保留最高分少量结果，避免 UI 搜索直接空白；自动注入层还会再过滤一次。
+    if not filtered:
+        filtered = sorted(scored, key=lambda item: (-item[0][0], -item[0][1], item[1][4]))[:max(1, min(limit, 3))]
+
+    filtered.sort(key=lambda item: (-item[0][0], -item[0][1], item[1][4]))
+    return [r for _, r in filtered[:limit]]
+
+
+def _memory_phrase_score(query: str, text: str) -> float:
+    """连续短语命中加权，优先保留真正包含当前主题的记忆。"""
+    score = 0.0
+    for phrase in re.findall(r"[a-zA-Z0-9_]{4,}|[一-鿿]{3,}", query):
+        if phrase in text:
+            score += 0.24 if len(phrase) >= 6 else 0.14
+    return min(score, 0.5)
 
 
 def search_memory(query: str, cwd: str, limit: int = 20) -> list[dict[str, Any]]:
@@ -565,6 +590,7 @@ def _extract_memory_terms(title: str, body: str, stem: str) -> set[str]:
         "the", "and", "for", "with", "from", "this", "that", "have", "will", "your", "into",
         "用户", "项目", "功能", "问题", "当前", "相关", "内容", "文件", "需要", "可以", "已经", "进行",
         "这个", "那个", "如果", "时候", "默认", "使用", "实现", "优化", "记录", "说明", "记忆",
+        "查看", "代码", "系统", "检索", "命中", "质量",
     }
 
     # 英文/数字词要求 3+ 字符，减少短词造成的弱关联。
