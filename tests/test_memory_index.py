@@ -1,0 +1,66 @@
+import tempfile
+import unittest
+from pathlib import Path
+from unittest import mock
+
+import memory_index
+
+
+class MemoryIndexTests(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.home = Path(self.tmp.name) / 'home'
+        self.home.mkdir()
+        self.cwd = str(Path(self.tmp.name) / 'project')
+        Path(self.cwd).mkdir()
+        self.memory_dir = self.home / '.claude' / 'projects' / memory_index._sanitize_path(self.cwd) / 'memory'
+        self.memory_dir.mkdir(parents=True)
+        self.index_dir = self.home / '.ccb' / 'memory_index'
+        self.index_dir.mkdir(parents=True)
+        self.patches = [
+            mock.patch.object(memory_index, 'INDEX_DIR', self.index_dir),
+            mock.patch.object(Path, 'home', classmethod(lambda cls: self.home)),
+        ]
+        for p in self.patches:
+            p.start()
+
+    def tearDown(self):
+        for p in reversed(self.patches):
+            p.stop()
+        self.tmp.cleanup()
+
+    def write_memory(self, rel, text):
+        path = self.memory_dir / rel
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(text, encoding='utf-8')
+        return path
+
+    def test_list_files_includes_relative_path_and_frontmatter(self):
+        self.write_memory('wiki/decisions/sse.md', '---\nname: 采用 SSE\ntype: decision\nsource: session\ninject: auto\ntags: [sse, ui]\nconfidence: 0.9\n---\n\n正文')
+        files = memory_index.list_memory_files(self.cwd)
+        self.assertEqual(files[0]['path'], 'wiki/decisions/sse.md')
+        self.assertEqual(files[0]['title'], '采用 SSE')
+        self.assertEqual(files[0]['type'], 'decision')
+        self.assertEqual(files[0]['source'], 'session')
+        self.assertEqual(files[0]['inject'], 'auto')
+        self.assertEqual(files[0]['tags'], ['sse', 'ui'])
+
+    def test_same_basename_files_are_indexed_by_relative_path(self):
+        self.write_memory('raw/note.md', '---\nname: 原始记录\n---\n\n飞书消息网关')
+        self.write_memory('wiki/note.md', '---\nname: 决策记录\n---\n\nSSE 自动注入')
+        memory_index.index_memory(self.cwd, force=True)
+        files = {item['path'] for item in memory_index.list_memory_files(self.cwd)}
+        self.assertEqual(files, {'raw/note.md', 'wiki/note.md'})
+        hit_paths = {item['file'] for item in memory_index.search_memory('飞书消息', self.cwd)}
+        self.assertIn('raw/note.md', hit_paths)
+
+    def test_search_snippet_uses_body_not_filename(self):
+        self.write_memory('feedback.md', '---\nname: 协作偏好\n---\n\n用户要求提交信息使用中文。')
+        memory_index.index_memory(self.cwd, force=True)
+        results = memory_index.search_memory('提交信息中文', self.cwd)
+        self.assertTrue(results)
+        self.assertIn('提交', results[0]['snippet'])
+
+
+if __name__ == '__main__':
+    unittest.main()

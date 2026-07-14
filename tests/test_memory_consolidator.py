@@ -1,0 +1,58 @@
+import tempfile
+import threading
+import unittest
+from pathlib import Path
+from unittest import mock
+
+import memory_consolidator
+import memory_llm
+
+
+class MemoryConsolidatorTests(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.jobs_path = Path(self.tmp.name) / 'jobs.json'
+        self.patch_jobs = mock.patch.object(memory_consolidator, 'JOBS_PATH', self.jobs_path)
+        self.patch_jobs.start()
+
+    def tearDown(self):
+        self.patch_jobs.stop()
+        self.tmp.cleanup()
+
+    def test_failed_extraction_result_triggers_regex_fallback(self):
+        job_id = memory_consolidator.enqueue_consolidation(
+            'sid', '/tmp/project', 'run', 'cid', user_message='请记住以后提交信息使用中文'
+        )
+        result = memory_consolidator.run_consolidation_job(
+            job_id,
+            {'memoryAutoConsolidate': 'safe'},
+            memory_llm.ExtractionResult(status='failed', candidates=[], error='not logged in'),
+        )
+        self.assertEqual(result.get('extraction_source'), 'regex_fallback')
+        self.assertGreaterEqual(result.get('candidates', 0), 1)
+
+    def test_ok_empty_extraction_does_not_fallback(self):
+        job_id = memory_consolidator.enqueue_consolidation(
+            'sid', '/tmp/project', 'run', 'cid', user_message='请记住以后提交信息使用中文'
+        )
+        result = memory_consolidator.run_consolidation_job(
+            job_id,
+            {'memoryAutoConsolidate': 'safe'},
+            memory_llm.ExtractionResult(status='ok', candidates=[]),
+        )
+        self.assertEqual(result.get('extraction_source'), 'llm')
+        self.assertEqual(result.get('candidates'), 0)
+
+    def test_job_store_keeps_concurrent_enqueues(self):
+        def enqueue(i):
+            memory_consolidator.enqueue_consolidation(f'sid{i}', '/tmp/project', f'run{i}', 'cid', user_message=f'请记住规则 {i}')
+        threads = [threading.Thread(target=enqueue, args=(i,)) for i in range(20)]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
+        self.assertEqual(len(memory_consolidator._load_jobs()), 20)
+
+
+if __name__ == '__main__':
+    unittest.main()
