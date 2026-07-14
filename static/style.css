@@ -5649,6 +5649,10 @@ html.light-theme body.resizing-workspace-pane .workspace-pane-resizer::after {
   align-items: start;
 }
 
+.memory-layout[hidden] {
+  display: none !important;
+}
+
 .memory-toolbar {
   display: flex;
   flex-direction: column;

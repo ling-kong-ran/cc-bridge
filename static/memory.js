@@ -192,7 +192,29 @@ async function selectMemory(path) {
 }
 
 async function viewMemoryFile(filename) {
-  await selectMemory(filename);
+  if (!filename) return;
+  memoryState.selectedPath = filename;
+  renderMemoryList();
+  try {
+    const data = await memoryApi('/api/memory/file', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ filename, cwd: cwdInput.value.trim() || '' }),
+    });
+    renderMemoryDetail(data);
+    const path = data.path || data.file || data.name || filename;
+    const titleEl = document.getElementById('memory-modal-title');
+    const bodyEl = document.getElementById('memory-modal-body');
+    const overlay = document.getElementById('memory-modal-overlay');
+    if (titleEl) {
+      titleEl.textContent = data.title || data.name || path;
+      titleEl.dataset.filename = path;
+    }
+    if (bodyEl) bodyEl.innerHTML = renderMd(data.body || data.content || '');
+    if (overlay) overlay.style.display = 'flex';
+  } catch (e) {
+    showToast(t('memoryFileLoadFailed', { message: e.message }), 'error');
+  }
 }
 
 function currentMemoryModalFilename() {
