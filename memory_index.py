@@ -49,7 +49,57 @@ def _get_memory_dir(cwd: str) -> Path:
     return Path.home() / MEMORY_DIR_TEMPLATE.format(sanitized=sanitized) / "memory"
 
 
-def _parse_memory_file(file_path: Path) -> dict[str, Any] | None:
+def _memory_relative_path(file_path: Path, memory_dir: Path | None = None) -> str:
+    """返回 memory 根目录相对 POSIX 路径，作为稳定 ID。"""
+    if memory_dir is None:
+        for parent in file_path.parents:
+            if parent.name == "memory":
+                memory_dir = parent
+                break
+    if memory_dir:
+        try:
+            return file_path.relative_to(memory_dir).as_posix()
+        except ValueError:
+            pass
+    return file_path.name
+
+
+def _parse_frontmatter_value(raw: str) -> Any:
+    value = raw.strip().strip("\"'")
+    if value.startswith("[") and value.endswith("]"):
+        inner = value[1:-1].strip()
+        if not inner:
+            return []
+        return [part.strip().strip("\"'") for part in inner.split(",") if part.strip()]
+    if value.lower() in {"true", "false"}:
+        return value.lower() == "true"
+    try:
+        if "." in value:
+            return float(value)
+        return int(value)
+    except ValueError:
+        return value
+
+
+def _resolve_memory_target(memory_dir: Path, filename: str, must_exist: bool = False) -> Path | None:
+    """解析相对路径并限制在 memory 目录内；兼容 basename 查找。"""
+    raw = str(filename or "").replace("\\", "/").strip().lstrip("/")
+    if not raw:
+        return None
+    candidate = (memory_dir / raw).resolve()
+    root = memory_dir.resolve()
+    if candidate == root or root not in candidate.parents:
+        return None
+    if must_exist and not candidate.exists():
+        safe_name = Path(raw).name
+        matches = [f for f in memory_dir.rglob("*.md") if f.name == safe_name]
+        if len(matches) == 1:
+            return matches[0]
+        return None
+    return candidate
+
+
+def _parse_memory_file(file_path: Path, memory_dir: Path | None = None) -> dict[str, Any] | None:
     """解析 memory markdown 文件，返回 frontmatter + content。"""
     try:
         content = file_path.read_text(encoding="utf-8")
@@ -58,7 +108,7 @@ def _parse_memory_file(file_path: Path) -> dict[str, Any] | None:
 
     title = file_path.stem
     body = content.strip()
-    # 尝试提取 frontmatter
+    frontmatter: dict[str, Any] = {}
     if body.startswith("---"):
         parts = body.split("---", 2)
         if len(parts) >= 3:
@@ -67,23 +117,33 @@ def _parse_memory_file(file_path: Path) -> dict[str, Any] | None:
             for line in fm_text.split("\n"):
                 if ":" in line:
                     key, _, val = line.partition(":")
-                    key = key.strip()
-                    if key == "name":
-                        title = val.strip().strip('"\'')
+                    frontmatter[key.strip()] = _parse_frontmatter_value(val)
+            title_value = frontmatter.get("title") or frontmatter.get("name")
+            if title_value:
+                title = str(title_value).strip()
             if not title:
                 title = file_path.stem
 
+    path = _memory_relative_path(file_path, memory_dir)
+    stat = file_path.stat() if file_path.exists() else None
+    tags = frontmatter.get("tags") or []
+    if isinstance(tags, str):
+        tags = [part.strip() for part in tags.split(",") if part.strip()]
     return {
-        "file": file_path.relative_to(file_path.parent.parent).as_posix()
-        if file_path.parent.parent else file_path.name,
+        "file": path,
+        "path": path,
         "name": file_path.name,
         "title": title,
-        "size": file_path.stat().st_size if file_path.exists() else 0,
-        "updated_at": file_path.stat().st_mtime if file_path.exists() else 0,
+        "type": str(frontmatter.get("type") or "").strip(),
+        "source": str(frontmatter.get("source") or "").strip(),
+        "inject": str(frontmatter.get("inject") or "").strip(),
+        "confidence": frontmatter.get("confidence"),
+        "tags": tags if isinstance(tags, list) else [],
+        "size": stat.st_size if stat else 0,
+        "updated_at": stat.st_mtime if stat else 0,
         "content": content,
         "body": body,
     }
-
 
 def _init_db(db_path: Path) -> sqlite3.Connection:
     """初始化 SQLite 数据库和 FTS5 表。"""
@@ -142,11 +202,11 @@ def index_memory(cwd: str, force: bool = False) -> int:
             continue
         conn.execute(
             "INSERT INTO memory_fts(file_path, name, title, content) VALUES (?, ?, ?, ?)",
-            (parsed["name"], parsed["name"], parsed["title"], _indexable_content(parsed)),
+            (parsed["path"], parsed["name"], parsed["title"], _indexable_content(parsed)),
         )
         conn.execute(
             "INSERT OR REPLACE INTO file_mtime(file_path, mtime) VALUES (?, ?)",
-            (parsed["name"], parsed["updated_at"]),
+            (parsed["path"], parsed["updated_at"]),
         )
         indexed += 1
 
@@ -179,7 +239,7 @@ def _has_changes(memory_dir: Path, db_path: Path) -> bool:
         current_files = set()
         for md_file in memory_dir.rglob("*.md"):
             mtime = md_file.stat().st_mtime
-            name = md_file.name
+            name = _memory_relative_path(md_file, memory_dir)
             current_files.add(name)
             if name not in stored or stored[name] != mtime:
                 return True
@@ -274,7 +334,7 @@ def search_memory(query: str, cwd: str, limit: int = 20) -> list[dict[str, Any]]
         def _run(match_expr: str) -> list[tuple]:
             # 末列 content 用于按 query bigram 覆盖度重排；snippet 太短不足以估计命中面
             return conn.execute(
-                "SELECT file_path, name, title, snippet(memory_fts, 1, '<mark>', '</mark>', '...', 64) AS snippet, rank, content "
+                "SELECT file_path, name, title, snippet(memory_fts, 3, '<mark>', '</mark>', '...', 64) AS snippet, rank, content "
                 "FROM memory_fts WHERE memory_fts MATCH ? ORDER BY rank LIMIT ?",
                 (match_expr, limit),
             ).fetchall()
@@ -322,8 +382,15 @@ def list_memory_files(cwd: str) -> list[dict[str, Any]]:
         parsed = _parse_memory_file(md_file)
         if parsed:
             files.append({
+                "path": parsed["path"],
+                "file": parsed["path"],
                 "name": parsed["name"],
                 "title": parsed["title"],
+                "type": parsed.get("type", ""),
+                "source": parsed.get("source", ""),
+                "inject": parsed.get("inject", ""),
+                "confidence": parsed.get("confidence"),
+                "tags": parsed.get("tags", []),
                 "size": parsed["size"],
                 "updated_at": parsed["updated_at"],
             })
@@ -336,17 +403,9 @@ def get_memory_file(filename: str, cwd: str) -> dict[str, Any] | None:
     if not memory_dir.exists():
         return None
 
-    # 安全校验：文件名不能包含路径穿越
-    safe_name = Path(filename).name
-    file_path = memory_dir / safe_name
-    if not file_path.exists():
-        # 递归搜索
-        for f in memory_dir.rglob("*.md"):
-            if f.name == safe_name:
-                file_path = f
-                break
-        else:
-            return None
+    file_path = _resolve_memory_target(memory_dir, filename, must_exist=True)
+    if file_path is None:
+        return None
 
     return _parse_memory_file(file_path)
 
@@ -392,7 +451,7 @@ def get_memory_graph(cwd: str) -> dict:
         parsed = _parse_memory_file(md_file)
         if not parsed:
             continue
-        node_id = parsed["name"]
+        node_id = parsed["path"]
         stem = Path(node_id).stem
         nodes.append({
             "id": node_id,
@@ -412,7 +471,7 @@ def get_memory_graph(cwd: str) -> dict:
         parsed = _parse_memory_file(md_file)
         if not parsed:
             continue
-        source_id = parsed["name"]
+        source_id = parsed["path"]
         source_stem = Path(source_id).stem
         wikilinks = _extract_wikilinks(parsed.get("body", ""))
 
@@ -719,15 +778,10 @@ def organize_memory_links(cwd: str) -> dict:
 def delete_memory_file(filename: str, cwd: str) -> bool:
     """删除 memory 文件（重命名为 .bak）。"""
     memory_dir = _get_memory_dir(cwd)
-    safe_name = Path(filename).name
-    file_path = memory_dir / safe_name
-    if not file_path.exists():
-        for f in memory_dir.rglob("*.md"):
-            if f.name == safe_name:
-                file_path = f
-                break
-        else:
-            return False
+    file_path = _resolve_memory_target(memory_dir, filename, must_exist=True)
+    if file_path is None:
+        return False
+    safe_name = _memory_relative_path(file_path, memory_dir)
 
     bak = file_path.with_suffix(file_path.suffix + ".bak")
     file_path.rename(bak)
@@ -789,11 +843,14 @@ def save_memory_file(filename: str, content: str, cwd: str) -> dict[str, Any] | 
     memory_dir = _get_memory_dir(cwd)
     memory_dir.mkdir(parents=True, exist_ok=True)
 
-    # 安全校验
-    safe_name = Path(filename).name
+    safe_name = str(filename or "").replace("\\", "/").strip().lstrip("/")
     if not safe_name.endswith(".md"):
         safe_name = safe_name + ".md"
-    file_path = memory_dir / safe_name
+    file_path = _resolve_memory_target(memory_dir, safe_name, must_exist=False)
+    if file_path is None:
+        return None
+    file_path.parent.mkdir(parents=True, exist_ok=True)
+    safe_name = _memory_relative_path(file_path, memory_dir)
 
     # 写入内容
     file_path.write_text(content, encoding="utf-8")
@@ -807,7 +864,7 @@ def save_memory_file(filename: str, content: str, cwd: str) -> dict[str, Any] | 
         conn.execute("DELETE FROM memory_fts WHERE file_path = ?", (safe_name,))
         conn.execute(
             "INSERT INTO memory_fts (file_path, name, title, content) VALUES (?, ?, ?, ?)",
-            (safe_name, safe_name, parsed.get("title", safe_name), _indexable_content(parsed))
+            (safe_name, parsed.get("name", Path(safe_name).name), parsed.get("title", safe_name), _indexable_content(parsed))
         )
         conn.execute(
             "INSERT OR REPLACE INTO file_mtime (file_path, mtime) VALUES (?, ?)",
