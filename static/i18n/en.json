@@ -686,6 +686,7 @@
   "imageGenerateFailed": "Image generation failed: {message}",
   "imageProviderNotConfigured": "Image generation provider is not configured. Set the Provider API key first.",
   "imagePromptRequired": "Enter an image prompt",
+  "imageReferenceOnlyImages": "Image references only support PNG/JPG/WebP attachments. Non-image attachments were ignored.",
   "imageCopyUrl": "Copy image URL",
   "imageCopyPath": "Copy local path",
   "imageOpenOriginal": "Open original",

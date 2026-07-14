@@ -14,6 +14,14 @@ class ImageGenerationError(Exception):
 
 
 @dataclass
+class ReferenceImage:
+    data: bytes
+    mime_type: str
+    name: str = ""
+    path: str = ""
+
+
+@dataclass
 class ImageGenerationRequest:
     provider: str
     model: str
@@ -23,7 +31,7 @@ class ImageGenerationRequest:
     aspect_ratio: str = ""
     quality: str = ""
     n: int = 1
-    input_images: list[str] = field(default_factory=list)
+    input_images: list[ReferenceImage] = field(default_factory=list)
     extra: dict[str, Any] = field(default_factory=dict)
 
 

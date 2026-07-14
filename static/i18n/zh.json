@@ -686,6 +686,7 @@
   "imageGenerateFailed": "图片生成失败: {message}",
   "imageProviderNotConfigured": "生图服务未配置，请先设置 Provider API Key。",
   "imagePromptRequired": "请输入图片提示词",
+  "imageReferenceOnlyImages": "生图参考附件只支持 PNG/JPG/WebP 图片，已忽略非图片附件。",
   "imageCopyUrl": "复制图片 URL",
   "imageCopyPath": "复制本地路径",
   "imageOpenOriginal": "打开原图",

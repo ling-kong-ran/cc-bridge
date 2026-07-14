@@ -624,6 +624,7 @@ def append_generated_image_message(session_id: str, cwd: str, prompt: str, resul
                 "aspect_ratio": result.get("aspect_ratio", ""),
                 "quality": result.get("quality", ""),
                 "images": result.get("images") or [],
+                "input_images": result.get("input_images") or [],
                 "request_id": result.get("request_id", ""),
                 "usage": result.get("usage") or {},
             }],
@@ -654,6 +655,7 @@ def _generated_image_block(block: dict) -> dict:
         "aspect_ratio": block.get("aspect_ratio", ""),
         "quality": block.get("quality", ""),
         "images": block.get("images") or [],
+        "input_images": block.get("input_images") or [],
         "request_id": block.get("request_id", ""),
         "usage": block.get("usage") or {},
     }

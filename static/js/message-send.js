@@ -60,12 +60,14 @@
     const attachedFiles = ctx.getAttachedFiles();
     if ((!content && attachedFiles.length === 0 && quotesForThisTurn.length === 0) || !state.sessionActive) return;
     if (root.imageGeneration?.isImageModeActive?.()) {
-      if (!content || attachedFiles.length > 0 || quotesForThisTurn.length > 0 || state.isResponding) return;
+      if (!content || quotesForThisTurn.length > 0 || state.isResponding) return;
+      const filesForThisTurn = ctx.consumeAttachedFiles();
       if (ctx.inputEl) ctx.inputEl.value = '';
       ctx.updateUI();
       await root.imageGeneration.generateFromPrompt(content, {
         sessionId: state.currentSessionId || '',
         cwd: document.getElementById('cwd-input')?.value.trim() || '',
+        attachments: filesForThisTurn,
       });
       ctx.captureActiveWorkspaceSnapshot();
       return;

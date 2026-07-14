@@ -274,6 +274,17 @@
     if (content) content.textContent = t('imageGenerateFailed', { message });
   }
 
+  function isSupportedReferenceImage(file) {
+    return !!file?.path && /\.(png|jpe?g|webp)$/i.test(file.path || file.name || '');
+  }
+
+  function imageAttachments(attachments = []) {
+    return (attachments || [])
+      .filter(isSupportedReferenceImage)
+      .slice(0, 4)
+      .map(file => ({ path: file.path, name: file.name || '', mime_type: file.mime_type || '' }));
+  }
+
   async function buildPayload(prompt, options = {}) {
     await loadModels();
     await loadSettings();
@@ -292,6 +303,7 @@
       aspect_ratio: provider.aspect_ratios ? sizeValue : '',
       quality: settingsData?.quality || modelsData?.defaults?.quality || '',
       n: Number(settingsData?.n || 1),
+      input_images: imageAttachments(options.attachments),
       extra: {},
     };
   }
@@ -301,6 +313,9 @@
     const cleanPrompt = String(prompt || '').trim();
     if (!cleanPrompt) return { ok: false, error: t('imagePromptRequired') };
 
+    const referenceImages = imageAttachments(options.attachments);
+    const skippedAttachments = (options.attachments || []).length - referenceImages.length;
+
     generating = true;
     const button = document.getElementById('btn-generate-image');
     button?.classList.add('loading');
@@ -308,12 +323,13 @@
     const pendingEl = createPendingCard();
 
     try {
-      const payload = await buildPayload(cleanPrompt, options);
+      const payload = await buildPayload(cleanPrompt, { ...options, attachments: referenceImages });
       const data = await root.api.postJson('/api/images/generate', payload);
       if (!data?.ok) throw new Error(data?.error || t('unknownError'));
       data.size = payload.size;
       data.aspect_ratio = payload.aspect_ratio;
       data.n = payload.n;
+      if (skippedAttachments > 0) root.toast?.showToast?.(t('imageReferenceOnlyImages'), 'warning');
       renderGeneratedImages(data, pendingEl);
       return { ok: true, data };
     } catch (error) {

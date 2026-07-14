@@ -17,6 +17,7 @@ from .base import (
     ImageGenerationRequest,
     ImageGenerationResult,
     ProviderImagePayload,
+    ReferenceImage,
 )
 from .gemini_provider import GeminiImageProvider
 from .openai_provider import OpenAIImageProvider
@@ -24,6 +25,8 @@ from .openai_provider import OpenAIImageProvider
 PROMPT_MAX_CHARS = 4000
 MAX_IMAGES = 4
 MAX_REMOTE_IMAGE_BYTES = 20 * 1024 * 1024
+MAX_INPUT_IMAGE_BYTES = 20 * 1024 * 1024
+MAX_INPUT_IMAGES = 4
 ALLOWED_IMAGE_MIME_TYPES = {"image/png", "image/jpeg", "image/webp"}
 MIME_EXTENSIONS = {
     "image/png": ".png",
@@ -139,9 +142,35 @@ class ImageGenerationService:
             aspect_ratio=str(data.get("aspect_ratio") or "").strip(),
             quality=str(data.get("quality") or "").strip(),
             n=n,
-            input_images=[str(item) for item in input_images],
+            input_images=self._load_input_images(input_images),
             extra=extra,
         )
+
+    def _load_input_images(self, items: list) -> list[ReferenceImage]:
+        images = []
+        for item in items[:MAX_INPUT_IMAGES]:
+            path = str(item.get("path") if isinstance(item, dict) else item or "").strip()
+            if not path:
+                continue
+            fp = Path(path).expanduser().resolve()
+            is_gui_upload = any(part == ".gui-uploads" for part in fp.parts)
+            if not is_gui_upload:
+                raise ImageGenerationError("参考图必须来自已上传的图片附件", 400)
+            if not fp.exists() or not fp.is_file():
+                raise ImageGenerationError(f"参考图不存在：{path}", 400)
+            if fp.stat().st_size > MAX_INPUT_IMAGE_BYTES:
+                raise ImageGenerationError("参考图不能超过 20MB", 413)
+            data = fp.read_bytes()
+            mime_type = _detect_image_mime(data) or _normalize_mime(mimetypes.guess_type(fp.name)[0] or "")
+            if mime_type not in ALLOWED_IMAGE_MIME_TYPES:
+                raise ImageGenerationError(f"不支持的参考图类型：{mime_type or fp.name}", 415)
+            images.append(ReferenceImage(
+                data=data,
+                mime_type=mime_type,
+                name=fp.name,
+                path=str(fp).replace("\\", "/"),
+            ))
+        return images
 
     def _resolve_output_dir(self, cwd: str) -> Path:
         if not cwd:

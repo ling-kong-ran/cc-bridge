@@ -3176,6 +3176,12 @@ async def handle_api_post(path: str, body: bytes, writer: asyncio.StreamWriter):
             payload["size"] = str(data.get("size") or "")
             payload["aspect_ratio"] = str(data.get("aspect_ratio") or "")
             payload["quality"] = str(data.get("quality") or "")
+            input_images = data.get("input_images") if isinstance(data.get("input_images"), list) else []
+            payload["input_images"] = [
+                {"path": str(item.get("path") or ""), "name": str(item.get("name") or "")}
+                for item in input_images
+                if isinstance(item, dict) and item.get("path")
+            ]
             session_id = str(data.get("session_id") or "").strip()
             if session_id:
                 append_generated_image_message(session_id, str(data.get("cwd") or ""), str(data.get("prompt") or ""), payload)

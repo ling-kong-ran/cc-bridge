@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import asyncio
+import base64
 import json
 import os
 from urllib.error import HTTPError, URLError
@@ -49,9 +50,17 @@ class GeminiImageProvider(ImageProvider):
         api_key = self._api_key()
         base_url = (self._env("GEMINI_BASE_URL") or "https://generativelanguage.googleapis.com/v1beta").rstrip("/")
         model = request.model or self.default_model
+        parts = [{"text": request.prompt}]
+        for image in request.input_images:
+            parts.append({
+                "inlineData": {
+                    "mimeType": image.mime_type,
+                    "data": base64.b64encode(image.data).decode("ascii"),
+                }
+            })
         payload = {
             "contents": [
-                {"role": "user", "parts": [{"text": request.prompt}]}
+                {"role": "user", "parts": parts}
             ]
         }
         generation_config = {}
