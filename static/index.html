@@ -733,7 +733,31 @@
               <span id="memory-status-info" class="memory-status-info"></span>
             </div>
           </div>
-          <div class="memory-layout">
+          <div class="memory-workspace-tabs" role="tablist" aria-label="Memory views">
+            <button id="memory-tab-browse" class="memory-tab active" type="button" data-memory-view="browse" data-i18n="memoryBrowse">Browse</button>
+            <button id="memory-tab-graph" class="memory-tab" type="button" data-memory-view="graph" data-i18n="memoryGraph">Graph</button>
+          </div>
+          <div id="memory-browse-view" class="memory-layout memory-browse-view">
+            <aside class="memory-filter-panel" aria-label="Memory filters">
+              <label class="field-label" for="memory-search-input" data-i18n="search">Search</label>
+              <input id="memory-search-input" class="input" type="search" data-i18n-placeholder="memorySearchPlaceholder" placeholder="Search memory...">
+              <label class="field-label" for="memory-filter-type" data-i18n="type">Type</label>
+              <select id="memory-filter-type" class="select"><option value="all" data-i18n="all">All</option></select>
+              <label class="field-label" for="memory-filter-source" data-i18n="source">Source</label>
+              <select id="memory-filter-source" class="select"><option value="all" data-i18n="all">All</option></select>
+              <label class="field-label" for="memory-filter-inject" data-i18n="memoryInject">Inject</label>
+              <select id="memory-filter-inject" class="select"><option value="all" data-i18n="all">All</option></select>
+            </aside>
+            <section class="memory-list-panel">
+              <div id="memory-list-state" class="memory-list-state" aria-live="polite"></div>
+              <div id="memory-file-list" class="memory-file-list"></div>
+            </section>
+            <section class="memory-detail-panel" aria-live="polite">
+              <div id="memory-detail-empty" class="memory-detail-empty" data-i18n="memorySelectHint">Select a memory to view details.</div>
+              <div id="memory-detail-content" class="memory-detail-content" hidden></div>
+            </section>
+          </div>
+          <div id="memory-graph-view" class="memory-layout memory-graph-view" hidden>
             <div id="memory-graph-panel" class="memory-graph-panel">
               <canvas id="wiki-graph-canvas"></canvas>
               <div class="graph-controls">

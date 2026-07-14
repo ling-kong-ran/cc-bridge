@@ -103,7 +103,7 @@ function initWikiGraph() {
   canvas.addEventListener("dblclick", onWikiGraphDoubleClick);
   canvas.setAttribute("tabindex", "0");
   canvas.setAttribute("role", "img");
-  canvas.setAttribute("aria-label", "Memory knowledge graph. Drag to pan, scroll to zoom, click nodes to open memory files.");
+  canvas.setAttribute("aria-label", typeof t === "function" ? t("memoryGraphAria") : "Memory knowledge graph. Drag to pan, scroll to zoom, click nodes to open memory files.");
 
   var resetBtn = document.getElementById("btn-graph-reset");
   if (resetBtn) resetBtn.addEventListener("click", resetWikiGraphView);
