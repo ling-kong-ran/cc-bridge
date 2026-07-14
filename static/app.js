@@ -2328,7 +2328,7 @@ function getMessageExtrasOptions() {
     addSystemMsg,
     showPage,
     domText,
-    messagesEl,
+    getMessagesEl: getActiveMessagesEl,
     inputEl,
     quotePreviewBar,
   };

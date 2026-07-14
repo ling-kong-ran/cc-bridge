@@ -1,6 +1,7 @@
 (function () {
   const root = window.CCBridge = window.CCBridge || {};
   let quotedMessages = [];
+  let quoteClickListenerBound = false;
 
   function getContext(options = {}) {
     return {
@@ -130,8 +131,9 @@
     const menu = document.getElementById('msg-context-menu');
     menu?.remove();
 
-    const messagesEl = ctx.getMessagesEl();
-    messagesEl?.addEventListener('click', (e) => {
+    if (quoteClickListenerBound) return;
+    quoteClickListenerBound = true;
+    document.addEventListener('click', (e) => {
       const quoteBtn = e.target.closest('.msg-quote-btn');
       if (!quoteBtn) return;
       const msgEl = quoteBtn.closest('.message');
