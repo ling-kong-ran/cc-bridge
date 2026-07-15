@@ -767,24 +767,42 @@
 
             <section class="workflow-canvas-panel" aria-label="Live workflow DAG">
               <div class="workflow-canvas-head">
-                <div>
+                <div class="workflow-canvas-titleblock">
                   <div class="workflow-panel-kicker" data-i18n="workflowLiveDag">Live DAG</div>
                   <h3 id="workflow-canvas-title">—</h3>
-                </div>
-                <div class="workflow-canvas-tools">
-                  <button id="btn-workflow-toggle-list" class="btn-mini" type="button" data-i18n="workflows">Workflows</button>
-                  <button id="btn-workflow-template" class="btn-mini" type="button" data-i18n="workflowTemplateLibrary">Templates</button>
-                  <button id="btn-workflow-save" class="btn-mini" type="button" data-i18n="workflowSaveDraft">Save draft</button>
-                  <button id="btn-workflow-add-node" class="btn-mini" type="button" data-i18n="workflowAddNode">+ Node</button>
-                  <button id="btn-workflow-connect" class="btn-mini" type="button" data-i18n="workflowConnect">Connect</button>
-                  <button id="btn-workflow-delete-node" class="btn-mini" type="button" data-i18n="delete">Delete</button>
-                  <button id="btn-workflow-cancel" class="btn-mini workflow-cancel-inline" type="button" data-i18n="workflowCancelRun">Cancel run</button>
-                  <button id="btn-workflow-run" class="btn btn-primary btn-medium" type="button"><span class="btn-prefix">▶</span> <span data-i18n="workflowRun">Run workflow</span></button>
                   <div id="workflow-canvas-summary" class="workflow-canvas-summary">0 nodes</div>
                 </div>
+                <div class="workflow-canvas-tools">
+                  <div class="workflow-tool-group">
+                    <button id="btn-workflow-toggle-list" class="btn-mini" type="button" data-i18n="workflows">Workflows</button>
+                    <button id="btn-workflow-template" class="btn-mini" type="button" data-i18n="workflowTemplateLibrary">Templates</button>
+                    <button id="btn-workflow-save" class="btn-mini" type="button" data-i18n="workflowSaveDraft">Save draft</button>
+                  </div>
+                  <div class="workflow-tool-group">
+                    <button id="btn-workflow-add-node" class="btn-mini" type="button" data-i18n="workflowAddNode">+ Node</button>
+                    <button id="btn-workflow-connect" class="btn-mini" type="button" data-i18n="workflowConnect">Connect</button>
+                    <button id="btn-workflow-delete-node" class="btn-mini" type="button" data-i18n="delete">Delete</button>
+                  </div>
+                  <div class="workflow-tool-group workflow-run-actions">
+                    <button id="btn-workflow-new-run" class="btn-mini workflow-new-run-btn" type="button" title="New run" data-i18n-title="workflowNewRun" aria-label="New run"><span aria-hidden="true">+</span></button>
+                    <button id="btn-workflow-pause" class="btn-mini workflow-pause-btn" type="button" title="Pause" data-i18n-title="workflowPauseRun" aria-label="Pause" disabled><span aria-hidden="true">II</span></button>
+                    <button id="btn-workflow-run" class="btn btn-primary workflow-run-btn" type="button" title="Run" data-i18n-title="workflowRun" aria-label="Run"><span aria-hidden="true">▶</span></button>
+                  </div>
+                </div>
               </div>
+              <form id="workflow-run-form" class="workflow-run-panel">
+                <label class="workflow-run-request" for="workflow-run-request">
+                  <span data-i18n="workflowRunRequest">Request</span>
+                  <textarea id="workflow-run-request" class="input" rows="3" data-i18n-placeholder="workflowRunRequestPlaceholder" placeholder="Describe what this workflow should do..."></textarea>
+                </label>
+              </form>
+              <section class="workflow-run-history" aria-label="Workflow run history">
+                <div class="workflow-run-history-head">
+                  <span data-i18n="workflowRunHistory">Run history</span>
+                </div>
+                <div id="workflow-run-history-list" class="workflow-run-history-list"></div>
+              </section>
               <div id="workflow-canvas" class="workflow-canvas" tabindex="0">
-                <div id="workflow-canvas-status" class="workflow-canvas-status" aria-live="polite"></div>
                 <div id="workflow-approval-card" class="workflow-approval-card" hidden>
                   <div class="workflow-approval-title" data-i18n="workflowApprovalRequired">Approval required</div>
                   <p id="workflow-approval-message">—</p>
@@ -800,20 +818,6 @@
             </section>
           </div>
 
-          <section class="workflow-timeline-panel" aria-label="Workflow timeline">
-            <div class="workflow-timeline-summary">
-              <div class="workflow-panel-kicker" data-i18n="workflowTimeline">Run timeline</div>
-              <div id="workflow-timeline-title" class="workflow-timeline-title">idle</div>
-              <div class="workflow-progress-track"><div id="workflow-progress-bar" class="workflow-progress-bar"></div></div>
-            </div>
-            <div class="workflow-log-panel">
-              <div class="workflow-log-head">
-                <span data-i18n="workflowLogs">SSE logs</span>
-                <button id="btn-workflow-clear-log" class="btn-mini" type="button" data-i18n="clear">Clear</button>
-              </div>
-              <div id="workflow-log" class="workflow-log" aria-live="polite"></div>
-            </div>
-          </section>
         </div>
       </div>
 
@@ -1243,6 +1247,19 @@
         <button id="workflow-editor-close" class="close-btn" type="button">&times;</button>
       </div>
       <div id="workflow-editor-body" class="workflow-inspector-body modal-scroll-body"></div>
+    </div>
+  </div>
+
+  <div id="workflow-template-overlay" class="modal-overlay" style="display:none">
+    <div class="modal workflow-template-modal">
+      <div class="memory-modal-head">
+        <div>
+          <div class="workflow-panel-kicker" data-i18n="workflowTemplateLibrary">Templates</div>
+          <h3 class="modal-title" data-i18n="workflowTemplateLibraryTitle">Multi-Agent workflow templates</h3>
+        </div>
+        <button id="workflow-template-close" class="close-btn" type="button">&times;</button>
+      </div>
+      <div id="workflow-template-list" class="workflow-template-list modal-scroll-body"></div>
     </div>
   </div>
 

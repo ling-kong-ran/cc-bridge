@@ -20,8 +20,8 @@ import wiki_store
 
 DEFAULT_CONTEXT_SETTINGS: dict[str, Any] = {
     "memoryAutoInject": True,
-    "memoryInjectMaxTokens": 6000,
-    "memoryInjectMaxItems": 4,
+    "memoryInjectMaxTokens": 1200,
+    "memoryInjectMaxItems": 2,
     "memoryInjectDepth": 0,
     "memoryInjectIncludeRaw": False,
     "memoryInjectExplain": True,
@@ -37,8 +37,8 @@ def normalize_context_settings(settings: dict[str, Any] | None = None) -> dict[s
     merged["memoryAutoInject"] = bool(merged.get("memoryAutoInject", True))
     merged["memoryInjectIncludeRaw"] = bool(merged.get("memoryInjectIncludeRaw", False))
     merged["memoryInjectExplain"] = bool(merged.get("memoryInjectExplain", True))
-    merged["memoryInjectMaxTokens"] = _clamp_int(merged.get("memoryInjectMaxTokens"), 1000, 30000, 8000)
-    merged["memoryInjectMaxItems"] = _clamp_int(merged.get("memoryInjectMaxItems"), 1, 20, 6)
+    merged["memoryInjectMaxTokens"] = _clamp_int(merged.get("memoryInjectMaxTokens"), 300, 2000, 1200)
+    merged["memoryInjectMaxItems"] = _clamp_int(merged.get("memoryInjectMaxItems"), 1, 4, 2)
     merged["memoryInjectDepth"] = _clamp_int(merged.get("memoryInjectDepth"), 0, 3, 1)
     return merged
 
@@ -99,6 +99,9 @@ def retrieve_context_trace(
     }
 
     if not normalized["memoryAutoInject"]:
+        return trace
+    if _is_low_signal_query(query):
+        trace["skipped"] = [{"reason": "query too short or low-signal for automatic memory recall"}]
         return trace
 
     candidates: list[dict[str, Any]] = []
@@ -183,7 +186,7 @@ def _retrieve_project_memory(query: str, cwd: str, include_raw: bool, limit: int
         if not include_raw and (mem_type == "raw" or str(rel_path).startswith("raw/")):
             continue
         body = file_data.get("body") or file_data.get("content") or ""
-        content = _trim_to_tokens(body, 2400)
+        content = _trim_to_tokens(body, 900)
         score = max(0.1, 1.0 - idx * 0.05)
         if mem_type in {"feedback", "project", "user"}:
             score += 0.25
@@ -211,7 +214,7 @@ def _retrieve_wiki(query: str, depth: int, limit: int) -> list[dict[str, Any]]:
         if not node:
             continue
         seen.add(node_id)
-        content = _trim_to_tokens(node.get("body") or result.get("snippet") or "", 2400)
+        content = _trim_to_tokens(node.get("body") or result.get("snippet") or "", 900)
         score = max(0.08, 0.88 - idx * 0.04)
         score += min(float(node.get("access_count") or 0) * 0.005, 0.1)
         candidates.append({
@@ -239,7 +242,7 @@ def _retrieve_wiki(query: str, depth: int, limit: int) -> list[dict[str, Any]]:
                 "source": "wiki",
                 "path": neighbor_id,
                 "score": round(max(0.05, score - 0.18), 3),
-                "content": _trim_to_tokens(neighbor_node.get("body") or "", 1200),
+                "content": _trim_to_tokens(neighbor_node.get("body") or "", 500),
                 "reason": f"与命中 wiki 节点 {node.get('title') or node_id} 存在 wikilink 关联",
             })
     return candidates
@@ -361,6 +364,25 @@ def _phrase_overlap_score(query: str, text: str) -> float:
     return min(score, 0.5)
 
 
+def _is_low_signal_query(query: str) -> bool:
+    text = str(query or "").strip().lower()
+    if not text:
+        return True
+    normalized = re.sub(r"[\s`*_(){}\[\]<>:;,.!?，。！？、'\"-]+", "", text)
+    greetings = {
+        "hi", "hello", "hey", "你好", "您好", "哈喽", "嗨", "在吗", "早上好", "下午好", "晚上好",
+        "ok", "test", "测试",
+    }
+    if normalized in greetings:
+        return True
+    terms = _semantic_terms(text)
+    if len(terms) < 2:
+        return True
+    if len(normalized) <= 8 and not re.search(r"[a-zA-Z0-9_]{4,}|[\u4e00-\u9fff]{3,}", normalized):
+        return True
+    return False
+
+
 def _semantic_terms(text: str) -> set[str]:
     """提取用于自动注入相关性判断的低噪声关键词。"""
     text = str(text or "").lower()
@@ -412,8 +434,7 @@ def _skip_item(item: dict[str, Any], reason: str) -> dict[str, Any]:
 
 
 def _item_token_budget(max_tokens: int, max_items: int) -> int:
-    # 给单条记忆留出更宽松但受控的预算，避免前几条大块内容挤掉全部结果。
-    return max(800, min(3000, max_tokens // max(1, min(max_items, 4))))
+    return max(250, min(700, max_tokens // max(1, min(max_items, 3))))
 
 
 def _summarize_to_tokens(query: str, text: str, max_tokens: int, cwd: str = "", settings: dict[str, Any] | None = None) -> str:

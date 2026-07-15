@@ -200,7 +200,7 @@
   function initMemoryAutoConsolidateControl() {
     const toggle = document.getElementById('memory-auto-consolidate');
     toggle?.addEventListener('change', () => {
-      saveGuiSettings({ memoryAutoConsolidate: toggle.checked ? 'auto' : 'off' });
+      saveGuiSettings({ memoryAutoConsolidate: toggle.checked ? 'suggest' : 'off' });
     });
   }
 

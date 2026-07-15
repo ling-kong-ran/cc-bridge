@@ -1583,6 +1583,8 @@ async def schedule_memory_consolidation(client_id: str, session_id: str = "", ru
         prompt = run_last_prompt.get(run_id, "") or client_last_prompt.get(client_id, "") or client_last_msg.get(client_id, "")
         if not prompt:
             return
+        if len(prompt.strip()) < 12:
+            return
         meta = client_meta.get(client_id, {}) or {}
         cwd = meta.get("cwd") or DEFAULT_CWD
         # 提前捕获本轮助手回复，避免 _notify_summary pop 缓冲区后读到空值
@@ -3058,6 +3060,8 @@ async def handle_workflow_get(path: str, query: dict | None = None) -> tuple[int
     query = query or {}
     if path == "/api/workflows":
         return 200, {"workflows": workflow_store.list_workflows()}
+    if path == "/api/workflows/templates":
+        return 200, {"templates": workflow_store.list_workflow_templates()}
     if path == "/api/workflows/runs":
         workflow_id = query.get("workflow_id", [""])[0] or None
         limit_text = query.get("limit", ["100"])[0]
@@ -3088,9 +3092,27 @@ async def handle_workflow_post(path: str, data: dict) -> tuple[int, dict]:
             return 200, workflow_store.save_workflow(data)
         except ValueError as exc:
             return 400, {"error": str(exc)}
+    if path == "/api/workflows/from-template":
+        template_id = str(data.get("template_id") or data.get("id") or "").strip()
+        try:
+            return 200, workflow_store.instantiate_workflow_template(template_id)
+        except ValueError as exc:
+            return 404, {"error": str(exc)}
     if path.startswith("/api/workflows/runs/") and path.endswith("/cancel"):
         run_id = path.removeprefix("/api/workflows/runs/")[:-len("/cancel")].strip("/")
         run = await get_workflow_runner().cancel_run(run_id)
+        if not run:
+            return 404, {"error": "not found"}
+        return 200, run
+    if path.startswith("/api/workflows/runs/") and path.endswith("/pause"):
+        run_id = path.removeprefix("/api/workflows/runs/")[:-len("/pause")].strip("/")
+        run = await get_workflow_runner().pause_run(run_id)
+        if not run:
+            return 404, {"error": "not found"}
+        return 200, run
+    if path.startswith("/api/workflows/runs/") and path.endswith("/resume"):
+        run_id = path.removeprefix("/api/workflows/runs/")[:-len("/resume")].strip("/")
+        run = await get_workflow_runner().resume_run(run_id)
         if not run:
             return 404, {"error": "not found"}
         return 200, run
