@@ -4,6 +4,7 @@ Workflow Store - Agent 工作流定义与运行记录持久化
 """
 import copy
 import json
+import os
 import time
 import uuid
 from pathlib import Path
@@ -30,7 +31,9 @@ def _load_json(path: Path, default: Any) -> Any:
 
 def _save_json(path: Path, data: Any) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+    tmp_path = path.with_name(f".{path.name}.{uuid.uuid4().hex}.tmp")
+    tmp_path.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+    os.replace(tmp_path, path)
 
 
 def _load_workflows() -> list[dict]:
@@ -66,11 +69,12 @@ def _default_workflow() -> dict:
         "variables": {
             "cwd": "",
             "model": "",
+            "execution_mode": "mock",
         },
         "nodes": [
             {"id": "start", "type": "start", "title": "开始"},
-            {"id": "analyze", "type": "agent", "title": "分析需求", "config": {"prompt": "分析需求和当前改动，输出实施计划。", "output_key": "analysis"}},
-            {"id": "implement", "type": "agent", "title": "模拟代码修改", "config": {"prompt": "根据分析结果模拟修改代码。", "output_key": "implementation"}},
+            {"id": "analyze", "type": "agent", "title": "分析需求", "config": {"prompt": "分析需求和当前改动，输出实施计划。", "output_key": "analysis", "mode": "mock"}},
+            {"id": "implement", "type": "agent", "title": "模拟代码修改", "config": {"prompt": "根据分析结果模拟修改代码。", "output_key": "implementation", "mode": "mock"}},
             {"id": "test", "type": "command", "title": "模拟运行测试", "config": {"command": "python -m py_compile server.py", "requires_approval": False}},
             {"id": "review", "type": "approval", "title": "人工复核", "config": {"message": "请确认模拟修改和测试结果是否可以继续生成报告。", "approve_label": "继续", "reject_label": "取消"}},
             {"id": "report", "type": "artifact", "title": "生成报告", "config": {"format": "markdown", "filename": "workflow-report.md"}},
@@ -164,6 +168,7 @@ def create_run(workflow_id: str, inputs: dict | None = None) -> dict:
         "ended_at": None,
         "current_node_ids": [],
         "node_runs": {},
+        "outputs": {},
         "artifacts": [],
         "events": [],
         "last_error": "",
@@ -239,3 +244,30 @@ def append_node_event(run_id: str, node_id: str, event: str, payload: dict | Non
         return None
     _save_runs(runs)
     return copy.deepcopy(updated)
+
+
+def update_run_output(run_id: str, node_id: str, output_key: str, output: dict) -> dict | None:
+    """记录节点输出，供后续节点模板引用。"""
+    run = get_run(run_id)
+    if not run:
+        return None
+    outputs = run.get("outputs") if isinstance(run.get("outputs"), dict) else {}
+    key = str(output_key or node_id or "")
+    if key:
+        outputs[key] = copy.deepcopy(output or {})
+    if node_id and node_id != key:
+        outputs[str(node_id)] = copy.deepcopy(output or {})
+    return update_run(run_id, {"outputs": outputs})
+
+
+def append_run_artifact(run_id: str, artifact: dict) -> dict | None:
+    """追加运行产物记录。"""
+    run = get_run(run_id)
+    if not run:
+        return None
+    artifacts = run.get("artifacts") if isinstance(run.get("artifacts"), list) else []
+    item = copy.deepcopy(artifact or {})
+    item.setdefault("id", f"artifact-{uuid.uuid4().hex[:8]}")
+    item.setdefault("created_at", _now())
+    artifacts.append(item)
+    return update_run(run_id, {"artifacts": artifacts})

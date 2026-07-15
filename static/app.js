@@ -1537,13 +1537,18 @@ function handleWorkflowEvent(data = {}) {
     if (ev === 'node_started') workflowState.nodeStatuses[data.node_id] = 'running';
     else if (ev === 'node_succeeded') workflowState.nodeStatuses[data.node_id] = 'succeeded';
     else if (ev === 'node_failed') workflowState.nodeStatuses[data.node_id] = 'failed';
+    else if (ev === 'node_cancelled') workflowState.nodeStatuses[data.node_id] = 'cancelled';
     else if (ev === 'approval_required') workflowState.nodeStatuses[data.node_id] = 'paused';
-    if (data.payload) workflowState.nodeOutputs[data.node_id] = { ...(workflowState.nodeOutputs[data.node_id] || {}), ...data.payload };
+    const output = data.payload?.output && typeof data.payload.output === 'object' ? data.payload.output : data.payload;
+    if (output) workflowState.nodeOutputs[data.node_id] = { ...(workflowState.nodeOutputs[data.node_id] || {}), ...output };
   }
   if (ev === 'run_paused' || ev === 'approval_required') workflowState.currentRun.status = 'paused';
   if (ev === 'run_succeeded') workflowState.currentRun.status = 'succeeded';
   if (ev === 'run_failed') workflowState.currentRun.status = 'failed';
-  if (ev === 'run_cancelled') workflowState.currentRun.status = 'cancelled';
+  if (ev === 'run_cancelled') {
+    workflowState.currentRun.status = 'cancelled';
+    Object.keys(workflowState.nodeStatuses).forEach((nodeId) => { if (workflowState.nodeStatuses[nodeId] === 'running' || workflowState.nodeStatuses[nodeId] === 'paused') workflowState.nodeStatuses[nodeId] = 'cancelled'; });
+  }
   appendWorkflowLog(ev, data.payload?.message || data.node_id || data.run_id || '');
   renderWorkflowsPage();
 }
