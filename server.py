@@ -1513,6 +1513,57 @@ async def broadcast_event(event_type: str, data: dict):
 async def publish_workflow_event(data: dict):
     """发布工作流运行事件，复用现有 SSE 通道。"""
     await broadcast_event("workflow_event", data)
+    if data.get("event") == "approval_required":
+        asyncio.create_task(_notify_workflow_approval_required(data))
+
+
+def _render_notify_template(template: str, values: dict[str, str]) -> str:
+    """渲染通知模板变量。"""
+    text = template or ""
+    for key, value in values.items():
+        text = text.replace("{{" + key + "}}", str(value or "-"))
+    return text.strip()
+
+
+async def _notify_workflow_approval_required(data: dict):
+    """工作流进入审批节点时主动推送到飞书网关。"""
+    try:
+        payload = data.get("payload") if isinstance(data.get("payload"), dict) else {}
+        workflow_id = str(data.get("workflow_id") or "")
+        run_id = str(data.get("run_id") or "")
+        node_id = str(data.get("node_id") or "")
+        workflow = workflow_store.get_workflow(workflow_id) or {}
+        nodes = workflow.get("nodes") if isinstance(workflow.get("nodes"), list) else []
+        node = next((item for item in nodes if isinstance(item, dict) and str(item.get("id") or "") == node_id), {})
+        config = _f.get_feishu_gateway_config(redact=False)
+        template = str(config.get("workflow_notify_template") or "").strip()
+        if not template:
+            template = (
+                "通知：工作流需要审批\n\n"
+                "工作流：{{workflow_name}}\n"
+                "Workflow ID：{{workflow_id}}\n"
+                "Run ID：{{run_id}}\n"
+                "节点：{{node_title}}\n"
+                "Node ID：{{node_id}}\n\n"
+                "请在 cc-bridge 工作流页面审批继续或拒绝。"
+            )
+        text = _render_notify_template(template, {
+            "workflow_name": str(workflow.get("name") or workflow_id or "-"),
+            "workflow_id": workflow_id or "-",
+            "run_id": run_id or "-",
+            "node_title": str(node.get("title") or payload.get("title") or node_id or "-"),
+            "node_id": node_id or "-",
+            "status": str(payload.get("status") or "paused"),
+            "event": str(data.get("event") or "approval_required"),
+            "message": str(payload.get("message") or "请审批该工作流节点"),
+        })
+        await get_feishu_gateway().notify_active_scopes(
+            text,
+            reason="workflow_approval_required",
+            require_complete_notify=False,
+        )
+    except Exception as exc:
+        _notify_log.info(f"workflow approval notify failed: {exc}")
 
 
 def get_workflow_runner() -> WorkflowRunner:
@@ -2828,17 +2879,25 @@ async def _notify_scheduled_task_event(event_type: str, data: dict):
         else:
             title = "Scheduled task completed" if is_en else "定时任务完成"
             status = "Completed" if is_en else "完成"
-        trigger_label = "Trigger" if is_en else "触发方式"
         trigger = ("Manual" if manual else "Schedule") if is_en else ("手动" if manual else "定时")
-        parts = [f"通知：{title}", f"\n{('Task' if is_en else '任务')}：{name}", f"{('Status' if is_en else '状态')}：{status}"]
-        parts.append(f"{trigger_label}：{trigger}")
-        if model:
-            parts.append(f"{('Model' if is_en else '模型')}：{model}")
-        if sid:
-            parts.append(f"Session：{sid}")
-        if error:
-            parts.append(f"\n{('Error' if is_en else '错误')}：{error[:500]}")
-        await get_feishu_gateway().notify_active_scopes("\n".join(parts).strip(), reason="notify_scheduled_task", require_complete_notify=False)
+        template = str(_f.get_feishu_gateway_config(redact=False).get("scheduled_notify_template") or "").strip()
+        if not template:
+            template = (
+                "Notification: {{title}}\n\nTask: {{task_name}}\nStatus: {{status}}\nTrigger: {{trigger}}\nModel: {{model}}\nSession: {{session_id}}\n\nError: {{error}}"
+                if is_en else
+                "通知：{{title}}\n\n任务：{{task_name}}\n状态：{{status}}\n触发方式：{{trigger}}\n模型：{{model}}\nSession：{{session_id}}\n\n错误：{{error}}"
+            )
+        text = _render_notify_template(template, {
+            "title": title,
+            "task_name": name,
+            "status": status,
+            "trigger": trigger,
+            "model": model,
+            "session_id": sid,
+            "error": error[:500],
+            "event_type": event_type,
+        })
+        await get_feishu_gateway().notify_active_scopes(text, reason="notify_scheduled_task", require_complete_notify=False)
     except Exception as exc:
         _notify_log.info(f"scheduled notify failed: {exc}")
 

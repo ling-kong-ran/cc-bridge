@@ -135,11 +135,11 @@ class WorkflowRunner:
             await asyncio.sleep(0.05)
             output = self._condition_output(run_id, node)
         elif node_type == "approval":
-            message = str(config.get("message") or f"{title} 等待人工审批")
+            message = f"工作流 {workflow.get('name') or workflow_id or '-'} 的节点 {title} 需要审批"
             workflow_store.update_run(run_id, {"status": "paused", "current_node_ids": [node_id]})
-            workflow_store.append_node_event(run_id, node_id, "approval_required", {"message": message})
+            workflow_store.append_node_event(run_id, node_id, "approval_required", {"message": message, "title": title})
             self._paused[run_id] = {"workflow": workflow, "node_id": node_id}
-            await self._emit(workflow_id, run_id, node_id, "approval_required", {"status": "paused", "message": message, "config": config})
+            await self._emit(workflow_id, run_id, node_id, "approval_required", {"status": "paused", "message": message, "title": title, "config": config})
             await self._emit(workflow_id, run_id, node_id, "run_paused", {"status": "paused", "message": "工作流等待人工审批"})
             return True
         elif node_type == "agent" and self._is_real_agent_node(workflow, node):

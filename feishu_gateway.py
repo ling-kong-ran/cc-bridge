@@ -70,6 +70,23 @@ from feishu_gateway_store import (
 from session_store import add_session_usage, save_session
 
 
+def _render_notify_template(template: str, values: dict[str, str]) -> str:
+    text = template or ""
+    for key, value in values.items():
+        text = text.replace("{{" + key + "}}", str(value or ""))
+    return "\n".join(line.rstrip() for line in text.splitlines()).strip()
+
+
+def _format_elapsed(elapsed: float, lang: str = "zh") -> str:
+    if elapsed <= 0:
+        return ""
+    if elapsed < 60:
+        return f"{elapsed:.0f}s"
+    m = int(elapsed // 60)
+    s = int(elapsed % 60)
+    return f"{m}m{s}s"
+
+
 @dataclass
 class FeishuMessage:
     event_id: str
@@ -159,26 +176,22 @@ class FeishuGateway:
         """向所有活跃飞书聊天发送 GUI 会话完成通知。"""
         is_en = lang == "en"
         header = "Session completed" if is_en else "会话完成"
-        q_label = "Q" if is_en else "问"
-        a_label = "A" if is_en else "答"
-        model_label = "Model" if is_en else "模型"
-        elapsed_label = "Duration" if is_en else "耗时"
-        cost_info = f" (${cost_usd:.4f})" if cost_usd > 0 else ""
-        parts = [f"通知：{header}{cost_info}"]
-        if prompt:
-            parts.append(f"\n{q_label}：\n{prompt}")
-        if summary:
-            parts.append(f"\n{a_label}：\n{summary}")
-        meta = [f"{model_label}：{model}"]
-        if elapsed > 0:
-            if elapsed < 60:
-                meta.append(f"{elapsed_label}：{elapsed:.0f}s")
-            else:
-                m = int(elapsed // 60)
-                s = int(elapsed % 60)
-                meta.append(f"{elapsed_label}：{m}m{s}s")
-        parts.append("\n" + "  |  ".join(meta))
-        text = "\n".join(parts).strip()
+        config = get_feishu_gateway_config(redact=False)
+        template = str(config.get("session_notify_template") or "").strip()
+        if not template:
+            template = (
+                "Notification: {{title}}{{cost}}\n\nQ:\n{{prompt}}\n\nA:\n{{summary}}\n\nModel: {{model}}  |  Duration: {{elapsed}}"
+                if is_en else
+                "通知：{{title}}{{cost}}\n\n问：\n{{prompt}}\n\n答：\n{{summary}}\n\n模型：{{model}}  |  耗时：{{elapsed}}"
+            )
+        text = _render_notify_template(template, {
+            "title": header,
+            "cost": f" (${cost_usd:.4f})" if cost_usd > 0 else "",
+            "prompt": prompt,
+            "summary": summary,
+            "model": model,
+            "elapsed": _format_elapsed(elapsed, lang),
+        })
         await self.notify_active_scopes(text, reason="notify_session_complete")
 
     async def reset_scope(self, chat_id: str) -> bool:

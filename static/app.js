@@ -380,6 +380,7 @@ const workflowState = {
   connectFromNodeId: '',
   selectedEdgeId: '',
   dragging: null,
+  listOpen: false,
 };
 
 function getDesktopWindowModule() {
@@ -1333,12 +1334,12 @@ function workflowSampleDefinitions() {
     description: t('workflowSampleCodeChangeDesc'),
     status: 'idle',
     nodes: [
-      { id: 'start', type: 'start', title: 'Start', config: { note: '入口节点' } },
-      { id: 'analyze', type: 'agent', title: 'Analyze request', config: { prompt: '分析当前任务、git diff 与风险。', output_key: 'analysis' } },
-      { id: 'implement', type: 'agent', title: 'Implement changes', config: { prompt: '根据分析结果修改代码。', output_key: 'implementation' } },
-      { id: 'test', type: 'condition', title: 'Need tests?', config: { expression: "outputs.analysis.summary contains '测试'" } },
-      { id: 'approval', type: 'approval', title: 'Human approval', config: { message: '高风险动作前暂停并等待人工确认。' } },
-      { id: 'end', type: 'end', title: 'Done', config: {} },
+      { id: 'start', type: 'start', title: t('workflowSampleStart'), config: { note: t('workflowSampleStartNote') } },
+      { id: 'analyze', type: 'agent', title: t('workflowSampleAnalyze'), config: { prompt: t('workflowSampleAnalyzePrompt'), output_key: 'analysis' } },
+      { id: 'implement', type: 'agent', title: t('workflowSampleImplement'), config: { prompt: t('workflowSampleImplementPrompt'), output_key: 'implementation' } },
+      { id: 'test', type: 'condition', title: t('workflowSampleNeedTests'), config: { expression: t('workflowSampleNeedTestsExpression') } },
+      { id: 'approval', type: 'approval', title: t('workflowSampleHumanApproval'), config: { message: t('workflowSampleHumanApprovalMessage') } },
+      { id: 'end', type: 'end', title: t('workflowSampleDone'), config: {} },
     ],
     edges: [
       { id: 'e1', from: 'start', to: 'analyze' }, { id: 'e2', from: 'analyze', to: 'implement' },
@@ -1351,9 +1352,11 @@ function workflowSampleDefinitions() {
 function workflowEls() {
   return {
     list: document.getElementById('workflow-list'), search: document.getElementById('workflow-search'),
-    title: document.getElementById('workflow-canvas-title'), summary: document.getElementById('workflow-canvas-summary'),
+    title: document.getElementById('workflow-canvas-title'), summary: document.getElementById('workflow-canvas-summary'), canvasStatus: document.getElementById('workflow-canvas-status'),
     edges: document.getElementById('workflow-edges'), nodes: document.getElementById('workflow-nodes'), empty: document.getElementById('workflow-empty'), canvas: document.getElementById('workflow-canvas'),
-    inspectorTitle: document.getElementById('workflow-inspector-title'), inspectorStatus: document.getElementById('workflow-inspector-status'), inspectorBody: document.getElementById('workflow-inspector-body'),
+    editorOverlay: document.getElementById('workflow-editor-overlay'), editorTitle: document.getElementById('workflow-editor-title'), editorStatus: document.getElementById('workflow-editor-status'), editorBody: document.getElementById('workflow-editor-body'), editorKicker: document.getElementById('workflow-editor-kicker'),
+    listPanel: document.querySelector('.workflow-list-panel'),
+    toggleList: document.getElementById('btn-workflow-toggle-list'),
     runId: document.getElementById('workflow-run-id'), runStatus: document.getElementById('workflow-run-status'), runProgress: document.getElementById('workflow-run-progress'), runCost: document.getElementById('workflow-run-cost'), status: document.getElementById('workflow-status-message'),
     log: document.getElementById('workflow-log'), progress: document.getElementById('workflow-progress-bar'), timelineTitle: document.getElementById('workflow-timeline-title'),
     approval: document.getElementById('workflow-approval-card'), approvalMsg: document.getElementById('workflow-approval-message'),
@@ -1385,6 +1388,10 @@ function initWorkflowsUI() {
   document.getElementById('btn-workflow-delete-node')?.addEventListener('click', deleteSelectedWorkflowNode);
   document.getElementById('btn-workflow-connect')?.addEventListener('click', toggleWorkflowConnectMode);
   document.getElementById('btn-workflow-clear-log')?.addEventListener('click', () => { workflowState.log = []; renderWorkflowLog(); });
+  document.getElementById('btn-workflow-toggle-list')?.addEventListener('click', () => { workflowState.listOpen = !workflowState.listOpen; renderWorkflowPanels(); });
+  document.getElementById('btn-workflow-close-list')?.addEventListener('click', () => { workflowState.listOpen = false; renderWorkflowPanels(); });
+  document.getElementById('workflow-editor-close')?.addEventListener('click', closeWorkflowEditor);
+  document.getElementById('workflow-editor-overlay')?.addEventListener('click', event => { if (event.target?.id === 'workflow-editor-overlay') closeWorkflowEditor(); });
   document.getElementById('workflow-search')?.addEventListener('input', renderWorkflowList);
   window.addEventListener('pointermove', onWorkflowPointerMove);
   window.addEventListener('pointerup', onWorkflowPointerUp);
@@ -1419,7 +1426,13 @@ async function loadWorkflowsPage(force = false) {
 }
 
 function renderWorkflowsPage() {
-  renderWorkflowList(); renderWorkflowCanvas(); renderWorkflowInspector(); renderWorkflowRunbar(); renderWorkflowLog();
+  renderWorkflowList(); renderWorkflowCanvas(); renderWorkflowEditor(); renderWorkflowApprovalNotice(); renderWorkflowRunbar(); renderWorkflowLog(); renderWorkflowPanels();
+}
+
+function renderWorkflowPanels() {
+  const els = workflowEls();
+  els.listPanel?.classList.toggle('open', Boolean(workflowState.listOpen));
+  els.toggleList?.classList.toggle('active', Boolean(workflowState.listOpen));
 }
 
 function renderWorkflowList() {
@@ -1428,8 +1441,8 @@ function renderWorkflowList() {
   const q = (els.search?.value || '').trim().toLowerCase();
   const items = workflowState.workflows.filter(w => !q || `${w.name || ''} ${w.description || ''}`.toLowerCase().includes(q));
   if (!items.length) { els.list.innerHTML = `<p class="empty-state">${esc(t('workflowNoWorkflows'))}</p>`; return; }
-  els.list.innerHTML = items.map(w => `<article class="workflow-card ${w.id === workflowState.selectedWorkflowId ? 'active' : ''}" data-workflow-id="${esc(w.id)}"><h4>${esc(w.name || w.id)}</h4><p>${esc(w.description || t('workflowNoDescription'))}</p><div class="workflow-card-meta"><span>${esc(w.status || 'idle')}</span><span>${(w.nodes || []).length} nodes</span></div></article>`).join('');
-  els.list.querySelectorAll('.workflow-card').forEach(card => card.addEventListener('click', () => { workflowState.selectedWorkflowId = card.dataset.workflowId || ''; workflowState.selectedNodeId = ''; workflowState.nodeStatuses = {}; workflowState.nodeOutputs = {}; renderWorkflowsPage(); }));
+  els.list.innerHTML = items.map(w => `<article class="workflow-card ${w.id === workflowState.selectedWorkflowId ? 'active' : ''}" data-workflow-id="${esc(w.id)}"><h4>${esc(w.name || w.id)}</h4><p>${esc(w.description || t('workflowNoDescription'))}</p><div class="workflow-card-meta"><span>${esc(w.status || 'idle')}</span><span>${(w.nodes || []).length} ${esc(t('workflowNodes'))}</span></div></article>`).join('');
+  els.list.querySelectorAll('.workflow-card').forEach(card => card.addEventListener('click', () => { workflowState.selectedWorkflowId = card.dataset.workflowId || ''; workflowState.selectedNodeId = ''; workflowState.selectedEdgeId = ''; workflowState.nodeStatuses = {}; workflowState.nodeOutputs = {}; workflowState.listOpen = false; closeWorkflowEditor(); renderWorkflowsPage(); }));
 }
 
 function markWorkflowDirty() {
@@ -1458,12 +1471,30 @@ function workflowNodeOutput(pos) {
   return { x: pos.x + 190, y: pos.y + 54 };
 }
 
+function workflowRunSnapshot(nodes) {
+  const run = workflowState.currentRun || {};
+  const statuses = nodes.map(node => ({ node, status: workflowNodeStatus(node.id) }));
+  const active = statuses.find(item => ['running', 'paused'].includes(item.status)) || statuses.find(item => ['failed', 'cancelled'].includes(item.status));
+  const done = statuses.filter(item => ['succeeded', 'done'].includes(item.status)).length;
+  const total = nodes.length || 0;
+  const status = run.status || 'idle';
+  const current = active?.node;
+  const currentStatus = active?.status || status;
+  const title = current ? (current.title || current.id) : (status === 'idle' ? t('workflowNotRun') : status);
+  const detail = current ? `${current.id} · ${currentStatus}` : (total ? `${done} / ${total}` : t('workflowNoNodes'));
+  const percent = total ? Math.round(done / total * 100) : 0;
+  return { status, currentStatus, title, detail, done, total, percent };
+}
+
 function renderWorkflowCanvas() {
   const wf = currentWorkflow(); const els = workflowEls();
   if (!els.nodes || !els.edges) return;
-  const nodes = wf?.nodes || []; const edges = wf?.edges || []; const layout = workflowNodeLayout(nodes);
+  const nodes = wf?.nodes || []; const edges = wf?.edges || []; const layout = workflowNodeLayout(nodes); const snapshot = workflowRunSnapshot(nodes);
   if (els.title) els.title.textContent = wf?.name || '—';
-  if (els.summary) els.summary.textContent = `${nodes.length} nodes · ${edges.length} edges${workflowState.connectFromNodeId ? ' · connect mode' : ''}`;
+  if (els.summary) els.summary.textContent = `${nodes.length} ${t('workflowNodes')} · ${edges.length} ${t('workflowEdges')}${workflowState.connectFromNodeId ? ` · ${t('workflowConnectMode')}` : ''}`;
+  if (els.canvasStatus) {
+    els.canvasStatus.innerHTML = `<div class="workflow-canvas-status-main"><span class="workflow-status-dot ${esc(snapshot.currentStatus)}"></span><strong>${esc(snapshot.title)}</strong><span>${esc(snapshot.detail)}</span></div><div class="workflow-canvas-status-side"><span>${esc(snapshot.status)}</span><span>${snapshot.done} / ${snapshot.total}</span><div class="workflow-mini-progress"><i style="width:${snapshot.percent}%"></i></div></div>`;
+  }
   if (els.empty) els.empty.style.display = nodes.length ? 'none' : '';
   const maxX = Math.max(760, ...Object.values(layout).map(p => p.x + 260));
   const maxY = Math.max(430, ...Object.values(layout).map(p => p.y + 180));
@@ -1478,9 +1509,9 @@ function renderWorkflowCanvas() {
   }).join('');
   els.nodes.innerHTML = nodes.map((node, idx) => {
     const pos = layout[node.id]; const status = workflowNodeStatus(node.id); const selected = node.id === workflowState.selectedNodeId; const connecting = node.id === workflowState.connectFromNodeId;
-    return `<article class="workflow-node-card ${status} ${selected ? 'selected' : ''} ${connecting ? 'connecting' : ''}" data-node-id="${esc(node.id)}" style="left:${pos.x}px;top:${pos.y}px"><button class="workflow-port workflow-port-in" type="button" data-port="in" title="Connect to this node"></button><button class="workflow-port workflow-port-out" type="button" data-port="out" title="Connect from this node"></button><div class="workflow-node-topline"><span class="workflow-node-type">${String(idx + 1).padStart(2, '0')} · ${esc(node.type || 'node')}</span><span class="workflow-node-dot ${status}"></span></div><div class="workflow-node-title">${esc(node.title || node.id)}</div><div class="workflow-node-desc">${esc(node.config?.prompt || node.config?.expression || node.config?.message || node.type || '')}</div><div class="workflow-node-meta">${esc(status)}</div></article>`;
+    return `<article class="workflow-node-card ${status} ${selected ? 'selected' : ''} ${connecting ? 'connecting' : ''}" data-node-id="${esc(node.id)}" style="left:${pos.x}px;top:${pos.y}px"><button class="workflow-port workflow-port-in" type="button" data-port="in" title="${esc(t('workflowConnectToNode'))}"></button><button class="workflow-port workflow-port-out" type="button" data-port="out" title="${esc(t('workflowConnectFromNode'))}"></button><div class="workflow-node-topline"><span class="workflow-node-type">${String(idx + 1).padStart(2, '0')} · ${esc(node.type || 'node')}</span><span class="workflow-node-dot ${status}"></span></div><div class="workflow-node-title">${esc(node.title || node.id)}</div><div class="workflow-node-desc">${esc(node.config?.prompt || node.config?.expression || node.config?.message || node.type || '')}</div><div class="workflow-node-meta">${esc(status)}</div></article>`;
   }).join('');
-  els.edges.querySelectorAll('.workflow-edge').forEach(edge => edge.addEventListener('click', () => { workflowState.selectedEdgeId = edge.dataset.edgeId || ''; workflowState.selectedNodeId = ''; renderWorkflowCanvas(); renderWorkflowInspector(); }));
+  els.edges.querySelectorAll('.workflow-edge').forEach(edge => edge.addEventListener('click', () => { workflowState.selectedEdgeId = edge.dataset.edgeId || ''; workflowState.selectedNodeId = ''; openWorkflowEditor(); renderWorkflowCanvas(); renderWorkflowEditor(); }));
   els.nodes.querySelectorAll('.workflow-node-card').forEach(card => {
     card.addEventListener('click', event => { if (!event.target?.classList?.contains('workflow-port')) handleWorkflowNodeClick(card.dataset.nodeId || ''); });
     card.addEventListener('pointerdown', event => startWorkflowNodeDrag(event, card.dataset.nodeId || ''));
@@ -1491,7 +1522,7 @@ function renderWorkflowCanvas() {
     workflowState.connectFromNodeId = nodeId;
     workflowState.selectedNodeId = nodeId;
     workflowState.selectedEdgeId = '';
-    renderWorkflowCanvas(); renderWorkflowInspector();
+    renderWorkflowCanvas(); renderWorkflowEditor();
   }));
   els.nodes.querySelectorAll('.workflow-port-in').forEach(port => port.addEventListener('click', event => {
     event.stopPropagation();
@@ -1501,7 +1532,7 @@ function renderWorkflowCanvas() {
       workflowState.connectFromNodeId = '';
       workflowState.selectedNodeId = nodeId;
       workflowState.selectedEdgeId = '';
-      renderWorkflowCanvas(); renderWorkflowInspector();
+      renderWorkflowCanvas(); renderWorkflowEditor();
     } else handleWorkflowNodeClick(nodeId);
   }));
 }
@@ -1515,7 +1546,8 @@ function handleWorkflowNodeClick(nodeId) {
   }
   workflowState.selectedNodeId = nodeId;
   workflowState.selectedEdgeId = '';
-  renderWorkflowCanvas(); renderWorkflowInspector();
+  openWorkflowEditor();
+  renderWorkflowCanvas(); renderWorkflowEditor();
 }
 
 function startWorkflowNodeDrag(event, nodeId) {
@@ -1523,24 +1555,31 @@ function startWorkflowNodeDrag(event, nodeId) {
   const wf = currentWorkflow(); const node = (wf?.nodes || []).find(n => n.id === nodeId); const els = workflowEls();
   if (!node || !els.canvas) return;
   const pos = workflowNodeLayout(wf.nodes)[nodeId];
-  workflowState.dragging = { nodeId, startX: event.clientX, startY: event.clientY, originX: pos.x, originY: pos.y };
+  workflowState.dragging = { nodeId, startX: event.clientX, startY: event.clientY, originX: pos.x, originY: pos.y, moved: false };
   workflowState.selectedNodeId = nodeId; workflowState.selectedEdgeId = '';
   event.currentTarget.setPointerCapture?.(event.pointerId);
-  event.preventDefault();
 }
 
 function onWorkflowPointerMove(event) {
   const drag = workflowState.dragging; if (!drag) return;
   const wf = currentWorkflow(); const node = (wf?.nodes || []).find(n => n.id === drag.nodeId); if (!node) return;
-  node.position = { x: Math.max(12, Math.round(drag.originX + event.clientX - drag.startX)), y: Math.max(12, Math.round(drag.originY + event.clientY - drag.startY)) };
+  const dx = event.clientX - drag.startX; const dy = event.clientY - drag.startY;
+  if (Math.abs(dx) > 3 || Math.abs(dy) > 3) drag.moved = true;
+  if (!drag.moved) return;
+  node.position = { x: Math.max(12, Math.round(drag.originX + dx)), y: Math.max(12, Math.round(drag.originY + dy)) };
   markWorkflowDirty();
   renderWorkflowCanvas();
 }
 
 function onWorkflowPointerUp() {
-  if (!workflowState.dragging) return;
+  const drag = workflowState.dragging;
+  if (!drag) return;
   workflowState.dragging = null;
-  renderWorkflowCanvas(); renderWorkflowInspector();
+  if (!drag.moved) {
+    handleWorkflowNodeClick(drag.nodeId);
+    return;
+  }
+  renderWorkflowCanvas(); renderWorkflowEditor();
 }
 
 function uniqueWorkflowNodeId(type) {
@@ -1554,9 +1593,9 @@ function addWorkflowNode() {
   const wf = currentWorkflow(); if (!wf) return;
   wf.nodes = Array.isArray(wf.nodes) ? wf.nodes : [];
   const id = uniqueWorkflowNodeId('agent');
-  const node = { id, type: 'agent', title: 'New agent', position: { x: 80 + wf.nodes.length * 24, y: 80 + wf.nodes.length * 18 }, config: { prompt: '描述这个节点要完成的任务。', output_key: id, mode: 'mock' } };
+  const node = { id, type: 'agent', title: t('workflowNewAgent'), position: { x: 80 + wf.nodes.length * 24, y: 80 + wf.nodes.length * 18 }, config: { prompt: t('workflowNewAgentPrompt'), output_key: id, mode: 'mock' } };
   wf.nodes.push(node);
-  workflowState.selectedNodeId = id; workflowState.selectedEdgeId = ''; markWorkflowDirty(); renderWorkflowsPage();
+  workflowState.selectedNodeId = id; workflowState.selectedEdgeId = ''; markWorkflowDirty(); renderWorkflowsPage(); openWorkflowEditor();
 }
 
 function deleteSelectedWorkflowNode() {
@@ -1585,13 +1624,13 @@ function updateSelectedWorkflowNodeConfig(key, value) {
   const wf = currentWorkflow(); const node = (wf?.nodes || []).find(n => n.id === workflowState.selectedNodeId); if (!node) return;
   node.config = node.config || {};
   if (value === '') delete node.config[key]; else node.config[key] = value;
-  markWorkflowDirty(); renderWorkflowCanvas(); renderWorkflowInspector();
+  markWorkflowDirty(); renderWorkflowCanvas(); renderWorkflowEditor();
 }
 
 function updateSelectedWorkflowEdge(key, value) {
   const wf = currentWorkflow(); const edge = (wf?.edges || []).find(e => e.id === workflowState.selectedEdgeId); if (!edge) return;
   if (value === '') delete edge[key]; else edge[key] = value;
-  markWorkflowDirty(); renderWorkflowCanvas(); renderWorkflowInspector();
+  markWorkflowDirty(); renderWorkflowCanvas(); renderWorkflowEditor();
 }
 
 function deleteSelectedWorkflowEdge() {
@@ -1600,39 +1639,78 @@ function deleteSelectedWorkflowEdge() {
   workflowState.selectedEdgeId = ''; markWorkflowDirty(); renderWorkflowsPage();
 }
 
-function renderWorkflowInspector() {
+function renderWorkflowApprovalNotice() {
+  const els = workflowEls();
+  if (!els.approval) return;
+  const wf = currentWorkflow();
+  const pausedNode = (wf?.nodes || []).find(node => workflowNodeStatus(node.id) === 'paused') || (wf?.nodes || []).find(node => workflowState.currentRun?.status === 'paused' && node.type === 'approval');
+  const needed = Boolean(pausedNode && workflowState.currentRun?.status === 'paused');
+  els.approval.hidden = !needed;
+  if (!needed) return;
+  if (els.approvalMsg) els.approvalMsg.textContent = `${wf?.name || wf?.id || t('workflows')} · ${pausedNode.title || pausedNode.id}`;
+}
+
+function openWorkflowEditor() {
+  const els = workflowEls();
+  if (els.editorOverlay) els.editorOverlay.style.display = 'flex';
+}
+
+function closeWorkflowEditor() {
+  const els = workflowEls();
+  if (els.editorOverlay) els.editorOverlay.style.display = 'none';
+}
+
+function renderWorkflowEditor() {
   const wf = currentWorkflow(); const els = workflowEls();
   const edge = (wf?.edges || []).find(e => e.id === workflowState.selectedEdgeId);
-  const node = edge ? null : ((wf?.nodes || []).find(n => n.id === workflowState.selectedNodeId) || (wf?.nodes || [])[0]);
-  if (edge) {
-    if (els.inspectorTitle) els.inspectorTitle.textContent = 'Edge';
-    if (els.inspectorStatus) { els.inspectorStatus.textContent = edge.when || 'default'; els.inspectorStatus.className = 'workflow-node-pill'; }
-    if (els.inspectorBody) els.inspectorBody.innerHTML = `<section class="workflow-inspector-section"><h4>Edge config</h4><label class="workflow-form-row"><span>From</span><input class="input" value="${esc(edge.from || '')}" readonly></label><label class="workflow-form-row"><span>To</span><input class="input" value="${esc(edge.to || '')}" readonly></label><label class="workflow-form-row"><span>When</span><select class="select" data-edge-field="when"><option value="" ${!edge.when ? 'selected' : ''}>default</option><option value="true" ${edge.when === 'true' ? 'selected' : ''}>true</option><option value="false" ${edge.when === 'false' ? 'selected' : ''}>false</option><option value="approved" ${edge.when === 'approved' ? 'selected' : ''}>approved</option><option value="succeeded" ${edge.when === 'succeeded' ? 'selected' : ''}>succeeded</option></select></label><button class="btn btn-danger btn-medium" type="button" id="btn-workflow-delete-edge">Delete edge</button></section>`;
-    els.inspectorBody.querySelector('[data-edge-field="when"]')?.addEventListener('change', e => updateSelectedWorkflowEdge('when', e.target.value));
-    els.inspectorBody.querySelector('#btn-workflow-delete-edge')?.addEventListener('click', deleteSelectedWorkflowEdge);
-    if (els.approval) els.approval.hidden = true;
+  const node = edge ? null : ((wf?.nodes || []).find(n => n.id === workflowState.selectedNodeId) || null);
+  if (!els.editorBody) return;
+  if (!edge && !node) {
+    if (els.editorTitle) els.editorTitle.textContent = t('workflowSelectNode');
+    if (els.editorStatus) els.editorStatus.textContent = '';
+    els.editorBody.innerHTML = `<p class="empty-state">${esc(t('workflowSelectNode'))}</p>`;
     return;
   }
-  if (!node) { if (els.inspectorBody) els.inspectorBody.innerHTML = `<p class="empty-state">${esc(t('workflowSelectNode'))}</p>`; return; }
+  if (edge) {
+    if (els.editorKicker) els.editorKicker.textContent = t('workflowEdgeConfig');
+    if (els.editorTitle) els.editorTitle.textContent = t('workflowEdge');
+    if (els.editorStatus) { els.editorStatus.textContent = edge.when || t('workflowDefault'); els.editorStatus.className = 'workflow-node-pill'; }
+    els.editorBody.innerHTML = `<section class="workflow-inspector-section"><h4>${esc(t('workflowEdgeConfig'))}</h4><label class="workflow-form-row"><span>${esc(t('workflowFrom'))}</span><input class="input" value="${esc(edge.from || '')}" readonly></label><label class="workflow-form-row"><span>${esc(t('workflowTo'))}</span><input class="input" value="${esc(edge.to || '')}" readonly></label><label class="workflow-form-row"><span>${esc(t('workflowWhen'))}</span><select class="select" data-edge-field="when"><option value="" ${!edge.when ? 'selected' : ''}>${esc(t('workflowDefault'))}</option><option value="true" ${edge.when === 'true' ? 'selected' : ''}>${esc(t('workflowWhenTrue'))}</option><option value="false" ${edge.when === 'false' ? 'selected' : ''}>${esc(t('workflowWhenFalse'))}</option><option value="approved" ${edge.when === 'approved' ? 'selected' : ''}>${esc(t('workflowWhenApproved'))}</option><option value="succeeded" ${edge.when === 'succeeded' ? 'selected' : ''}>${esc(t('workflowWhenSucceeded'))}</option></select></label><button class="btn btn-danger btn-medium" type="button" id="btn-workflow-delete-edge">${esc(t('workflowDeleteEdge'))}</button></section>`;
+    els.editorBody.querySelector('[data-edge-field="when"]')?.addEventListener('change', e => updateSelectedWorkflowEdge('when', e.target.value));
+    els.editorBody.querySelector('#btn-workflow-delete-edge')?.addEventListener('click', () => { deleteSelectedWorkflowEdge(); closeWorkflowEditor(); });
+    return;
+  }
   workflowState.selectedNodeId = workflowState.selectedNodeId || node.id;
   const status = workflowNodeStatus(node.id);
-  if (els.inspectorTitle) els.inspectorTitle.textContent = node.title || node.id;
-  if (els.inspectorStatus) { els.inspectorStatus.textContent = status; els.inspectorStatus.className = `workflow-node-pill ${status}`; }
+  if (els.editorKicker) els.editorKicker.textContent = t('workflowNodeConfig');
+  if (els.editorTitle) els.editorTitle.textContent = node.title || node.id;
+  if (els.editorStatus) { els.editorStatus.textContent = status; els.editorStatus.className = `workflow-node-pill ${status}`; }
   const cfg = node.config || {}; const output = workflowState.nodeOutputs[node.id] || {};
-  if (els.inspectorBody) {
-    els.inspectorBody.innerHTML = `<section class="workflow-inspector-section"><h4>${esc(t('workflowNodeConfig'))}</h4><label class="workflow-form-row"><span>ID</span><input class="input" data-node-field="id" value="${esc(node.id)}"></label><label class="workflow-form-row"><span>Title</span><input class="input" data-node-field="title" value="${esc(node.title || '')}"></label><label class="workflow-form-row"><span>Type</span><select class="select" data-node-field="type">${['start','agent','command','condition','approval','artifact','end'].map(type => `<option value="${type}" ${node.type === type ? 'selected' : ''}>${type}</option>`).join('')}</select></label><label class="workflow-form-row"><span>Prompt</span><textarea class="input" rows="4" data-config-field="prompt">${esc(cfg.prompt || '')}</textarea></label><label class="workflow-form-row"><span>Expression</span><input class="input" data-config-field="expression" value="${esc(cfg.expression || '')}"></label><label class="workflow-form-row"><span>Message</span><input class="input" data-config-field="message" value="${esc(cfg.message || '')}"></label><label class="workflow-form-row"><span>Output key</span><input class="input" data-config-field="output_key" value="${esc(cfg.output_key || '')}"></label><label class="workflow-form-row"><span>Mode</span><select class="select" data-config-field="mode"><option value="" ${!cfg.mode ? 'selected' : ''}>default</option><option value="mock" ${cfg.mode === 'mock' ? 'selected' : ''}>mock</option><option value="real" ${cfg.mode === 'real' ? 'selected' : ''}>real</option></select></label></section><section class="workflow-inspector-section"><h4>${esc(t('workflowNodeOutput'))}</h4><div class="workflow-inspector-row"><span>Status</span><code>${esc(status)}</code></div><div class="workflow-inspector-row"><span>Session</span><code>${esc(output.session_id || '—')}</code></div><div class="workflow-inspector-row"><span>Summary</span><code>${esc(output.summary || output.message || output.text || '—')}</code></div></section>`;
-    els.inspectorBody.querySelectorAll('[data-node-field]').forEach(input => input.addEventListener('change', e => {
-      const field = e.target.dataset.nodeField; const value = e.target.value.trim(); const wfNow = currentWorkflow(); const current = (wfNow?.nodes || []).find(n => n.id === workflowState.selectedNodeId); if (!current) return;
-      if (field === 'id' && value && value !== current.id) {
-        const oldId = current.id; current.id = value; (wfNow.edges || []).forEach(edge => { if (edge.from === oldId) edge.from = value; if (edge.to === oldId) edge.to = value; }); workflowState.selectedNodeId = value;
-      } else current[field] = value;
-      markWorkflowDirty(); renderWorkflowsPage();
-    }));
-    els.inspectorBody.querySelectorAll('[data-config-field]').forEach(input => input.addEventListener('change', e => updateSelectedWorkflowNodeConfig(e.target.dataset.configField, e.target.value.trim())));
+  const configRows = [];
+  if (['agent', 'command', 'artifact'].includes(node.type)) {
+    configRows.push(`<label class="workflow-form-row"><span>${esc(t('workflowPrompt'))}</span><textarea class="input" rows="4" data-config-field="prompt">${esc(cfg.prompt || '')}</textarea></label>`);
   }
-  const approvalNeeded = status === 'paused' || (workflowState.currentRun?.status === 'paused' && node.type === 'approval');
-  if (els.approval) els.approval.hidden = !approvalNeeded;
-  if (els.approvalMsg) els.approvalMsg.textContent = cfg.message || t('workflowApprovalRequired');
+  if (node.type === 'condition') {
+    configRows.push(`<div class="workflow-inspector-note">${esc(t('workflowConditionHint'))}</div>`);
+  }
+  if (node.type === 'approval') {
+    configRows.push(`<div class="workflow-inspector-note">${esc(t('workflowApprovalNotifyHint'))}</div>`);
+  }
+  if (!['start', 'end', 'approval'].includes(node.type)) {
+    configRows.push(`<label class="workflow-form-row"><span>${esc(t('workflowOutputKey'))}</span><input class="input" data-config-field="output_key" value="${esc(cfg.output_key || '')}"></label>`);
+  }
+  if (node.type === 'agent') {
+    configRows.push(`<label class="workflow-form-row"><span>${esc(t('workflowMode'))}</span><select class="select" data-config-field="mode"><option value="" ${!cfg.mode ? 'selected' : ''}>${esc(t('workflowDefault'))}</option><option value="mock" ${cfg.mode === 'mock' ? 'selected' : ''}>mock</option><option value="real" ${cfg.mode === 'real' ? 'selected' : ''}>real</option></select></label>`);
+  }
+  els.editorBody.innerHTML = `<section class="workflow-inspector-section"><h4>${esc(t('workflowNodeConfig'))}</h4><label class="workflow-form-row"><span>ID</span><input class="input" data-node-field="id" value="${esc(node.id)}"></label><label class="workflow-form-row"><span>${esc(t('workflowTitle'))}</span><input class="input" data-node-field="title" value="${esc(node.title || '')}"></label><label class="workflow-form-row"><span>${esc(t('type'))}</span><select class="select" data-node-field="type">${['start','agent','command','condition','approval','artifact','end'].map(type => `<option value="${type}" ${node.type === type ? 'selected' : ''}>${type}</option>`).join('')}</select></label>${configRows.join('')}</section><section class="workflow-inspector-section"><h4>${esc(t('workflowNodeOutput'))}</h4><div class="workflow-inspector-row"><span>${esc(t('workflowRunStatus'))}</span><code>${esc(status)}</code></div><div class="workflow-inspector-row"><span>${esc(t('workflowSession'))}</span><code>${esc(output.session_id || '—')}</code></div><div class="workflow-inspector-row"><span>${esc(t('workflowSummary'))}</span><code>${esc(output.summary || output.message || output.text || '—')}</code></div></section>`;
+  els.editorBody.querySelectorAll('[data-node-field]').forEach(input => input.addEventListener('change', e => {
+    const field = e.target.dataset.nodeField; const value = e.target.value.trim(); const wfNow = currentWorkflow(); const current = (wfNow?.nodes || []).find(n => n.id === workflowState.selectedNodeId); if (!current) return;
+    if (field === 'id' && value && value !== current.id) {
+      const oldId = current.id; current.id = value; (wfNow.edges || []).forEach(edge => { if (edge.from === oldId) edge.from = value; if (edge.to === oldId) edge.to = value; }); workflowState.selectedNodeId = value;
+    } else current[field] = value;
+    markWorkflowDirty(); renderWorkflowsPage(); openWorkflowEditor();
+  }));
+  els.editorBody.querySelectorAll('[data-config-field]').forEach(input => input.addEventListener('change', e => updateSelectedWorkflowNodeConfig(e.target.dataset.configField, e.target.value.trim())));
 }
 
 function renderWorkflowRunbar() {

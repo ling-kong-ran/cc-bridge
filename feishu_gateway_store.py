@@ -12,6 +12,46 @@ FEISHU_GATEWAY_FILE = CCB_DIR / "feishu_gateway.json"
 _SECRET_KEYS = {"app_secret", "verification_token"}
 
 
+def _default_session_notify_template() -> str:
+    return (
+        "通知：{{title}}{{cost}}\n\n"
+        "问：\n{{prompt}}\n\n"
+        "答：\n{{summary}}\n\n"
+        "模型：{{model}}  |  耗时：{{elapsed}}"
+    )
+
+
+def _default_scheduled_notify_template() -> str:
+    return (
+        "通知：{{title}}\n\n"
+        "任务：{{task_name}}\n"
+        "状态：{{status}}\n"
+        "触发方式：{{trigger}}\n"
+        "模型：{{model}}\n"
+        "Session：{{session_id}}\n\n"
+        "错误：{{error}}"
+    )
+
+
+def _default_workflow_notify_template() -> str:
+    return (
+        "通知：工作流需要审批\n\n"
+        "工作流：{{workflow_name}}\n"
+        "Workflow ID：{{workflow_id}}\n"
+        "Run ID：{{run_id}}\n"
+        "节点：{{node_title}}\n"
+        "Node ID：{{node_id}}\n\n"
+        "请在 cc-bridge 工作流页面审批继续或拒绝。"
+    )
+
+
+_TEMPLATE_DEFAULTS = {
+    "session_notify_template": _default_session_notify_template,
+    "scheduled_notify_template": _default_scheduled_notify_template,
+    "workflow_notify_template": _default_workflow_notify_template,
+}
+
+
 def _default_config() -> dict[str, Any]:
     return {
         "enabled": False,
@@ -26,6 +66,9 @@ def _default_config() -> dict[str, Any]:
         "allowed_users": [],
         "allowed_chats": [],
         "complete_notify": True,
+        "session_notify_template": _default_session_notify_template(),
+        "scheduled_notify_template": _default_scheduled_notify_template(),
+        "workflow_notify_template": _default_workflow_notify_template(),
         "scopes": {},
         "processed_events": {},
         "updated_at": "",
@@ -52,6 +95,9 @@ def _load_raw() -> dict[str, Any]:
             config[key] = []
     if config.get("busy_mode") not in ("queue", "reject"):
         config["busy_mode"] = "queue"
+    for key, default_factory in _TEMPLATE_DEFAULTS.items():
+        if not str(config.get(key) or "").strip():
+            config[key] = default_factory()
     return config
 
 
@@ -94,6 +140,9 @@ def update_feishu_gateway_config(patch: dict[str, Any]) -> dict[str, Any]:
         "allowed_users",
         "allowed_chats",
         "complete_notify",
+        "session_notify_template",
+        "scheduled_notify_template",
+        "workflow_notify_template",
     }
     for key, value in patch.items():
         if key not in allowed:

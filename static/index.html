@@ -698,6 +698,36 @@
                     <label class="field-label" for="feishu-allowed-chats" data-i18n="feishuAllowedChats">Allowed chats</label>
                     <textarea id="feishu-allowed-chats" class="input feishu-textarea" rows="3" spellcheck="false" data-i18n-placeholder="feishuAllowedChatsPlaceholder" placeholder="oc_xxx, oc_yyy"></textarea>
                   </div>
+                  <div class="settings-row align-top span-all">
+                    <label class="field-label" for="feishu-session-notify-template" data-i18n="feishuSessionNotifyTemplate">Session notification template</label>
+                    <textarea id="feishu-session-notify-template" class="input feishu-textarea notify-template-input" rows="8" spellcheck="false" data-template-kind="session"></textarea>
+                    <div class="notify-template-vars" data-target="feishu-session-notify-template">
+                      <select class="select notify-template-var-select" data-i18n-title="notifyTemplateVariableSelectTitle" title="Select variable">
+                        <option value="" data-i18n="notifyTemplateVariableSelect">Select variable</option>
+                      </select>
+                      <button class="btn-mini notify-template-insert" type="button" data-i18n="notifyTemplateInsertVariable">Insert variable</button>
+                    </div>
+                  </div>
+                  <div class="settings-row align-top span-all">
+                    <label class="field-label" for="feishu-scheduled-notify-template" data-i18n="feishuScheduledNotifyTemplate">Scheduled task notification template</label>
+                    <textarea id="feishu-scheduled-notify-template" class="input feishu-textarea notify-template-input" rows="8" spellcheck="false" data-template-kind="scheduled"></textarea>
+                    <div class="notify-template-vars" data-target="feishu-scheduled-notify-template">
+                      <select class="select notify-template-var-select" data-i18n-title="notifyTemplateVariableSelectTitle" title="Select variable">
+                        <option value="" data-i18n="notifyTemplateVariableSelect">Select variable</option>
+                      </select>
+                      <button class="btn-mini notify-template-insert" type="button" data-i18n="notifyTemplateInsertVariable">Insert variable</button>
+                    </div>
+                  </div>
+                  <div class="settings-row align-top span-all">
+                    <label class="field-label" for="feishu-workflow-notify-template" data-i18n="feishuWorkflowNotifyTemplate">Workflow notification template</label>
+                    <textarea id="feishu-workflow-notify-template" class="input feishu-textarea notify-template-input" rows="8" spellcheck="false" data-template-kind="workflow"></textarea>
+                    <div class="notify-template-vars" data-target="feishu-workflow-notify-template">
+                      <select class="select notify-template-var-select" data-i18n-title="notifyTemplateVariableSelectTitle" title="Select variable">
+                        <option value="" data-i18n="notifyTemplateVariableSelect">Select variable</option>
+                      </select>
+                      <button class="btn-mini notify-template-insert" type="button" data-i18n="notifyTemplateInsertVariable">Insert variable</button>
+                    </div>
+                  </div>
                 </div>
               </form>
             </details>
@@ -721,41 +751,6 @@
       <!-- 工作流页 -->
       <div id="page-workflows" class="page workflows-page">
         <div class="workflow-shell">
-          <header class="workflow-hero">
-            <div>
-              <div class="workflow-kicker" data-i18n="workflowsKicker">Agent orchestration</div>
-              <h2 data-i18n="workflowStudio">Workflow Studio</h2>
-              <p data-i18n="workflowStudioSubtitle">可视化编排、运行并审批多节点 Agent 工作流。</p>
-            </div>
-            <div class="workflow-hero-actions">
-              <button id="btn-workflow-template" class="btn-mini" type="button" data-i18n="workflowTemplateLibrary">Templates</button>
-              <button id="btn-workflow-save" class="btn-mini" type="button" data-i18n="workflowSaveDraft">Save draft</button>
-              <button id="btn-workflow-cancel" class="btn btn-danger btn-medium" type="button" data-i18n="workflowCancelRun">Cancel run</button>
-              <button id="btn-workflow-approve" class="btn btn-primary btn-medium" type="button" data-i18n="workflowApproveContinue">Approve & continue</button>
-              <button id="btn-workflow-run" class="btn btn-primary btn-medium" type="button"><span class="btn-prefix">▶</span> <span data-i18n="workflowRun">Run workflow</span></button>
-            </div>
-          </header>
-
-          <section class="workflow-runbar" aria-live="polite">
-            <div class="workflow-run-chip">
-              <span class="workflow-label" data-i18n="workflowRunId">Run ID</span>
-              <strong id="workflow-run-id">—</strong>
-            </div>
-            <div class="workflow-run-chip">
-              <span class="workflow-label" data-i18n="workflowRunStatus">Status</span>
-              <strong id="workflow-run-status">idle</strong>
-            </div>
-            <div class="workflow-run-chip">
-              <span class="workflow-label" data-i18n="workflowCompletedNodes">Completed</span>
-              <strong id="workflow-run-progress">0 / 0</strong>
-            </div>
-            <div class="workflow-run-chip">
-              <span class="workflow-label" data-i18n="totalCost">Total Cost</span>
-              <strong id="workflow-run-cost">$0.0000</strong>
-            </div>
-            <div id="workflow-status-message" class="workflow-status-message" data-i18n="workflowBackendHint">Backend not connected yet; showing local preview when unavailable.</div>
-          </section>
-
           <div class="workflow-workbench">
             <aside class="workflow-list-panel" aria-label="Workflows">
               <div class="workflow-panel-head">
@@ -764,6 +759,7 @@
                   <h3 data-i18n="workflowDefinitions">Definitions</h3>
                 </div>
                 <button id="btn-workflows-refresh" class="btn-mini" type="button" data-i18n="refresh">Refresh</button>
+                <button id="btn-workflow-close-list" class="btn-mini workflow-panel-close" type="button">×</button>
               </div>
               <input id="workflow-search" class="input workflow-search" type="search" placeholder="Search workflows..." data-i18n-placeholder="workflowSearchPlaceholder">
               <div id="workflow-list" class="workflow-list" aria-live="polite"></div>
@@ -776,37 +772,32 @@
                   <h3 id="workflow-canvas-title">—</h3>
                 </div>
                 <div class="workflow-canvas-tools">
-                  <button id="btn-workflow-add-node" class="btn-mini" type="button">+ Node</button>
-                  <button id="btn-workflow-connect" class="btn-mini" type="button">Connect</button>
-                  <button id="btn-workflow-delete-node" class="btn-mini" type="button">Delete</button>
+                  <button id="btn-workflow-toggle-list" class="btn-mini" type="button" data-i18n="workflows">Workflows</button>
+                  <button id="btn-workflow-template" class="btn-mini" type="button" data-i18n="workflowTemplateLibrary">Templates</button>
+                  <button id="btn-workflow-save" class="btn-mini" type="button" data-i18n="workflowSaveDraft">Save draft</button>
+                  <button id="btn-workflow-add-node" class="btn-mini" type="button" data-i18n="workflowAddNode">+ Node</button>
+                  <button id="btn-workflow-connect" class="btn-mini" type="button" data-i18n="workflowConnect">Connect</button>
+                  <button id="btn-workflow-delete-node" class="btn-mini" type="button" data-i18n="delete">Delete</button>
+                  <button id="btn-workflow-cancel" class="btn-mini workflow-cancel-inline" type="button" data-i18n="workflowCancelRun">Cancel run</button>
+                  <button id="btn-workflow-run" class="btn btn-primary btn-medium" type="button"><span class="btn-prefix">▶</span> <span data-i18n="workflowRun">Run workflow</span></button>
                   <div id="workflow-canvas-summary" class="workflow-canvas-summary">0 nodes</div>
                 </div>
               </div>
               <div id="workflow-canvas" class="workflow-canvas" tabindex="0">
+                <div id="workflow-canvas-status" class="workflow-canvas-status" aria-live="polite"></div>
+                <div id="workflow-approval-card" class="workflow-approval-card" hidden>
+                  <div class="workflow-approval-title" data-i18n="workflowApprovalRequired">Approval required</div>
+                  <p id="workflow-approval-message">—</p>
+                  <div class="workflow-approval-actions">
+                    <button id="btn-workflow-approve-card" class="btn btn-primary btn-medium" type="button" data-i18n="workflowApproveContinue">Approve & continue</button>
+                    <button id="btn-workflow-reject-card" class="btn btn-danger btn-medium" type="button" data-i18n="workflowReject">Reject</button>
+                  </div>
+                </div>
                 <svg id="workflow-edges" class="workflow-edges" aria-hidden="true"></svg>
                 <div id="workflow-nodes" class="workflow-nodes"></div>
                 <div id="workflow-empty" class="workflow-empty" data-i18n="workflowNoWorkflows">No workflows yet.</div>
               </div>
             </section>
-
-            <aside class="workflow-inspector" aria-label="Workflow inspector">
-              <div class="workflow-panel-head">
-                <div>
-                  <div class="workflow-panel-kicker" data-i18n="workflowInspector">Inspector</div>
-                  <h3 id="workflow-inspector-title" data-i18n="workflowSelectNode">Select a node</h3>
-                </div>
-                <span id="workflow-inspector-status" class="workflow-node-pill">pending</span>
-              </div>
-              <div id="workflow-inspector-body" class="workflow-inspector-body"></div>
-              <div id="workflow-approval-card" class="workflow-approval-card" hidden>
-                <div class="workflow-approval-title" data-i18n="workflowApprovalRequired">Approval required</div>
-                <p id="workflow-approval-message">—</p>
-                <div class="workflow-approval-actions">
-                  <button id="btn-workflow-approve-card" class="btn btn-primary btn-medium" type="button" data-i18n="workflowApproveContinue">Approve & continue</button>
-                  <button id="btn-workflow-reject-card" class="btn btn-danger btn-medium" type="button" data-i18n="workflowReject">Reject</button>
-                </div>
-              </div>
-            </aside>
           </div>
 
           <section class="workflow-timeline-panel" aria-label="Workflow timeline">
@@ -1241,6 +1232,20 @@
   <div id="mobile-sidebar-backdrop" class="mobile-sidebar-backdrop" aria-hidden="true"></div>
 
   <!-- Memory 查看模态框 -->
+  <div id="workflow-editor-overlay" class="modal-overlay" style="display:none">
+    <div class="modal workflow-editor-modal">
+      <div class="memory-modal-head">
+        <div>
+          <div class="workflow-panel-kicker" id="workflow-editor-kicker" data-i18n="workflowNodeConfig">Node config</div>
+          <h3 id="workflow-editor-title" class="modal-title" data-i18n="workflowSelectNode">Select a node</h3>
+        </div>
+        <span id="workflow-editor-status" class="workflow-node-pill">pending</span>
+        <button id="workflow-editor-close" class="close-btn" type="button">&times;</button>
+      </div>
+      <div id="workflow-editor-body" class="workflow-inspector-body modal-scroll-body"></div>
+    </div>
+  </div>
+
   <div id="memory-modal-overlay" class="modal-overlay" style="display:none">
     <div class="modal memory-view-modal">
       <div class="memory-modal-head">

@@ -5,6 +5,12 @@
   let gatewayScopes = [];
   let onboardState = null;
 
+  const TEMPLATE_VARIABLES = {
+    session: ['title', 'cost', 'prompt', 'summary', 'model', 'elapsed'],
+    scheduled: ['title', 'task_name', 'status', 'trigger', 'model', 'session_id', 'error', 'event_type'],
+    workflow: ['workflow_name', 'workflow_id', 'run_id', 'node_title', 'node_id', 'status', 'event', 'message'],
+  };
+
   function formatMessage(data, fallbackKey = 'unknownError') {
     return root.i18n?.formatMessage ? root.i18n.formatMessage(data, fallbackKey) : String(data?.error || data?.message || t(fallbackKey) || '');
   }
@@ -24,10 +30,44 @@
     document.getElementById('btn-feishu-onboard-start')?.addEventListener('click', beginOnboard);
     document.getElementById('btn-feishu-onboard-cancel')?.addEventListener('click', () => cancelOnboard(false));
     document.getElementById('feishu-gateway-enabled')?.addEventListener('change', () => saveConfig({ silent: true }));
+    initTemplateVariablePickers();
     document.getElementById('btn-feishu-platform-config')?.addEventListener('click', () => {
       document.getElementById('gateway-platform-detail-feishu')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
     });
     loadConfig();
+  }
+
+  function insertAtCursor(input, text) {
+    if (!input || !text) return;
+    const start = input.selectionStart ?? input.value.length;
+    const end = input.selectionEnd ?? input.value.length;
+    input.value = input.value.slice(0, start) + text + input.value.slice(end);
+    const next = start + text.length;
+    input.focus();
+    input.setSelectionRange?.(next, next);
+  }
+
+  function initTemplateVariablePickers() {
+    document.querySelectorAll('.notify-template-vars').forEach(row => {
+      const targetId = row.dataset.target || '';
+      const target = document.getElementById(targetId);
+      const kind = target?.dataset.templateKind || '';
+      const select = row.querySelector('.notify-template-var-select');
+      const vars = TEMPLATE_VARIABLES[kind] || [];
+      if (select && select.options.length <= 1) {
+        vars.forEach(name => {
+          const option = document.createElement('option');
+          option.value = name;
+          option.textContent = `{{${name}}}`;
+          select.appendChild(option);
+        });
+      }
+      row.querySelector('.notify-template-insert')?.addEventListener('click', () => {
+        const name = select?.value || '';
+        if (!name) return;
+        insertAtCursor(target, `{{${name}}}`);
+      });
+    });
   }
 
   async function loadGateway() {
@@ -262,6 +302,12 @@
     if (connMode) connMode.value = config.connection_mode === 'webhook' ? 'webhook' : 'websocket';
     const eventUrl = get('feishu-event-url');
     if (eventUrl) eventUrl.value = config.event_url || getEventUrl();
+    const sessionTemplate = get('feishu-session-notify-template');
+    if (sessionTemplate) sessionTemplate.value = config.session_notify_template || '';
+    const scheduledTemplate = get('feishu-scheduled-notify-template');
+    if (scheduledTemplate) scheduledTemplate.value = config.scheduled_notify_template || '';
+    const workflowTemplate = get('feishu-workflow-notify-template');
+    if (workflowTemplate) workflowTemplate.value = config.workflow_notify_template || '';
     updateUIState(config);
   }
 
@@ -275,6 +321,9 @@
       busy_mode: document.getElementById('feishu-busy-mode')?.value === 'reject' ? 'reject' : 'queue',
       allowed_users: readDelimitedList(document.getElementById('feishu-allowed-users')?.value || ''),
       allowed_chats: readDelimitedList(document.getElementById('feishu-allowed-chats')?.value || ''),
+      session_notify_template: document.getElementById('feishu-session-notify-template')?.value || '',
+      scheduled_notify_template: document.getElementById('feishu-scheduled-notify-template')?.value || '',
+      workflow_notify_template: document.getElementById('feishu-workflow-notify-template')?.value || '',
     };
   }
 

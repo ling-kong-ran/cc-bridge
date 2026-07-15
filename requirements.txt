@@ -2,5 +2,7 @@ qrcode
 pywinauto; platform_system == "Windows"
 truststore
 requests
+lark-oapi
+websockets
 # 可选：记忆系统中文分词，缺失时自动退回 bigram 兜底（不影响基础聊天/离线启动）
 jieba
