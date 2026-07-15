@@ -10753,14 +10753,24 @@ html.light-theme .nav-gateway-status-main { color: var(--text-2); }
 .workflow-card p { margin: 0 0 10px; color: var(--text-muted); font-size: 12px; line-height: 1.45; }
 .workflow-card-meta { display: flex; gap: 6px; flex-wrap: wrap; font-size: 11px; color: var(--text-ghost); }
 .workflow-canvas-summary { color: var(--text-muted); font-size: 12px; }
+.workflow-canvas-tools { display: flex; align-items: center; justify-content: flex-end; gap: 8px; flex-wrap: wrap; }
 .workflow-canvas { position: relative; flex: 1; min-height: 360px; overflow: auto; background: linear-gradient(rgba(255,255,255,0.026) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.026) 1px, transparent 1px); background-size: 28px 28px; }
 .workflow-edges, .workflow-nodes { position: absolute; inset: 0; min-width: 760px; min-height: 430px; }
-.workflow-edge-path { fill: none; stroke: rgba(200, 211, 222, 0.30); stroke-width: 2; }
+.workflow-edge-path { fill: none; stroke: rgba(200, 211, 222, 0.30); stroke-width: 2; pointer-events: none; }
+.workflow-edge-hit { fill: none; stroke: transparent; stroke-width: 16; cursor: pointer; }
+.workflow-edge.selected .workflow-edge-path { stroke: var(--workflow-amber); stroke-width: 3; filter: drop-shadow(0 0 8px rgba(232, 167, 48, 0.35)); }
+.workflow-edge-label { fill: var(--workflow-amber); font-family: var(--font-mono); font-size: 11px; text-anchor: middle; pointer-events: none; }
 .workflow-edge-path.active { stroke: var(--workflow-sage); filter: drop-shadow(0 0 6px rgba(154, 179, 135, 0.35)); }
 .workflow-edge-path.approval { stroke: var(--workflow-amber); }
-.workflow-node-card { position: absolute; width: 190px; min-height: 104px; border: 1px solid var(--border-dim); border-radius: 18px; padding: 12px; background: linear-gradient(150deg, rgba(37, 45, 61, 0.96), rgba(22, 27, 38, 0.96)); box-shadow: 0 16px 38px rgba(0, 0, 0, 0.25); cursor: pointer; transition: transform var(--t-base) var(--ease-out), opacity var(--t-base), border-color var(--t-base), box-shadow var(--t-base); }
-.workflow-node-card:hover { transform: translateY(-2px); }
+.workflow-node-card { position: absolute; width: 190px; min-height: 104px; border: 1px solid var(--border-dim); border-radius: 18px; padding: 12px; background: linear-gradient(150deg, rgba(37, 45, 61, 0.96), rgba(22, 27, 38, 0.96)); box-shadow: 0 16px 38px rgba(0, 0, 0, 0.25); cursor: grab; transition: opacity var(--t-base), border-color var(--t-base), box-shadow var(--t-base); user-select: none; }
+.workflow-node-card:active { cursor: grabbing; }
+.workflow-node-card:hover { border-color: rgba(232, 167, 48, 0.42); }
 .workflow-node-card.selected { border-color: var(--workflow-amber); box-shadow: 0 0 0 1px rgba(232, 167, 48, 0.22), 0 0 22px rgba(232, 167, 48, 0.16); }
+.workflow-node-card.connecting { border-color: var(--workflow-sage); box-shadow: 0 0 0 1px rgba(154, 179, 135, 0.28), 0 0 22px rgba(154, 179, 135, 0.16); }
+.workflow-port { position: absolute; top: 48px; width: 13px; height: 13px; border: 2px solid var(--workflow-amber); border-radius: 999px; background: var(--surface-card); cursor: crosshair; z-index: 2; }
+.workflow-port-in { left: -7px; }
+.workflow-port-out { right: -7px; }
+.workflow-port:hover { transform: scale(1.18); background: var(--workflow-amber); }
 .workflow-node-card.pending { opacity: 0.58; }
 .workflow-node-card.running { border-color: var(--workflow-sage); }
 .workflow-node-card.failed { border-color: var(--workflow-red); }
@@ -10782,6 +10792,9 @@ html.light-theme .nav-gateway-status-main { color: var(--text-2); }
 .workflow-inspector-row { display: grid; grid-template-columns: 90px 1fr; gap: 10px; padding: 6px 0; font-size: 12px; }
 .workflow-inspector-row span:first-child { color: var(--text-ghost); }
 .workflow-inspector-row code { white-space: pre-wrap; word-break: break-word; color: var(--text-secondary); }
+.workflow-form-row { display: grid; grid-template-columns: 86px minmax(0, 1fr); gap: 10px; align-items: start; margin: 8px 0; font-size: 12px; }
+.workflow-form-row span { color: var(--text-ghost); padding-top: 8px; }
+.workflow-form-row textarea { resize: vertical; min-height: 78px; }
 .workflow-node-pill { border: 1px solid var(--border-dim); border-radius: 999px; padding: 4px 8px; color: var(--text-muted); font-size: 11px; }
 .workflow-node-pill.running { border-color: var(--workflow-sage); color: var(--workflow-sage); }
 .workflow-node-pill.paused { border-color: var(--workflow-amber); color: var(--workflow-amber); }
