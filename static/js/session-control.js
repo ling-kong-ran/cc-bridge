@@ -68,8 +68,9 @@
 
   function createNewSession(cwd, options = {}) {
     const ctx = getContext(options);
-    resetSessionViewState(options);
     const pendingSessionId = `pending-${Date.now()}`;
+    ctx.setState({ activeWorkspaceSessionId: pendingSessionId });
+    resetSessionViewState(options);
     ctx.setState({
       activeWorkspaceSessionId: pendingSessionId,
       sessionActive: true,

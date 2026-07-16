@@ -106,6 +106,75 @@ function getSessionUiState(sessionId) {
   return sessionUiStates.get(sessionId);
 }
 
+function nativeSessionIdOrNull(sessionId) {
+  const value = String(sessionId || '');
+  return value && !value.startsWith('pending-') ? value : null;
+}
+
+function getSessionSnapshot(sessionId, extra = {}) {
+  const state = getSessionUiState(sessionId || '');
+  if (!state) {
+    return {
+      sessionActive,
+      isResponding,
+      isViewer,
+      currentSessionId: nativeSessionIdOrNull(currentSessionId),
+      currentRunId,
+      currentAssistantEl,
+      currentAssistantMessageId,
+      currentContent,
+      streamBlocks,
+      totalCost,
+      totalTokens,
+      currentTurnContent,
+      currentTurnHasAssistantOutput,
+      currentTurnStartedAt,
+      currentTurnAttachmentCount,
+      ...extra,
+    };
+  }
+  return {
+    sessionActive: state.sessionActive,
+    isResponding: state.isResponding,
+    isViewer: state.isViewer,
+    currentSessionId: nativeSessionIdOrNull(state.currentSessionId || state.sessionId),
+    currentRunId: state.currentRunId,
+    currentAssistantEl: state.currentAssistantEl,
+    currentAssistantMessageId: state.currentAssistantMessageId,
+    currentContent: state.currentContent,
+    streamBlocks: state.streamBlocks,
+    totalCost: state.totalCost,
+    totalTokens: state.totalTokens,
+    currentTurnContent: state.currentTurnContent,
+    currentTurnHasAssistantOutput: state.currentTurnHasAssistantOutput,
+    currentTurnStartedAt: state.currentTurnStartedAt,
+    currentTurnAttachmentCount: state.currentTurnAttachmentCount,
+    ...extra,
+  };
+}
+
+function getActiveSessionSnapshot(extra = {}) {
+  return getSessionSnapshot(activeWorkspaceSessionId || currentSessionId || '', extra);
+}
+
+function getRenderSessionSnapshot(extra = {}) {
+  return getSessionSnapshot(_activeRenderSessionId || activeWorkspaceSessionId || currentSessionId || '', extra);
+}
+
+function patchActiveSessionUiState(patch = {}) {
+  const targetSessionId = patch.sessionId || _activeRenderSessionId || patch.activeWorkspaceSessionId || activeWorkspaceSessionId || currentSessionId || '';
+  const state = getSessionUiState(targetSessionId);
+  if (!state) return;
+  const keys = [
+    'sessionActive', 'isResponding', 'isViewer', 'currentAssistantEl', 'currentAssistantMessageId',
+    'currentContent', 'streamBlocks', 'totalCost', 'totalTokens', 'currentSessionId', 'currentRunId',
+    'currentTurnContent', 'currentTurnHasAssistantOutput', 'currentTurnStartedAt', 'currentTurnAttachmentCount',
+  ];
+  for (const key of keys) {
+    if (key in patch) state[key] = patch[key];
+  }
+}
+
 function getRenderSessionId() {
   return _activeRenderSessionId || currentSessionId || activeWorkspaceSessionId || '';
 }
@@ -2302,16 +2371,16 @@ function getSseLifecycleOptions() {
     cwdInput,
     modelSelect,
     remoteTargetSelect,
-    getCurrentRunId: () => currentRunId,
-    getCurrentSessionId: () => currentSessionId,
+    getCurrentRunId: () => getRenderSessionSnapshot().currentRunId,
+    getCurrentSessionId: () => getRenderSessionSnapshot().currentSessionId,
     getActiveWorkspaceSessionId: () => activeWorkspaceSessionId,
-    getSessionActive: () => sessionActive,
-    getIsViewer: () => isViewer,
-    setCurrentRunId: (value) => { currentRunId = value; },
-    setCurrentSessionId: (value) => { currentSessionId = value; },
-    setSessionActive: (value) => { sessionActive = value; },
-    setIsViewer: (value) => { isViewer = value; },
-    setIsResponding: (value) => { isResponding = value; },
+    getSessionActive: () => getRenderSessionSnapshot().sessionActive,
+    getIsViewer: () => getRenderSessionSnapshot().isViewer,
+    setCurrentRunId: (value) => { currentRunId = value; patchActiveSessionUiState({ currentRunId: value }); },
+    setCurrentSessionId: (value) => { currentSessionId = value; patchActiveSessionUiState({ currentSessionId: value }); },
+    setSessionActive: (value) => { sessionActive = value; patchActiveSessionUiState({ sessionActive: value }); },
+    setIsViewer: (value) => { isViewer = value; patchActiveSessionUiState({ isViewer: value }); },
+    setIsResponding: (value) => { isResponding = value; patchActiveSessionUiState({ isResponding: value }); },
     setActiveWorkspaceSessionId: (value) => { activeWorkspaceSessionId = value; },
     updateUI,
     getDisplayModelName,
@@ -2465,6 +2534,10 @@ function bindSSEEvents(source = eventSource) {
 
   source.addEventListener('session_id_captured', (e) => {
     const data = JSON.parse(e.data);
+    const previousPendingSessionId = activeWorkspaceSessionId && activeWorkspaceSessionId.startsWith('pending-')
+      ? activeWorkspaceSessionId
+      : '';
+    const pendingState = previousPendingSessionId ? getSessionUiState(previousPendingSessionId) : null;
     // 判定是否属于当前活跃页签：active 为空 / pending- 前缀 / 已等于该 session
     const isActiveSession = !activeWorkspaceSessionId
       || activeWorkspaceSessionId.startsWith('pending-')
@@ -2486,7 +2559,24 @@ function bindSSEEvents(source = eventSource) {
     currentRunId = data.run_id || currentRunId;
     if (activeWorkspaceSessionId && activeWorkspaceSessionId.startsWith('pending-') && activeWorkspaceSessionId !== data.session_id) {
       workspaceSessions.delete(activeWorkspaceSessionId);
+      sessionUiStates.delete(activeWorkspaceSessionId);
       activeWorkspaceSessionId = data.session_id;
+    }
+    if (pendingState) {
+      const nextState = getSessionUiState(data.session_id);
+      Object.assign(nextState, pendingState, {
+        sessionId: data.session_id,
+        currentSessionId: data.session_id,
+        currentRunId: data.run_id || pendingState.currentRunId || currentRunId || null,
+        sessionActive: true,
+      });
+      if (nextState.messagesEl) nextState.messagesEl.dataset.sessionId = data.session_id;
+    } else {
+      patchActiveSessionUiState({
+        currentSessionId: data.session_id,
+        currentRunId: data.run_id || currentRunId || null,
+        sessionActive: true,
+      });
     }
     ensureWorkspaceSession(data.session_id, {
       cwd: cwdInput.value.trim() || '',
@@ -3323,22 +3413,9 @@ function getMessageSendOptions() {
     quoteDisplayText,
     getAttachedFiles,
     consumeAttachedFiles,
-    getState: () => ({
-      sessionActive,
-      isResponding,
-      isViewer,
-      currentSessionId,
-      currentRunId,
-      currentAssistantEl,
-      currentAssistantMessageId,
-      currentContent,
-      streamBlocks,
-      currentTurnContent,
-      currentTurnHasAssistantOutput,
-      currentTurnStartedAt,
-      currentTurnAttachmentCount,
-    }),
+    getState: () => getActiveSessionSnapshot(),
     setState: (state = {}) => {
+      patchActiveSessionUiState(state);
       if ('sessionActive' in state) sessionActive = state.sessionActive;
       if ('isResponding' in state) isResponding = state.isResponding;
       if ('isViewer' in state) isViewer = state.isViewer;
@@ -3422,21 +3499,10 @@ function getSessionControlOptions() {
     sendAction,
     loadSessions,
     getClientId: () => clientId,
-    getState: () => ({
-      currentAssistantEl,
-      currentAssistantMessageId,
-      currentContent,
-      streamBlocks,
-      totalCost,
-      totalTokens,
-      currentSessionId,
-      currentRunId,
-      activeWorkspaceSessionId,
-      sessionActive,
-      isResponding,
-      isViewer,
-    }),
+    getState: () => getActiveSessionSnapshot({ activeWorkspaceSessionId }),
     setState: (state = {}) => {
+      if ('activeWorkspaceSessionId' in state) activeWorkspaceSessionId = state.activeWorkspaceSessionId;
+      patchActiveSessionUiState(state);
       if ('currentAssistantEl' in state) currentAssistantEl = state.currentAssistantEl;
       if ('currentAssistantMessageId' in state) currentAssistantMessageId = state.currentAssistantMessageId;
       if ('currentContent' in state) currentContent = state.currentContent;
@@ -3445,7 +3511,6 @@ function getSessionControlOptions() {
       if ('totalTokens' in state) totalTokens = state.totalTokens;
       if ('currentSessionId' in state) currentSessionId = state.currentSessionId;
       if ('currentRunId' in state) currentRunId = state.currentRunId;
-      if ('activeWorkspaceSessionId' in state) activeWorkspaceSessionId = state.activeWorkspaceSessionId;
       if ('sessionActive' in state) sessionActive = state.sessionActive;
       if ('isResponding' in state) isResponding = state.isResponding;
       if ('isViewer' in state) isViewer = state.isViewer;
@@ -3488,7 +3553,7 @@ function getMainUiOptions() {
   return {
     t,
     setSidebarCollapsed,
-    getState: () => ({ sessionActive, isResponding, isViewer, sidebarCollapsed }),
+    getState: () => getActiveSessionSnapshot({ sidebarCollapsed }),
     setState: (state = {}) => {
       if ('sidebarCollapsed' in state) sidebarCollapsed = state.sidebarCollapsed;
     },
