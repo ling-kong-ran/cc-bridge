@@ -110,9 +110,14 @@ def run_consolidation_job(
         candidates = filter_sensitive(candidates)
         job["candidates"] = len(candidates)
         written: list[dict[str, Any]] = []
+        raw_written: list[dict[str, Any]] = []
         skipped = 0
         pending: list[dict[str, Any]] = []
         for candidate in candidates:
+            raw_result = _write_raw_evidence(candidate, job)
+            if raw_result.get("ok"):
+                candidate["raw_evidence"] = raw_result.get("filename", "")
+                raw_written.append(raw_result)
             if mode == "suggest":
                 pending.append(_candidate_to_pending(candidate, job))
                 skipped += 1
@@ -134,6 +139,7 @@ def run_consolidation_job(
             "written": len(written),
             "skipped": skipped,
             "files": written,
+            "raw_files": raw_written,
             "pending": pending,
             "updated_at": time.time(),
         })
@@ -158,6 +164,7 @@ def _candidate_to_pending(candidate: dict[str, Any], job: dict[str, Any]) -> dic
         "suggested_target": "",
         "source_session_id": job.get("session_id") or "",
         "source_run_id": job.get("run_id") or "",
+        "raw_evidence": candidate.get("raw_evidence") or "",
         "created_at": time.time(),
         "decision_at": None,
         "decision_reason": "",
@@ -208,6 +215,8 @@ def resolve_and_write(candidate: dict[str, Any], cwd: str) -> dict[str, Any]:
     title = candidate.get("title") or "自动沉淀记忆"
     existing = search_memory(content[:200], cwd, limit=5)
     for item in existing:
+        if str(item.get("file") or "").replace("\\", "/").startswith("raw/"):
+            continue
         if _similar_title(title, item.get("title") or item.get("name") or ""):
             return {"ok": False, "reason": "duplicate", "title": title}
 
@@ -216,7 +225,54 @@ def resolve_and_write(candidate: dict[str, Any], cwd: str) -> dict[str, Any]:
     saved = save_memory_file(filename, body, cwd)
     if not saved:
         return {"ok": False, "reason": "save failed", "title": title}
-    return {"ok": True, "filename": saved.get("name", filename), "title": saved.get("title", title), "type": candidate.get("type", "feedback")}
+    return {"ok": True, "filename": saved.get("file") or filename, "title": saved.get("title", title), "type": candidate.get("type", "feedback")}
+
+
+def _write_raw_evidence(candidate: dict[str, Any], job: dict[str, Any]) -> dict[str, Any]:
+    cwd = job.get("cwd") or ""
+    idx = int(candidate.get("candidate_index") or 0)
+    date = time.strftime("%Y-%m-%d")
+    job_id = str(job.get("job_id") or "job")
+    filename = f"raw/sessions/{date}-{job_id}-{idx}.md"
+    saved = save_memory_file(filename, _render_raw_evidence(candidate, job), cwd)
+    if not saved:
+        return {"ok": False, "reason": "save raw evidence failed", "filename": filename}
+    return {"ok": True, "filename": saved.get("file") or filename, "title": saved.get("title") or candidate.get("title") or ""}
+
+
+def _render_raw_evidence(candidate: dict[str, Any], job: dict[str, Any]) -> str:
+    title = candidate.get("title") or "Raw memory evidence"
+    created = time.strftime("%Y-%m-%d")
+    session_id = job.get("session_id") or candidate.get("session_id") or ""
+    run_id = job.get("run_id") or candidate.get("run_id") or ""
+    user_message = (job.get("user_message") or "").strip()
+    assistant_summary = (job.get("assistant_summary") or "").strip()
+    content = (candidate.get("content") or "").strip()
+    return f"""---
+name: Raw evidence: {title}
+description: Raw append-only evidence captured before memory synthesis
+type: raw
+source: session
+confidence: source-backed
+scope: project
+created: {created}
+session_id: {session_id}
+run_id: {run_id}
+inject: never
+---
+
+## Candidate
+
+{content}
+
+## User Message
+
+{user_message}
+
+## Assistant Summary
+
+{assistant_summary}
+""".strip() + "\n"
 
 
 def _clean_user_memory(text: str) -> str:
@@ -246,8 +302,9 @@ def _slug(text: str) -> str:
 
 
 def _unique_filename(candidate: dict[str, Any], cwd: str) -> str:
+    directory = _synthesized_directory(candidate.get("type") or "memory")
     base = f"auto-{candidate.get('type') or 'memory'}-{_slug(candidate.get('content') or candidate.get('title') or '')}"
-    filename = base + ".md"
+    filename = f"{directory}/{base}.md"
     try:
         from memory_index import get_memory_file
         idx = 2
@@ -259,21 +316,38 @@ def _unique_filename(candidate: dict[str, Any], cwd: str) -> str:
     return filename
 
 
+def _synthesized_directory(mem_type: str) -> str:
+    normalized = str(mem_type or "").strip().lower()
+    if normalized in {"decision", "architecture"}:
+        return "wiki/decisions"
+    if normalized in {"workflow", "process"}:
+        return "wiki/workflows"
+    if normalized in {"troubleshooting", "bug", "fix"}:
+        return "wiki/troubleshooting"
+    return "wiki/preferences"
+
+
 def _render_memory(candidate: dict[str, Any]) -> str:
     title = candidate.get("title") or "自动沉淀记忆"
     mem_type = candidate.get("type") or "feedback"
     created = candidate.get("created_at") or time.strftime("%Y-%m-%d")
+    last_verified_at = candidate.get("last_verified_at") or created
     session_id = candidate.get("session_id") or ""
     run_id = candidate.get("run_id") or ""
     content = candidate.get("content") or ""
+    raw_evidence = candidate.get("raw_evidence") or ""
     return f"""---
 name: {title}
 description: 自动从对话沉淀的长期记忆
 type: {mem_type}
 source: session
+confidence: confirmed
+scope: project
 created: {created}
+last_verified_at: {last_verified_at}
 session_id: {session_id}
 run_id: {run_id}
+raw_evidence: {raw_evidence}
 inject: auto
 ---
 

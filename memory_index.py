@@ -4,6 +4,7 @@ Memory Index - 为 Claude Code auto memory 提供轻量 SQLite FTS5 全文检索
 可选依赖 jieba 用于中文分词（未安装时退回 bigram）。
 索引会随分词器变化；切换分词器后建议 force=True 全量重建一次索引。
 """
+import hashlib
 import json
 import re
 import shutil
@@ -29,6 +30,79 @@ MEMORY_DIR_TEMPLATE = ".claude/projects/{sanitized}"
 # 轮询间隔（秒）—— 检查文件变化的最小间隔
 SCAN_INTERVAL = 30
 
+CANONICAL_MEMORY_DIRS = [
+    "raw/sessions",
+    "raw/artifacts",
+    "raw/uploads",
+    "raw/external",
+    "wiki/decisions",
+    "wiki/workflows",
+    "wiki/troubleshooting",
+]
+
+CANONICAL_MEMORY_PAGES: dict[str, str] = {
+    "wiki/quickstart.md": """---
+name: Project Memory Quickstart
+type: wiki
+source: system
+confidence: confirmed
+scope: project
+inject: auto
+---
+
+# Project Memory Quickstart
+
+This page is the entry point for synthesized project memory. Keep it short and link to the most useful wiki pages.
+""",
+    "wiki/preferences.md": """---
+name: Project Preferences
+type: feedback
+source: system
+confidence: confirmed
+scope: project
+inject: auto
+---
+
+# Project Preferences
+
+Stable user preferences and collaboration rules should be synthesized here or linked from here.
+""",
+    "wiki/open-questions.md": """---
+name: Open Questions
+type: open-question
+source: system
+confidence: watchlist
+scope: project
+inject: manual
+---
+
+# Open Questions
+
+Track unresolved assumptions that the model should not guess.
+""",
+    "wiki/sources.md": """---
+name: Memory Sources
+type: source-index
+source: system
+confidence: confirmed
+scope: project
+inject: manual
+---
+
+# Memory Sources
+
+Track where synthesized memory came from and how trustworthy each source is.
+""",
+}
+
+CANONICAL_ENTRY_PAGES = [
+    "wiki/quickstart.md",
+    "wiki/preferences.md",
+    "wiki/open-questions.md",
+    "wiki/sources.md",
+    "index.md",
+]
+
 
 def _sanitize_path(path_str: str) -> str:
     """与 CLI 一致的路径 sanitize 逻辑。"""
@@ -47,6 +121,25 @@ def _get_memory_dir(cwd: str) -> Path:
     # auto memory 存储在 ~/.claude/projects/<sanitized>/memory/
     sanitized = _sanitize_path(cwd)
     return Path.home() / MEMORY_DIR_TEMPLATE.format(sanitized=sanitized) / "memory"
+
+
+def ensure_memory_layout(cwd: str) -> list[str]:
+    """Create the raw/wiki/index memory layout without overwriting user content."""
+    memory_dir = _get_memory_dir(cwd)
+    created: list[str] = []
+    memory_dir.mkdir(parents=True, exist_ok=True)
+    for rel_dir in CANONICAL_MEMORY_DIRS:
+        target = memory_dir / rel_dir
+        if not target.exists():
+            target.mkdir(parents=True, exist_ok=True)
+            created.append(rel_dir + "/")
+    for rel_path, content in CANONICAL_MEMORY_PAGES.items():
+        target = memory_dir / rel_path
+        if not target.exists():
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_text(content, encoding="utf-8")
+            created.append(rel_path)
+    return created
 
 
 def _memory_relative_path(file_path: Path, memory_dir: Path | None = None) -> str:
@@ -126,6 +219,7 @@ def _parse_memory_file(file_path: Path, memory_dir: Path | None = None) -> dict[
 
     path = _memory_relative_path(file_path, memory_dir)
     stat = file_path.stat() if file_path.exists() else None
+    body_hash = hashlib.sha256(body.encode("utf-8", "ignore")).hexdigest()
     tags = frontmatter.get("tags") or []
     if isinstance(tags, str):
         tags = [part.strip() for part in tags.split(",") if part.strip()]
@@ -138,6 +232,9 @@ def _parse_memory_file(file_path: Path, memory_dir: Path | None = None) -> dict[
         "source": str(frontmatter.get("source") or "").strip(),
         "inject": str(frontmatter.get("inject") or "").strip(),
         "confidence": frontmatter.get("confidence"),
+        "scope": str(frontmatter.get("scope") or "").strip(),
+        "last_verified_at": str(frontmatter.get("last_verified_at") or "").strip(),
+        "body_hash": body_hash,
         "tags": tags if isinstance(tags, list) else [],
         "size": stat.st_size if stat else 0,
         "updated_at": stat.st_mtime if stat else 0,
@@ -165,6 +262,13 @@ def _init_db(db_path: Path) -> sqlite3.Connection:
             mtime REAL NOT NULL
         )
     """)
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS memory_meta (
+            file_path TEXT PRIMARY KEY,
+            body_hash TEXT NOT NULL,
+            indexed_at REAL NOT NULL
+        )
+    """)
     conn.commit()
     return conn
 
@@ -176,6 +280,7 @@ def _get_conn(db_path: Path) -> sqlite3.Connection:
 
 def index_memory(cwd: str, force: bool = False) -> int:
     """索引指定项目的所有 memory 文件。返回索引的文件数量。"""
+    ensure_memory_layout(cwd)
     memory_dir = _get_memory_dir(cwd)
     if not memory_dir.exists():
         return 0
@@ -207,6 +312,10 @@ def index_memory(cwd: str, force: bool = False) -> int:
         conn.execute(
             "INSERT OR REPLACE INTO file_mtime(file_path, mtime) VALUES (?, ?)",
             (parsed["path"], parsed["updated_at"]),
+        )
+        conn.execute(
+            "INSERT OR REPLACE INTO memory_meta(file_path, body_hash, indexed_at) VALUES (?, ?, ?)",
+            (parsed["path"], parsed["body_hash"], time.time()),
         )
         indexed += 1
 
@@ -376,6 +485,12 @@ def search_memory(query: str, cwd: str, limit: int = 20) -> list[dict[str, Any]]
                 rows = _run(and_query)
             except sqlite3.OperationalError:
                 rows = []
+        if not rows:
+            rows = conn.execute(
+                "SELECT file_path, name, title, substr(content, 1, 180) AS snippet, 0.0 AS rank, content "
+                "FROM memory_fts LIMIT ?",
+                (max(limit * 4, 20),),
+            ).fetchall()
 
         rows = _rerank_by_overlap(rows, query, limit)
 
@@ -415,6 +530,9 @@ def list_memory_files(cwd: str) -> list[dict[str, Any]]:
                 "source": parsed.get("source", ""),
                 "inject": parsed.get("inject", ""),
                 "confidence": parsed.get("confidence"),
+                "scope": parsed.get("scope", ""),
+                "last_verified_at": parsed.get("last_verified_at", ""),
+                "body_hash": parsed.get("body_hash", ""),
                 "tags": parsed.get("tags", []),
                 "size": parsed["size"],
                 "updated_at": parsed["updated_at"],
@@ -866,6 +984,7 @@ def get_memory_tree(cwd):
 
 def save_memory_file(filename: str, content: str, cwd: str) -> dict[str, Any] | None:
     """创建或更新 memory 文件，然后重新索引该文件。"""
+    ensure_memory_layout(cwd)
     memory_dir = _get_memory_dir(cwd)
     memory_dir.mkdir(parents=True, exist_ok=True)
 
@@ -878,15 +997,21 @@ def save_memory_file(filename: str, content: str, cwd: str) -> dict[str, Any] | 
     file_path.parent.mkdir(parents=True, exist_ok=True)
     safe_name = _memory_relative_path(file_path, memory_dir)
 
-    # 写入内容
-    file_path.write_text(content, encoding="utf-8")
+    current_content = None
+    if file_path.exists():
+        try:
+            current_content = file_path.read_text(encoding="utf-8")
+        except (OSError, UnicodeDecodeError):
+            current_content = None
+    if current_content != content:
+        file_path.write_text(content, encoding="utf-8")
 
     # 重新索引该文件（列名须与 _init_db 的 memory_fts 表结构一致：file_path, name, title, content）
     db_path = _get_index_db(cwd)
+    conn = None
     try:
-        _init_db(db_path)
         parsed = _parse_memory_file(file_path)
-        conn = sqlite3.connect(str(db_path))
+        conn = _init_db(db_path)
         conn.execute("DELETE FROM memory_fts WHERE file_path = ?", (safe_name,))
         conn.execute(
             "INSERT INTO memory_fts (file_path, name, title, content) VALUES (?, ?, ?, ?)",
@@ -896,10 +1021,16 @@ def save_memory_file(filename: str, content: str, cwd: str) -> dict[str, Any] | 
             "INSERT OR REPLACE INTO file_mtime (file_path, mtime) VALUES (?, ?)",
             (safe_name, file_path.stat().st_mtime)
         )
+        conn.execute(
+            "INSERT OR REPLACE INTO memory_meta(file_path, body_hash, indexed_at) VALUES (?, ?, ?)",
+            (safe_name, parsed.get("body_hash", ""), time.time()),
+        )
         conn.commit()
-        conn.close()
     except sqlite3.Error as e:
         print(f"Memory index update failed: {e}")
+    finally:
+        if conn is not None:
+            conn.close()
 
     return _parse_memory_file(file_path)
 

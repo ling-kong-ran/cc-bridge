@@ -22,6 +22,7 @@ DEFAULT_CONTEXT_SETTINGS: dict[str, Any] = {
     "memoryAutoInject": True,
     "memoryInjectMaxTokens": 1200,
     "memoryInjectMaxItems": 2,
+    "memoryInjectMaxCandidates": 8,
     "memoryInjectDepth": 0,
     "memoryInjectIncludeRaw": False,
     "memoryInjectExplain": True,
@@ -39,6 +40,7 @@ def normalize_context_settings(settings: dict[str, Any] | None = None) -> dict[s
     merged["memoryInjectExplain"] = bool(merged.get("memoryInjectExplain", True))
     merged["memoryInjectMaxTokens"] = _clamp_int(merged.get("memoryInjectMaxTokens"), 300, 2000, 1200)
     merged["memoryInjectMaxItems"] = _clamp_int(merged.get("memoryInjectMaxItems"), 1, 4, 2)
+    merged["memoryInjectMaxCandidates"] = _clamp_int(merged.get("memoryInjectMaxCandidates"), 2, 12, 8)
     merged["memoryInjectDepth"] = _clamp_int(merged.get("memoryInjectDepth"), 0, 3, 1)
     return merged
 
@@ -82,7 +84,9 @@ def retrieve_context_trace(
     normalized = normalize_context_settings(settings)
     max_tokens = normalized["memoryInjectMaxTokens"]
     max_items = normalized["memoryInjectMaxItems"]
-    include_raw = normalized["memoryInjectIncludeRaw"]
+    max_candidates = normalized["memoryInjectMaxCandidates"]
+    raw_requested = _explicitly_requests_raw(query)
+    include_raw = bool(normalized["memoryInjectIncludeRaw"] or raw_requested)
 
     trace: dict[str, Any] = {
         "trace_id": f"ctx_{uuid.uuid4().hex[:12]}",
@@ -91,6 +95,20 @@ def retrieve_context_trace(
         "query": query,
         "enabled": bool(normalized["memoryAutoInject"]),
         "budget_tokens": max_tokens,
+        "max_items": max_items,
+        "max_candidates": max_candidates,
+        "retrieval_order": [
+            "project canonical entry pages",
+            "project synthesized wiki and regular memory",
+            "global wiki",
+            "raw evidence only when explicitly requested or enabled",
+        ],
+        "raw_allowed": include_raw,
+        "raw_reason": (
+            "explicit user request" if raw_requested
+            else "memoryInjectIncludeRaw enabled" if normalized["memoryInjectIncludeRaw"]
+            else "disabled by default"
+        ),
         "used_tokens": 0,
         "candidates": 0,
         "injected": [],
@@ -101,30 +119,41 @@ def retrieve_context_trace(
     if not normalized["memoryAutoInject"]:
         return trace
     if _is_low_signal_query(query):
-        trace["skipped"] = [{"reason": "query too short or low-signal for automatic memory recall"}]
+        trace["skipped"] = [{"reason": "low-signal query; automatic memory recall skipped"}]
         return trace
 
     candidates: list[dict[str, Any]] = []
+    skipped: list[dict[str, Any]] = []
     errors: list[str] = []
 
     try:
         memory_index.index_memory(cwd)
-        candidates.extend(_retrieve_project_memory(query, cwd, include_raw, max_items * 2))
+        entry_candidates, entry_skipped = _retrieve_project_entry_pages(query, cwd, include_raw)
+        candidates.extend(entry_candidates)
+        skipped.extend(entry_skipped)
+        project_candidates, project_skipped = _retrieve_project_memory(query, cwd, include_raw, max_candidates)
+        candidates.extend(project_candidates)
+        skipped.extend(project_skipped)
     except Exception as exc:
         errors.append(f"project-memory: {exc}")
 
     try:
-        candidates.extend(_retrieve_wiki(query, normalized["memoryInjectDepth"], max_items * 2))
+        wiki_candidates, wiki_skipped = _retrieve_wiki(query, normalized["memoryInjectDepth"], max_candidates, include_raw)
+        candidates.extend(wiki_candidates)
+        skipped.extend(wiki_skipped)
     except Exception as exc:
         errors.append(f"wiki: {exc}")
 
     deduped = _dedupe_candidates(candidates)
     deduped = _rank_relevant_candidates(query, deduped)
+    if len(deduped) > max_candidates:
+        for item in deduped[max_candidates:]:
+            skipped.append(_skip_item(item, "candidate cap exceeded before injection ranking"))
+        deduped = deduped[:max_candidates]
     trace["candidates"] = len(deduped)
 
     used_tokens = 0
     injected: list[dict[str, Any]] = []
-    skipped: list[dict[str, Any]] = []
 
     for item in deduped:
         if len(injected) >= max_items:
@@ -169,9 +198,10 @@ def retrieve_context_trace(
     return trace
 
 
-def _retrieve_project_memory(query: str, cwd: str, include_raw: bool, limit: int) -> list[dict[str, Any]]:
+def _retrieve_project_memory(query: str, cwd: str, include_raw: bool, limit: int) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     results = memory_index.search_memory(query, cwd, limit=limit)
     candidates: list[dict[str, Any]] = []
+    skipped: list[dict[str, Any]] = []
     for idx, result in enumerate(results):
         filename = result.get("name") or result.get("file") or ""
         file_data = memory_index.get_memory_file(filename, cwd) if filename else None
@@ -180,31 +210,114 @@ def _retrieve_project_memory(query: str, cwd: str, include_raw: bool, limit: int
         meta = _parse_frontmatter(file_data.get("content", ""))
         rel_path = file_data.get("file") or filename
         mem_type = str(meta.get("type") or "").strip().lower()
+        source_kind = str(meta.get("source") or "").strip().lower()
         inject = str(meta.get("inject") or "auto").strip().lower()
+        is_raw = mem_type == "raw" or source_kind == "raw" or str(rel_path).startswith("raw/")
         if inject == "never":
+            skipped.append(_skip_item({
+                "title": file_data.get("title") or result.get("title") or filename,
+                "path": rel_path,
+                "source": "project-memory",
+            }, "frontmatter inject: never"))
             continue
-        if not include_raw and (mem_type == "raw" or str(rel_path).startswith("raw/")):
+        if inject == "manual":
+            skipped.append(_skip_item({
+                "title": file_data.get("title") or result.get("title") or filename,
+                "path": rel_path,
+                "source": "project-memory",
+            }, "frontmatter inject: manual; not eligible for automatic injection"))
+            continue
+        if is_raw and not include_raw:
+            skipped.append(_skip_item({
+                "title": file_data.get("title") or result.get("title") or filename,
+                "path": rel_path,
+                "source": "project-memory",
+            }, "raw evidence disabled for automatic injection"))
             continue
         body = file_data.get("body") or file_data.get("content") or ""
         content = _trim_to_tokens(body, 900)
         score = max(0.1, 1.0 - idx * 0.05)
         if mem_type in {"feedback", "project", "user"}:
             score += 0.25
+        if _is_project_wiki_path(rel_path, mem_type):
+            score += 0.18
+        if is_raw:
+            score -= 0.35
         candidates.append({
             "id": f"project-memory:{rel_path}",
             "title": file_data.get("title") or result.get("title") or filename,
             "source": "project-memory",
             "path": rel_path,
+            "memory_type": mem_type,
+            "confidence": meta.get("confidence"),
+            "scope": meta.get("scope") or "",
+            "last_verified_at": meta.get("last_verified_at") or "",
             "score": round(score, 3),
             "content": content,
-            "reason": "项目 memory FTS 命中，当前项目加权",
+            "reason": (
+                "project synthesized wiki hit"
+                if _is_project_wiki_path(rel_path, mem_type)
+                else "raw evidence hit; included because raw fallback is allowed"
+                if is_raw
+                else "project memory hit"
+            ),
         })
-    return candidates
+    return candidates, skipped
 
 
-def _retrieve_wiki(query: str, depth: int, limit: int) -> list[dict[str, Any]]:
+def _retrieve_project_entry_pages(query: str, cwd: str, include_raw: bool) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    candidates: list[dict[str, Any]] = []
+    skipped: list[dict[str, Any]] = []
+    for idx, rel_path in enumerate(getattr(memory_index, "CANONICAL_ENTRY_PAGES", [])):
+        file_data = memory_index.get_memory_file(rel_path, cwd)
+        if not file_data:
+            continue
+        meta = _parse_frontmatter(file_data.get("content", ""))
+        mem_type = str(meta.get("type") or "").strip().lower()
+        source_kind = str(meta.get("source") or "").strip().lower()
+        inject = str(meta.get("inject") or "auto").strip().lower()
+        is_raw = mem_type == "raw" or source_kind == "raw" or str(rel_path).startswith("raw/")
+        if inject == "never":
+            skipped.append(_skip_item({
+                "title": file_data.get("title") or rel_path,
+                "path": rel_path,
+                "source": "project-memory",
+            }, "frontmatter inject: never"))
+            continue
+        if inject == "manual":
+            skipped.append(_skip_item({
+                "title": file_data.get("title") or rel_path,
+                "path": rel_path,
+                "source": "project-memory",
+            }, "canonical entry page is manual-only"))
+            continue
+        if is_raw and not include_raw:
+            skipped.append(_skip_item({
+                "title": file_data.get("title") or rel_path,
+                "path": rel_path,
+                "source": "project-memory",
+            }, "raw evidence disabled for automatic injection"))
+            continue
+        candidates.append({
+            "id": f"project-memory:{rel_path}",
+            "title": file_data.get("title") or rel_path,
+            "source": "project-memory",
+            "path": rel_path,
+            "memory_type": mem_type,
+            "confidence": meta.get("confidence"),
+            "scope": meta.get("scope") or "",
+            "last_verified_at": meta.get("last_verified_at") or "",
+            "score": round(1.05 - idx * 0.05, 3),
+            "content": _trim_to_tokens(file_data.get("body") or file_data.get("content") or "", 700),
+            "reason": "project canonical entry page",
+        })
+    return candidates, skipped
+
+
+def _retrieve_wiki(query: str, depth: int, limit: int, include_raw: bool = False) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     search_result = wiki_store.search(query, limit=limit)
     candidates: list[dict[str, Any]] = []
+    skipped: list[dict[str, Any]] = []
     seen = set()
     for idx, result in enumerate(search_result.get("results", [])):
         node_id = result.get("id") or ""
@@ -212,6 +325,14 @@ def _retrieve_wiki(query: str, depth: int, limit: int) -> list[dict[str, Any]]:
             continue
         node = wiki_store.get_node(node_id)
         if not node:
+            continue
+        node_type = str(node.get("type") or "").strip().lower()
+        if node_type == "raw" and not include_raw:
+            skipped.append(_skip_item({
+                "title": node.get("title") or result.get("title") or node_id,
+                "path": node_id,
+                "source": "wiki",
+            }, "global wiki node type raw; not eligible for automatic injection"))
             continue
         seen.add(node_id)
         content = _trim_to_tokens(node.get("body") or result.get("snippet") or "", 900)
@@ -222,6 +343,7 @@ def _retrieve_wiki(query: str, depth: int, limit: int) -> list[dict[str, Any]]:
             "title": node.get("title") or result.get("title") or node_id,
             "source": "wiki",
             "path": node_id,
+            "memory_type": node_type,
             "score": round(score, 3),
             "content": content,
             "reason": "全局 wiki FTS 命中" + ("，含图谱邻居扩展" if depth else ""),
@@ -235,17 +357,26 @@ def _retrieve_wiki(query: str, depth: int, limit: int) -> list[dict[str, Any]]:
             neighbor_node = wiki_store.get_node(neighbor_id)
             if not neighbor_node:
                 continue
+            neighbor_type = str(neighbor_node.get("type") or "").strip().lower()
+            if neighbor_type == "raw" and not include_raw:
+                skipped.append(_skip_item({
+                    "title": neighbor_node.get("title") or neighbor_id,
+                    "path": neighbor_id,
+                    "source": "wiki",
+                }, "global wiki neighbor type raw; not eligible for automatic injection"))
+                continue
             seen.add(neighbor_id)
             candidates.append({
                 "id": f"wiki:{neighbor_id}",
                 "title": neighbor_node.get("title") or neighbor_id,
                 "source": "wiki",
                 "path": neighbor_id,
+                "memory_type": neighbor_type,
                 "score": round(max(0.05, score - 0.18), 3),
                 "content": _trim_to_tokens(neighbor_node.get("body") or "", 500),
                 "reason": f"与命中 wiki 节点 {node.get('title') or node_id} 存在 wikilink 关联",
             })
-    return candidates
+    return candidates, skipped
 
 
 def _format_context_block(items: list[dict[str, Any]]) -> str:
@@ -305,6 +436,30 @@ def _dedupe_candidates(candidates: list[dict[str, Any]]) -> list[dict[str, Any]]
     return deduped
 
 
+def _is_project_wiki_path(path: str, mem_type: str = "") -> bool:
+    path_text = str(path or "").replace("\\", "/").lower()
+    type_text = str(mem_type or "").strip().lower()
+    return path_text.startswith("wiki/") or type_text in {"wiki", "decision", "workflow", "troubleshooting"}
+
+
+def _is_raw_candidate(item: dict[str, Any]) -> bool:
+    path = str(item.get("path") or "").replace("\\", "/").lower()
+    mem_type = str(item.get("memory_type") or "").strip().lower()
+    return path.startswith("raw/") or mem_type == "raw"
+
+
+def _injection_priority(item: dict[str, Any]) -> int:
+    if _is_raw_candidate(item):
+        return 4
+    if item.get("source") == "project-memory" and _is_project_wiki_path(str(item.get("path") or ""), str(item.get("memory_type") or "")):
+        return 0
+    if item.get("source") == "project-memory":
+        return 1
+    if item.get("source") == "wiki":
+        return 2
+    return 3
+
+
 def _rank_relevant_candidates(query: str, candidates: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """按多信号相关性重排自动注入候选，避免只靠 FTS OR 弱命中。"""
     query_terms = _semantic_terms(query)
@@ -328,10 +483,12 @@ def _rank_relevant_candidates(query: str, candidates: list[dict[str, Any]]) -> l
         precision = len(overlap) / max(1, min(len(item_terms), 80))
         title_boost = min(len(title_overlap) * 0.18, 0.45)
         phrase_boost = _phrase_overlap_score(query, f"{title}\n{content}")
+        source_priority = _injection_priority(item)
         type_boost = 0.12 if item.get("source") == "project-memory" else 0.0
         source_score = float(item.get("score") or 0) * 0.12
         index_penalty = 0.16 if Path(path).name.upper() in {"MEMORY.MD", "INDEX.MD"} else 0.0
         score = recall * 0.55 + precision * 0.20 + title_boost + phrase_boost + type_boost + source_score - index_penalty
+        score += max(0, 4 - source_priority) * 0.015
 
         required_hits = 2 if query_size < 6 else 3
         min_score = 0.40 if query_size < 6 else 0.34
@@ -342,14 +499,15 @@ def _rank_relevant_candidates(query: str, candidates: list[dict[str, Any]]) -> l
             continue
 
         adjusted = dict(item)
+        adjusted["priority"] = source_priority
         adjusted["score"] = round(score, 3)
         adjusted["reason"] = (
-            f"{adjusted.get('reason') or '上下文命中'}，相关性 {score:.2f}，"
-            f"关键词覆盖 {len(overlap)}/{query_size}"
+            f"{item.get('reason') or 'context hit'}; relevance={score:.2f}; "
+            f"term_overlap={len(overlap)}/{query_size}; priority={source_priority}"
         )
         ranked.append(adjusted)
 
-    ranked.sort(key=lambda item: item.get("score", 0), reverse=True)
+    ranked.sort(key=lambda item: (item.get("priority", 9), -float(item.get("score") or 0)))
     return ranked
 
 
@@ -364,11 +522,27 @@ def _phrase_overlap_score(query: str, text: str) -> float:
     return min(score, 0.5)
 
 
+def _explicitly_requests_raw(query: str) -> bool:
+    text = str(query or "").lower()
+    raw_terms = {
+        "raw", "evidence", "source", "sources", "citation", "citations", "quote", "quotes",
+        "\u539f\u6587", "\u539f\u59cb", "\u8bc1\u636e", "\u51fa\u5904", "\u6765\u6e90",
+        "\u5f15\u7528", "\u8be6\u60c5", "\u539f\u59cb\u8bb0\u5f55",
+    }
+    return any(term in text for term in raw_terms)
+
+
 def _is_low_signal_query(query: str) -> bool:
     text = str(query or "").strip().lower()
     if not text:
         return True
     normalized = re.sub(r"[\s`*_(){}\[\]<>:;,.!?，。！？、'\"-]+", "", text)
+    normalized = re.sub(r"[\s`*_(){}\[\]<>:;,.\!?\"'\-~]+", "", normalized)
+    if normalized in {
+        "\u4f60\u597d", "\u60a8\u597d", "\u5728\u5417", "\u5728\u4e48", "\u54c8\u55bd", "\u55e8",
+        "\u65e9\u4e0a\u597d", "\u4e0b\u5348\u597d", "\u665a\u4e0a\u597d", "\u6d4b\u8bd5",
+    }:
+        return True
     greetings = {
         "hi", "hello", "hey", "你好", "您好", "哈喽", "嗨", "在吗", "早上好", "下午好", "晚上好",
         "ok", "test", "测试",

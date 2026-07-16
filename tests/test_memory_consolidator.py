@@ -5,18 +5,29 @@ from pathlib import Path
 from unittest import mock
 
 import memory_consolidator
+import memory_index
 import memory_llm
 
 
 class MemoryConsolidatorTests(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
+        self.home = Path(self.tmp.name) / 'home'
+        self.home.mkdir()
+        self.index_dir = self.home / '.ccb' / 'memory_index'
+        self.index_dir.mkdir(parents=True)
         self.jobs_path = Path(self.tmp.name) / 'jobs.json'
-        self.patch_jobs = mock.patch.object(memory_consolidator, 'JOBS_PATH', self.jobs_path)
-        self.patch_jobs.start()
+        self.patches = [
+            mock.patch.object(memory_consolidator, 'JOBS_PATH', self.jobs_path),
+            mock.patch.object(memory_index, 'INDEX_DIR', self.index_dir),
+            mock.patch.object(Path, 'home', classmethod(lambda cls: self.home)),
+        ]
+        for patch in self.patches:
+            patch.start()
 
     def tearDown(self):
-        self.patch_jobs.stop()
+        for patch in reversed(self.patches):
+            patch.stop()
         self.tmp.cleanup()
 
     def test_failed_extraction_result_triggers_regex_fallback(self):
@@ -30,6 +41,10 @@ class MemoryConsolidatorTests(unittest.TestCase):
         )
         self.assertEqual(result.get('extraction_source'), 'regex_fallback')
         self.assertGreaterEqual(result.get('candidates', 0), 1)
+        self.assertTrue(result.get('raw_files'))
+        self.assertTrue(result.get('files'))
+        self.assertTrue(result['raw_files'][0]['filename'].startswith('raw/sessions/'))
+        self.assertTrue(result['files'][0]['filename'].startswith('wiki/preferences/'))
 
     def test_ok_empty_extraction_does_not_fallback(self):
         job_id = memory_consolidator.enqueue_consolidation(

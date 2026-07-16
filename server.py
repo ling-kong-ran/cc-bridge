@@ -2222,6 +2222,14 @@ async def handle_action(body: bytes, writer: asyncio.StreamWriter):
 
     elif action == "resume_session":
         resume_id = data.get("session_id", "")
+        if not is_valid_native_session_id(resume_id):
+            err = json.dumps({
+                "ok": False,
+                "error": "Invalid native session ID",
+                "error_key": "invalid_session_id",
+            }, ensure_ascii=False).encode("utf-8")
+            await send_response(writer, 400, "application/json; charset=utf-8", err)
+            return
         model = data.get("model") or get_default_model()
         cwd = data.get("cwd")
         skip_perms = data.get("skip_permissions", True)
@@ -2440,6 +2448,8 @@ async def handle_action(body: bytes, writer: asyncio.StreamWriter):
                 return
 
             resume_id = client_session_ids.get(client_id) or client_session_ids.get(viewing_owner, "")
+            if resume_id and not is_valid_native_session_id(resume_id):
+                resume_id = ""
             takeover_viewers = [viewing_owner]
             takeover_viewers.extend(
                 vid for vid, oid in list(client_viewing.items())
@@ -2598,6 +2608,8 @@ async def handle_action(body: bytes, writer: asyncio.StreamWriter):
         if sid and not is_valid_native_session_id(sid):
             client_session_ids.pop(client_id, None)
             sid = ""
+        if session and getattr(session, "session_id", None) and not is_valid_native_session_id(session.session_id):
+            session.session_id = None
         if (not session or not session.is_running) and content:
             meta = client_meta.setdefault(client_id, {})
             if requested_model:
@@ -2909,6 +2921,8 @@ def make_owner_event_handler(client_id: str, run_id: str, session, model: str, c
     async def on_event(event: dict):
         evt_type = event.get("type", "unknown")
         sid = event.get("session_id") or getattr(session, "session_id", None) or client_session_ids.get(client_id, "")
+        if sid and not is_valid_native_session_id(sid):
+            sid = ""
         if sid and "session_id" not in event:
             event = dict(event)
             event["session_id"] = sid

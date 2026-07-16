@@ -19,6 +19,22 @@ from bootstrap.probe import detect_available_clis
 from config_manager import list_tools
 
 
+def is_valid_native_session_id(session_id: str | None) -> bool:
+    """Return whether a value can be safely passed to Claude CLI --resume."""
+    if not session_id:
+        return False
+    try:
+        uuid.UUID(str(session_id))
+        return True
+    except (TypeError, ValueError):
+        return False
+
+
+def normalize_native_session_id(session_id: str | None) -> Optional[str]:
+    sid = str(session_id or "").strip()
+    return sid if is_valid_native_session_id(sid) else None
+
+
 def _detect_available_clis() -> list[dict]:
     """检测所有可用的 CLI，返回列表 [{name, path, source}]。"""
     return detect_available_clis()
@@ -273,7 +289,7 @@ class CCBSession:
         """初始化会话参数"""
         self.model = model
         self.cwd = validate_cwd(cwd or DEFAULT_CWD)
-        self.session_id = resume_id
+        self.session_id = normalize_native_session_id(resume_id)
         self._on_event = on_event
         self.skip_permissions = skip_permissions
         self.remote_target = remote_target or None
@@ -487,8 +503,12 @@ class CCBSession:
         if self.skip_permissions:
             cmd += ["--dangerously-skip-permissions"]
 
-        if self.session_id:
-            cmd += ["--resume", self.session_id]
+        resume_id = normalize_native_session_id(self.session_id)
+        if self.session_id and not resume_id:
+            print(f"[CC Bridge] ignoring invalid resume session id: {self.session_id}")
+            self.session_id = None
+        if resume_id:
+            cmd += ["--resume", resume_id]
 
         if self.agent_configs:
             cmd += ["--agents", json.dumps(self.agent_configs, ensure_ascii=False)]
@@ -510,6 +530,10 @@ class CCBSession:
         # 如果上一个进程还在跑，先终止
         await self._kill_proc()
 
+        resume_id = normalize_native_session_id(self.session_id)
+        if self.session_id and not resume_id:
+            print(f"[CC Bridge] ignoring invalid resume session id: {self.session_id}")
+            self.session_id = None
         print(f"[CC Bridge] _send_one_shot sid={self.session_id} model={self.model} cli={self.cli or get_current_cli()}")
 
         cli = validate_cli(self.cli or get_current_cli())
@@ -532,8 +556,8 @@ class CCBSession:
         if self.skip_permissions:
             cmd += ["--dangerously-skip-permissions"]
 
-        if self.session_id:
-            cmd += ["--resume", self.session_id]
+        if resume_id:
+            cmd += ["--resume", resume_id]
 
         if self.agent_configs:
             cmd += ["--agents", json.dumps(self.agent_configs, ensure_ascii=False)]
@@ -729,7 +753,7 @@ class CCBSession:
                     self._message_has_output = False
 
                 # 从 init 或 result 事件中捕获 session_id
-                sid = event.get("session_id")
+                sid = normalize_native_session_id(event.get("session_id"))
                 if sid and sid != self.session_id:
                     self.session_id = sid
                     # 通知上层 session_id 已捕获
