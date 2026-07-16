@@ -40,6 +40,14 @@ def _now() -> float:
     return time.time()
 
 
+def _timeout_at_least(value: Any, minimum: int) -> int:
+    try:
+        current = int(value or 0)
+    except (TypeError, ValueError):
+        current = 0
+    return max(minimum, current)
+
+
 def _load_json(path: Path, default: Any) -> Any:
     if not path.exists():
         return copy.deepcopy(default)
@@ -85,10 +93,12 @@ def _normalize_workflow(workflow: dict) -> dict:
             role = str(config.get("role") or "").strip()
             if item.get("pattern") == "supervisor_dynamic" and role in SUPERVISOR_PROMPTS:
                 config["prompt"] = SUPERVISOR_PROMPTS[role]
-                if role in {"supervisor", "researcher", "checker"}:
-                    config.setdefault("timeout_seconds", 180)
+                if role == "supervisor":
+                    config["timeout_seconds"] = _timeout_at_least(config.get("timeout_seconds"), 240)
+                elif role in {"researcher", "checker"}:
+                    config["timeout_seconds"] = _timeout_at_least(config.get("timeout_seconds"), 600)
                 elif role == "worker":
-                    config.setdefault("timeout_seconds", 900)
+                    config["timeout_seconds"] = _timeout_at_least(config.get("timeout_seconds"), 900)
             prompt = str(config.get("prompt") or "").strip()
             if WORKFLOW_REQUEST_TOKEN not in prompt:
                 config["prompt"] = f"用户需求：\n{WORKFLOW_REQUEST_TOKEN}\n\n{prompt}".strip()
@@ -218,10 +228,10 @@ def _template_catalog() -> list[dict]:
             "pattern": "supervisor_dynamic",
             "nodes": [
                 {"id": "start", "type": "start", "title": "开始", "position": {"x": 44, "y": 190}},
-                {"id": "supervisor", "type": "agent", "title": "Supervisor", "position": {"x": 300, "y": 190}, "config": {"role": "supervisor", "prompt": SUPERVISOR_PROMPTS["supervisor"], "output_key": "supervision", "timeout_seconds": 180}},
-                {"id": "researcher", "type": "agent", "title": "Researcher", "position": {"x": 565, "y": 70}, "config": {"role": "researcher", "prompt": SUPERVISOR_PROMPTS["researcher"], "output_key": "research", "timeout_seconds": 180}},
+                {"id": "supervisor", "type": "agent", "title": "Supervisor", "position": {"x": 300, "y": 190}, "config": {"role": "supervisor", "prompt": SUPERVISOR_PROMPTS["supervisor"], "output_key": "supervision", "timeout_seconds": 240}},
+                {"id": "researcher", "type": "agent", "title": "Researcher", "position": {"x": 565, "y": 70}, "config": {"role": "researcher", "prompt": SUPERVISOR_PROMPTS["researcher"], "output_key": "research", "timeout_seconds": 600}},
                 {"id": "worker", "type": "agent", "title": "Worker", "position": {"x": 565, "y": 220}, "config": {"role": "worker", "prompt": SUPERVISOR_PROMPTS["worker"], "output_key": "work", "timeout_seconds": 900}},
-                {"id": "checker", "type": "agent", "title": "Checker", "position": {"x": 565, "y": 370}, "config": {"role": "checker", "prompt": SUPERVISOR_PROMPTS["checker"], "output_key": "check", "timeout_seconds": 180}},
+                {"id": "checker", "type": "agent", "title": "Checker", "position": {"x": 565, "y": 370}, "config": {"role": "checker", "prompt": SUPERVISOR_PROMPTS["checker"], "output_key": "check", "timeout_seconds": 600}},
                 {"id": "decision", "type": "condition", "title": "是否通过", "position": {"x": 835, "y": 220}, "config": {"role": "decision_gate"}},
                 {"id": "end", "type": "end", "title": "完成", "position": {"x": 1105, "y": 220}},
             ],

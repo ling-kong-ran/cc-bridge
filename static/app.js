@@ -385,6 +385,8 @@ const workflowState = {
   listOpen: true,
   templates: [],
   lastRunRequest: '',
+  runSyncTimer: null,
+  runSyncing: false,
 };
 
 function getDesktopWindowModule() {
@@ -1402,6 +1404,25 @@ function mergeWorkflowRun(run = {}) {
   return workflowState.runViews[runId];
 }
 
+function mergeWorkflowRunSnapshot(run = {}) {
+  const runId = workflowRunId(run);
+  if (!runId) return null;
+  const view = mergeWorkflowRun(run);
+  const hydrated = hydrateWorkflowRunView(run);
+  view.nodeStatuses = { ...(view.nodeStatuses || {}), ...hydrated.nodeStatuses };
+  const nextOutputs = { ...(view.nodeOutputs || {}) };
+  Object.entries(hydrated.nodeOutputs).forEach(([nodeId, output]) => {
+    nextOutputs[nodeId] = { ...(nextOutputs[nodeId] || {}), ...(output || {}) };
+  });
+  view.nodeOutputs = nextOutputs;
+  if (workflowState.selectedRunId === runId) {
+    workflowState.currentRun = view.run;
+    workflowState.nodeStatuses = { ...view.nodeStatuses };
+    workflowState.nodeOutputs = { ...view.nodeOutputs };
+  }
+  return view;
+}
+
 function selectWorkflowRun(runId) {
   if (!runId) return;
   const run = workflowState.runs.find(item => workflowRunId(item) === runId) || workflowState.runViews[runId]?.run;
@@ -1433,9 +1454,43 @@ async function workflowFetchJson(url, options = {}) {
   return resp.status === 204 ? null : resp.json();
 }
 
+function isWorkflowRunRecordActive(run = {}) {
+  return ['running', 'pausing', 'paused'].includes(String(run.status || ''));
+}
+
+function startWorkflowRunSync() {
+  if (workflowState.runSyncTimer) return;
+  workflowState.runSyncTimer = window.setInterval(() => {
+    const hasActiveRun = workflowState.runs.some(isWorkflowRunRecordActive) || isWorkflowRunActive();
+    if (!document.hidden && hasActiveRun) syncWorkflowRunsFromServer();
+  }, 5000);
+  document.addEventListener('visibilitychange', () => {
+    if (!document.hidden) syncWorkflowRunsFromServer();
+  });
+}
+
+async function syncWorkflowRunsFromServer() {
+  if (workflowState.runSyncing || !workflowState.backendAvailable) return;
+  workflowState.runSyncing = true;
+  try {
+    const data = await workflowFetchJson('/api/workflows/runs?limit=100');
+    const runs = Array.isArray(data) ? data : (Array.isArray(data?.runs) ? data.runs : []);
+    runs.forEach(mergeWorkflowRunSnapshot);
+    if (workflowState.selectedRunId && workflowState.runViews[workflowState.selectedRunId]) {
+      selectWorkflowRun(workflowState.selectedRunId);
+    }
+    renderWorkflowsPage();
+  } catch (e) {
+    // SSE remains the primary channel; polling is only a stale-state fallback.
+  } finally {
+    workflowState.runSyncing = false;
+  }
+}
+
 function initWorkflowsUI() {
   if (workflowState.initialized) return;
   workflowState.initialized = true;
+  startWorkflowRunSync();
   document.getElementById('btn-workflows-refresh')?.addEventListener('click', () => loadWorkflowsPage(true));
   document.getElementById('btn-workflow-new-run')?.addEventListener('click', runSelectedWorkflow);
   document.getElementById('btn-workflow-run')?.addEventListener('click', toggleWorkflowRun);
@@ -1502,8 +1557,7 @@ function renderWorkflowsPage() {
 }
 
 function isWorkflowRunActive() {
-  const status = workflowState.currentRun?.status || '';
-  return ['running', 'pausing', 'paused'].includes(status);
+  return isWorkflowRunRecordActive(workflowState.currentRun || {});
 }
 
 function renderWorkflowRunControls() {
@@ -1991,7 +2045,7 @@ async function runSelectedWorkflow() {
     const runWorkflow = saved || wf;
     const data = await workflowFetchJson(`/api/workflows/${encodeURIComponent(runWorkflow.id)}/runs`, { method: 'POST', body: JSON.stringify({ inputs }) });
     const run = data?.run || data || { id: data?.run_id, status: 'running', workflow_id: runWorkflow.id };
-    mergeWorkflowRun(run);
+    mergeWorkflowRunSnapshot(run);
     selectWorkflowRun(workflowRunId(run));
     workflowState.nodeStatuses = {};
     workflowState.nodeOutputs = {};
@@ -2016,7 +2070,7 @@ async function cancelWorkflowRun() {
   const runId = workflowState.currentRun?.id || workflowState.currentRun?.run_id; if (!runId) return;
   try {
     const run = await workflowFetchJson(`/api/workflows/runs/${encodeURIComponent(runId)}/cancel`, { method: 'POST', body: '{}' });
-    mergeWorkflowRun(run || { id: runId, status: 'cancelled' });
+    mergeWorkflowRunSnapshot(run || { id: runId, status: 'cancelled' });
   } catch (e) { showToast(t('workflowCancelFailed'), 'error'); }
   workflowState.currentRun.status = 'cancelled'; syncSelectedWorkflowRunView(); appendWorkflowLog('run_cancelled', t('workflowRunCancelled')); renderWorkflowsPage();
 }
@@ -2029,7 +2083,7 @@ async function toggleWorkflowPause() {
   try {
     const run = await workflowFetchJson(`/api/workflows/runs/${encodeURIComponent(runId)}/${action}`, { method: 'POST', body: '{}' });
     workflowState.currentRun = { ...(workflowState.currentRun || {}), ...(run || {}) };
-    mergeWorkflowRun(workflowState.currentRun);
+    mergeWorkflowRunSnapshot(workflowState.currentRun);
   } catch (e) {
     showToast(isManualPaused ? t('workflowResumeFailed') : t('workflowPauseFailed'), 'error');
   }
@@ -2041,7 +2095,7 @@ async function approveWorkflowRun(approved) {
   try {
     const run = await workflowFetchJson(`/api/workflows/runs/${encodeURIComponent(runId)}/approve`, { method: 'POST', body: JSON.stringify({ approved }) });
     workflowState.currentRun = { ...(workflowState.currentRun || {}), ...(run || {}) };
-    mergeWorkflowRun(workflowState.currentRun);
+    mergeWorkflowRunSnapshot(workflowState.currentRun);
   } catch (e) { showToast(t('workflowApproveFailed'), 'error'); }
   workflowState.currentRun.status = approved ? 'running' : 'cancelled'; syncSelectedWorkflowRunView(); appendWorkflowLog(approved ? 'run_resumed' : 'run_cancelled', approved ? t('workflowApproved') : t('workflowRejected')); renderWorkflowsPage();
 }
