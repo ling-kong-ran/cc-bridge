@@ -485,9 +485,11 @@ def _rank_relevant_candidates(query: str, candidates: list[dict[str, Any]]) -> l
         phrase_boost = _phrase_overlap_score(query, f"{title}\n{content}")
         source_priority = _injection_priority(item)
         type_boost = 0.12 if item.get("source") == "project-memory" else 0.0
+        freshness_boost = _freshness_boost(item.get("last_verified_at") or "")
+        stale_penalty = 0.16 if _is_stale_memory(item.get("last_verified_at") or "") else 0.0
         source_score = float(item.get("score") or 0) * 0.12
         index_penalty = 0.16 if Path(path).name.upper() in {"MEMORY.MD", "INDEX.MD"} else 0.0
-        score = recall * 0.55 + precision * 0.20 + title_boost + phrase_boost + type_boost + source_score - index_penalty
+        score = recall * 0.55 + precision * 0.20 + title_boost + phrase_boost + type_boost + freshness_boost + source_score - stale_penalty - index_penalty
         score += max(0, 4 - source_priority) * 0.015
 
         required_hits = 2 if query_size < 6 else 3
@@ -509,6 +511,35 @@ def _rank_relevant_candidates(query: str, candidates: list[dict[str, Any]]) -> l
 
     ranked.sort(key=lambda item: (item.get("priority", 9), -float(item.get("score") or 0)))
     return ranked
+
+
+def _parse_memory_date(value: str) -> float:
+    match = re.search(r"(20\d{2})-(\d{1,2})-(\d{1,2})", str(value or ""))
+    if not match:
+        return 0.0
+    try:
+        return time.mktime((int(match.group(1)), int(match.group(2)), int(match.group(3)), 0, 0, 0, 0, 0, -1))
+    except (OverflowError, ValueError):
+        return 0.0
+
+
+def _freshness_boost(last_verified_at: str) -> float:
+    verified = _parse_memory_date(last_verified_at)
+    if verified <= 0:
+        return 0.0
+    age_days = max(0.0, (time.time() - verified) / 86400)
+    if age_days <= 120:
+        return 0.08
+    if age_days <= 365:
+        return 0.04
+    return 0.0
+
+
+def _is_stale_memory(last_verified_at: str) -> bool:
+    verified = _parse_memory_date(last_verified_at)
+    if verified <= 0:
+        return False
+    return (time.time() - verified) / 86400 > 540
 
 
 def _phrase_overlap_score(query: str, text: str) -> float:
@@ -579,6 +610,10 @@ def _semantic_terms(text: str) -> set[str]:
             term = chunk[idx:idx + 2]
             if term not in stopwords:
                 terms.add(term)
+    try:
+        terms = memory_index._expand_semantic_aliases(terms)
+    except Exception:
+        pass
     return terms
 
 

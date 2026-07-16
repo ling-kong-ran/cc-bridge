@@ -68,6 +68,24 @@ class MemoryConsolidatorTests(unittest.TestCase):
             t.join()
         self.assertEqual(len(memory_consolidator._load_jobs()), 20)
 
+    def test_regex_fallback_classifies_decision_workflow_and_troubleshooting(self):
+        cases = [
+            ('请记住我们决定发布流程不要手动提交版本文件', 'decision', 'wiki/decisions/'),
+            ('请记住每次发版先运行 release workflow 再检查产物', 'workflow', 'wiki/workflows/'),
+            ('请记住遇到 SSE 断连报错的排查步骤是先看 heartbeat', 'troubleshooting', 'wiki/troubleshooting/'),
+        ]
+        for message, expected_type, prefix in cases:
+            job_id = memory_consolidator.enqueue_consolidation(
+                'sid', '/tmp/project', expected_type, 'cid', user_message=message
+            )
+            result = memory_consolidator.run_consolidation_job(
+                job_id,
+                {'memoryAutoConsolidate': 'safe'},
+                memory_llm.ExtractionResult(status='failed', candidates=[], error='not logged in'),
+            )
+            self.assertEqual(result['files'][0]['type'], expected_type)
+            self.assertTrue(result['files'][0]['filename'].startswith(prefix))
+
 
 if __name__ == '__main__':
     unittest.main()

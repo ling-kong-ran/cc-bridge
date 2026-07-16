@@ -5,6 +5,7 @@ Memory Index - 为 Claude Code auto memory 提供轻量 SQLite FTS5 全文检索
 索引会随分词器变化；切换分词器后建议 force=True 全量重建一次索引。
 """
 import hashlib
+import importlib
 import json
 import re
 import shutil
@@ -29,6 +30,24 @@ MEMORY_DIR_TEMPLATE = ".claude/projects/{sanitized}"
 
 # 轮询间隔（秒）—— 检查文件变化的最小间隔
 SCAN_INTERVAL = 30
+
+SEMANTIC_ALIASES: dict[str, list[str]] = {
+    "发布": ["release", "发版", "版本", "上线"],
+    "发版": ["release", "发布", "版本", "上线"],
+    "上线": ["deploy", "部署", "发布", "发版"],
+    "部署": ["deploy", "deployment", "上线", "发布"],
+    "提交": ["commit", "提交信息", "commit message"],
+    "提交信息": ["commit", "commit message", "提交"],
+    "拉取请求": ["pr", "pull request", "合并请求"],
+    "合并请求": ["pr", "pull request", "拉取请求"],
+    "偏好": ["习惯", "规则", "要求"],
+    "规则": ["约定", "偏好", "要求"],
+    "约定": ["规则", "规范", "要求"],
+    "错误": ["bug", "故障", "异常", "报错"],
+    "故障": ["troubleshooting", "错误", "异常", "报错"],
+    "接口": ["api", "endpoint", "端点"],
+    "记住": ["记忆", "memory", "偏好"],
+}
 
 CANONICAL_MEMORY_DIRS = [
     "raw/sessions",
@@ -361,6 +380,17 @@ def _has_changes(memory_dir: Path, db_path: Path) -> bool:
         return True
 
 
+def _expand_semantic_aliases(terms: set[str]) -> set[str]:
+    """用小型内置同义词表扩展查询词，弥补无向量检索时的常见表达差异。"""
+    expanded = set(terms)
+    lower_terms = {str(term).lower() for term in terms}
+    for key, aliases in SEMANTIC_ALIASES.items():
+        related = {key.lower(), *(alias.lower() for alias in aliases)}
+        if lower_terms & related:
+            expanded.update(related)
+    return {term for term in expanded if len(term.strip()) >= 2}
+
+
 def _build_fts_query(query: str) -> str:
     """把用户查询转成对中文友好的 FTS5 MATCH 表达式。
 
@@ -372,8 +402,8 @@ def _build_fts_query(query: str) -> str:
     if not query:
         return ""
 
-    # 用与索引整理一致的切分逻辑提取 token（中文 bigram + 英文词 + 分段）
-    terms = _extract_memory_terms(query, "", Path(query).stem)
+    # 用与索引整理一致的切分逻辑提取 token（中文 bigram + 英文词 + 分段），再补充常见语义别名。
+    terms = _expand_semantic_aliases(_extract_memory_terms(query, "", Path(query).stem))
     # 去掉过短/无信息量的 token，转义双引号
     safe_terms: list[str] = []
     seen: set[str] = set()
@@ -400,7 +430,7 @@ def _rerank_by_overlap(rows: list[tuple], query: str, limit: int) -> list[tuple]
     if not rows:
         return rows
 
-    q_terms = _extract_memory_terms(query, "", Path(query).stem)
+    q_terms = _expand_semantic_aliases(_extract_memory_terms(query, "", Path(query).stem))
     if not q_terms:
         return rows[:limit]
     query_size = len(q_terms)
@@ -452,6 +482,43 @@ def _memory_phrase_score(query: str, text: str) -> float:
     return min(score, 0.5)
 
 
+def _search_vector_memory(query: str, cwd: str, limit: int) -> list[tuple]:
+    """调用可选向量库后端，失败时静默退回 FTS。"""
+    try:
+        vector_store = importlib.import_module("memory_vector_store")
+        results = vector_store.search_memory(query, cwd, limit=limit)
+    except Exception:
+        return []
+    rows: list[tuple] = []
+    for item in results:
+        path = item.get("file") or item.get("path") or item.get("name") or ""
+        if not path:
+            continue
+        rows.append((
+            path,
+            item.get("name") or Path(str(path)).name,
+            item.get("title") or path,
+            item.get("snippet") or "",
+            item.get("rank") if item.get("rank") is not None else -float(item.get("vector_score") or 0),
+            item.get("snippet") or item.get("title") or path,
+        ))
+    return rows
+
+
+def _merge_search_rows(primary: list[tuple], secondary: list[tuple], limit: int) -> list[tuple]:
+    merged: list[tuple] = []
+    seen: set[str] = set()
+    for row in primary + secondary:
+        key = str(row[0] or "")
+        if not key or key in seen:
+            continue
+        seen.add(key)
+        merged.append(row)
+        if len(merged) >= max(limit * 3, limit):
+            break
+    return merged
+
+
 def search_memory(query: str, cwd: str, limit: int = 20) -> list[dict[str, Any]]:
     """全文搜索指定项目的 memory。"""
     db_path = _get_index_db(cwd)
@@ -492,6 +559,8 @@ def search_memory(query: str, cwd: str, limit: int = 20) -> list[dict[str, Any]]
                 (max(limit * 4, 20),),
             ).fetchall()
 
+        vector_rows = _search_vector_memory(query, cwd, limit)
+        rows = _merge_search_rows(vector_rows, rows, max(limit, 8)) if vector_rows else rows
         rows = _rerank_by_overlap(rows, query, limit)
 
         results = [

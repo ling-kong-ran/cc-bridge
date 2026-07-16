@@ -4,6 +4,7 @@ from pathlib import Path
 from unittest import mock
 
 import memory_index
+import memory_vector_store
 
 
 class MemoryIndexTests(unittest.TestCase):
@@ -17,8 +18,11 @@ class MemoryIndexTests(unittest.TestCase):
         self.memory_dir.mkdir(parents=True)
         self.index_dir = self.home / '.ccb' / 'memory_index'
         self.index_dir.mkdir(parents=True)
+        self.vector_dir = self.home / '.ccb' / 'memory_vectors'
+        self.vector_dir.mkdir(parents=True)
         self.patches = [
             mock.patch.object(memory_index, 'INDEX_DIR', self.index_dir),
+            mock.patch.object(memory_vector_store, 'VECTOR_DIR', self.vector_dir),
             mock.patch.object(Path, 'home', classmethod(lambda cls: self.home)),
         ]
         for p in self.patches:
@@ -73,6 +77,33 @@ class MemoryIndexTests(unittest.TestCase):
         results = memory_index.search_memory('记忆检索命中不高质量', self.cwd)
         self.assertTrue(results)
         self.assertEqual(results[0]['file'], 'feedback_token.md')
+
+    def test_search_semantic_alias_matches_release_wording(self):
+        self.write_memory('wiki/decisions/release.md', '---\nname: 发布限制\ntype: decision\n---\n\nrelease workflow 不要手动提交 version bump。')
+        memory_index.index_memory(self.cwd, force=True)
+        results = memory_index.search_memory('发版限制', self.cwd)
+        self.assertTrue(results)
+        self.assertEqual(results[0]['file'], 'wiki/decisions/release.md')
+
+    def test_search_merges_optional_vector_results(self):
+        self.write_memory('wiki/decisions/vector.md', '---\nname: 语义检索决策\ntype: decision\n---\n\n向量库负责 semantic recall。')
+        memory_index.index_memory(self.cwd, force=True)
+        with mock.patch.object(memory_index, '_search_vector_memory', return_value=[(
+            'wiki/decisions/vector.md', 'wiki/decisions/vector.md', '语义检索决策', '向量库负责 semantic recall。', -0.9, '向量库 semantic recall'
+        )]):
+            results = memory_index.search_memory('语义召回', self.cwd)
+        self.assertTrue(results)
+        self.assertEqual(results[0]['file'], 'wiki/decisions/vector.md')
+
+    def test_sqlite_vector_store_matches_alias_terms(self):
+        self.write_memory('wiki/decisions/release-vector.md', '---\nname: Release Workflow\ntype: decision\n---\n\nrelease workflow requires checking installer artifacts before publishing。')
+        memory_index.index_memory(self.cwd, force=True)
+        result = memory_vector_store.index_memory(self.cwd)
+        self.assertTrue(result['available'])
+        results = memory_vector_store.search_memory('发版流程检查产物', self.cwd)
+        self.assertTrue(results)
+        self.assertEqual(results[0]['file'], 'wiki/decisions/release-vector.md')
+        self.assertEqual(results[0]['retrieval'], 'sqlite-vector')
 
     def test_save_same_content_does_not_rewrite_body_file(self):
         content = '---\nname: 稳定偏好\ntype: feedback\n---\n\n保持精简。'

@@ -19,7 +19,7 @@ JOBS_PATH = Path.home() / ".ccb" / "memory_consolidation_jobs.json"
 JOBS_PATH.parent.mkdir(parents=True, exist_ok=True)
 _JOBS_LOCK = threading.RLock()
 
-_CONFIRM_RE = re.compile(r"(记住|记一下|以后|下次|每次|不要再|别再|不需要确认|无需确认|默认|偏好|习惯)")
+_CONFIRM_RE = re.compile(r"(记住|记一下|以后|下次|每次|不要再|别再|不需要确认|无需确认|默认|偏好|习惯|约定|规则|决定|决策|流程|工作流|排查|故障|解决办法|修复办法)")
 _SENSITIVE_RE = re.compile(
     r"(AKIA[0-9A-Z]{16}|sk-[A-Za-z0-9_-]{20,}|xox[baprs]-[A-Za-z0-9-]{10,}|-----BEGIN [A-Z ]*PRIVATE KEY-----|Authorization\s*:|password\s*=|token\s*=)",
     re.IGNORECASE,
@@ -281,7 +281,13 @@ def _clean_user_memory(text: str) -> str:
 
 
 def _classify_type(text: str) -> str:
-    if re.search(r"(不要再|别再|不需要|无需|每次|以后|默认|偏好|习惯)", text):
+    if re.search(r"(排查|故障|报错|错误|异常|解决办法|修复办法|踩坑|根因)", text):
+        return "troubleshooting"
+    if re.search(r"(决定|决策|采用|不再使用|迁移到|统一改为|架构)", text):
+        return "decision"
+    if re.search(r"(流程|工作流|步骤|每次发布|发版|上线|部署|先.*再)", text):
+        return "workflow"
+    if re.search(r"(不要再|别再|不需要|无需|每次|以后|默认|偏好|习惯|约定|规则|规范)", text):
         return "feedback"
     return "user"
 
@@ -289,7 +295,13 @@ def _classify_type(text: str) -> str:
 def _title_for(text: str, mem_type: str) -> str:
     compact = re.sub(r"[\r\n#*_`\[\]<>]", "", text).strip()
     compact = compact[:36].strip(" ，。,.：:")
-    prefix = "协作偏好" if mem_type == "feedback" else "用户记忆"
+    prefixes = {
+        "feedback": "协作偏好",
+        "decision": "项目决策",
+        "workflow": "工作流程",
+        "troubleshooting": "故障排查",
+    }
+    prefix = prefixes.get(mem_type, "用户记忆")
     return f"{prefix}：{compact}" if compact else prefix
 
 
@@ -324,6 +336,8 @@ def _synthesized_directory(mem_type: str) -> str:
         return "wiki/workflows"
     if normalized in {"troubleshooting", "bug", "fix"}:
         return "wiki/troubleshooting"
+    if normalized == "user":
+        return "wiki/preferences"
     return "wiki/preferences"
 
 
