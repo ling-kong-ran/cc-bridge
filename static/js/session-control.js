@@ -46,6 +46,9 @@
       totalTokens: ctx.emptyTokenUsage(),
       currentSessionId: null,
       currentRunId: null,
+      sessionActive: false,
+      isResponding: false,
+      isViewer: false,
     });
     ctx.renderTopbarMeta();
     ctx.renderCost();
@@ -67,7 +70,12 @@
     const ctx = getContext(options);
     resetSessionViewState(options);
     const pendingSessionId = `pending-${Date.now()}`;
-    ctx.setState({ activeWorkspaceSessionId: pendingSessionId });
+    ctx.setState({
+      activeWorkspaceSessionId: pendingSessionId,
+      sessionActive: true,
+      isResponding: false,
+      isViewer: false,
+    });
     ctx.ensureWorkspaceSession(pendingSessionId, {
       title: ctx.t('newChat'),
       cwd: cwd || ctx.cwdInput?.value.trim() || '',
@@ -75,13 +83,14 @@
       cli: ctx.cliSelect?.value || '',
       status: 'idle',
     });
+    ctx.updateUI?.();
 
     if (cwd && ctx.cwdInput) {
       ctx.cwdInput.value = cwd;
       ctx.updateRuntimeSummary();
     }
     ctx.refreshRightPaneFiles();
-    ctx.sendAction('new_session', {
+    const request = ctx.sendAction('new_session', {
       model: ctx.modelSelect?.value,
       cli: ctx.cliSelect?.value || '',
       cwd: ctx.cwdInput?.value.trim() || null,
@@ -90,6 +99,17 @@
       allow_remote_mutate: !!ctx.remoteAllowMutate?.checked,
       skip_memory_inject: ctx.memoryAutoInject?.checked === false,
       notify_platforms: ctx.notifyFeishu?.checked ? ['feishu'] : [],
+    });
+    Promise.resolve(request).then((result) => {
+      if (result?.ok !== false) return;
+      ctx.setState({ sessionActive: false, isResponding: false, isViewer: false });
+      ctx.updateUI?.();
+      const formatMessage = root.i18n?.formatMessage || ((data) => data?.error || data?.message || ctx.t('unknownError'));
+      ctx.addSystemMsg(formatMessage(result, 'requestFailed'), true);
+    }).catch((error) => {
+      ctx.setState({ sessionActive: false, isResponding: false, isViewer: false });
+      ctx.updateUI?.();
+      ctx.addSystemMsg(String(error?.message || error || ctx.t('unknownError')), true);
     });
     ctx.loadSessions();
   }

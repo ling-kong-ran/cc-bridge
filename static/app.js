@@ -3432,6 +3432,9 @@ function getSessionControlOptions() {
       currentSessionId,
       currentRunId,
       activeWorkspaceSessionId,
+      sessionActive,
+      isResponding,
+      isViewer,
     }),
     setState: (state = {}) => {
       if ('currentAssistantEl' in state) currentAssistantEl = state.currentAssistantEl;
@@ -3443,6 +3446,9 @@ function getSessionControlOptions() {
       if ('currentSessionId' in state) currentSessionId = state.currentSessionId;
       if ('currentRunId' in state) currentRunId = state.currentRunId;
       if ('activeWorkspaceSessionId' in state) activeWorkspaceSessionId = state.activeWorkspaceSessionId;
+      if ('sessionActive' in state) sessionActive = state.sessionActive;
+      if ('isResponding' in state) isResponding = state.isResponding;
+      if ('isViewer' in state) isViewer = state.isViewer;
     },
     messagesEl,
     cwdInput,
